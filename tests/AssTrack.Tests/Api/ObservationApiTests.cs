@@ -72,4 +72,71 @@ public class ObservationApiTests : IClassFixture<TestWebApplicationFactory>
         alerts.Should().ContainSingle();
         alerts[0].ObservedSpeedKmh.Should().Be(121);
     }
+
+    [Fact]
+    public async Task PostObservation_Ingest_Should_CreateObservation_AndLatestEndpointReturnsAssetName()
+    {
+        await _factory.ResetDatabaseAsync();
+        Guid deviceId;
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<AssTrackDbContext>();
+            var asset = new Asset { Name = "Generator B", Category = "Equipment" };
+            var device = new Device { Identifier = "dev-101", Asset = asset };
+            dbContext.Assets.Add(asset);
+            dbContext.Devices.Add(device);
+            await dbContext.SaveChangesAsync();
+            deviceId = device.Id;
+        }
+
+        using var client = _factory.CreateClient();
+        var request = new CreateObservationRequest(deviceId, DateTime.UtcNow, 40.7128, -74.0060, 12, 3, 130, 180, "{\"battery\":75}");
+
+        var response = await client.PostAsJsonAsync("/api/observations/ingest", request);
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+
+        var latest = await client.GetFromJsonAsync<ObservationDto>($"/api/observations/latest/{deviceId}");
+        latest.Should().NotBeNull();
+        latest!.AssetName.Should().Be("Generator B");
+        latest.DeviceIdentifier.Should().Be("dev-101");
+    }
+
+    [Fact]
+    public async Task PostObservation_Ingest_Should_CreateSpeedAlert_WhenThresholdExceeded()
+    {
+        await _factory.ResetDatabaseAsync();
+        Guid deviceId;
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<AssTrackDbContext>();
+            var device = new Device { Identifier = "dev-202" };
+            dbContext.Devices.Add(device);
+            await dbContext.SaveChangesAsync();
+            deviceId = device.Id;
+        }
+
+        using var client = _factory.CreateClient();
+        var request = new CreateObservationRequest(deviceId, DateTime.UtcNow, 51.5074, -0.1278, null, 5, 125, 45, null);
+        var response = await client.PostAsJsonAsync("/api/observations/ingest", request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+
+        using var verificationScope = _factory.Services.CreateScope();
+        var verificationDbContext = verificationScope.ServiceProvider.GetRequiredService<AssTrackDbContext>();
+        var alerts = await verificationDbContext.SpeedAlerts.ToListAsync();
+        alerts.Should().ContainSingle();
+        alerts[0].ObservedSpeedKmh.Should().Be(125);
+    }
+
+    [Fact]
+    public async Task PostObservation_Should_Return422_WhenDeviceNotFound()
+    {
+        await _factory.ResetDatabaseAsync();
+        using var client = _factory.CreateClient();
+        var request = new CreateObservationRequest(Guid.NewGuid(), DateTime.UtcNow, 0, 0, null, null, null, null, null);
+
+        var response = await client.PostAsJsonAsync("/api/observations", request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
+    }
 }

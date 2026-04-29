@@ -147,6 +147,28 @@
         }
       }
     },
+    "/api/observations/ingest": {
+      "post": {
+        "tags": [
+          "AssTrack.Api"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateObservationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/observations/latest/{deviceId}": {
       "get": {
         "tags": [

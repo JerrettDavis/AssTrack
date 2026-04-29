@@ -21,4 +21,22 @@ public class GeofenceEvaluatorTests
 
         GeofenceEvaluator.IsInside(geofence, observation).Should().BeTrue();
     }
+
+    [Fact]
+    public void HaversineDistance_Should_Return_KnownDistance_ForTwoPoints()
+    {
+        // London to Paris is approximately 340 km (340,000 meters)
+        var distance = GeofenceEvaluator.HaversineDistance(51.5074, -0.1278, 48.8566, 2.3522);
+        distance.Should().BeApproximately(340_000, 10_000);
+    }
+
+    [Fact]
+    public void IsInside_Should_ReturnFalse_WhenObservationIsOutsideRadius()
+    {
+        var geofence = new Geofence { CenterLatitude = 51.5007, CenterLongitude = -0.1246, RadiusMeters = 100 };
+        // Observation is ~1 km away – clearly outside the 100 m radius
+        var observation = new Observation { Latitude = 51.5100, Longitude = -0.1246 };
+
+        GeofenceEvaluator.IsInside(geofence, observation).Should().BeFalse();
+    }
 }

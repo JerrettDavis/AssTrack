@@ -27,4 +27,26 @@ public class SpeedAlertEvaluatorTests
 
         alert.Should().BeNull();
     }
+
+    [Fact]
+    public void Evaluate_Should_ReturnAlert_WithCorrectAssetId()
+    {
+        var assetId = Guid.NewGuid();
+        var observation = new Observation { Id = Guid.NewGuid(), DeviceId = Guid.NewGuid(), SpeedKmh = 150.0 };
+
+        var alert = SpeedAlertEvaluator.Evaluate(observation, assetId);
+
+        alert.Should().NotBeNull();
+        alert!.AssetId.Should().Be(assetId);
+    }
+
+    [Fact]
+    public void Evaluate_Should_ReturnNull_WhenSpeedIsNull()
+    {
+        var observation = new Observation { Id = Guid.NewGuid(), DeviceId = Guid.NewGuid(), SpeedKmh = null };
+
+        var alert = SpeedAlertEvaluator.Evaluate(observation);
+
+        alert.Should().BeNull();
+    }
 }

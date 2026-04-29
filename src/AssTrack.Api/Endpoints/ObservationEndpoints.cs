@@ -23,16 +23,18 @@ public static class ObservationEndpoints
             return observation is null ? Results.NotFound() : Results.Ok(Map(observation));
         });
 
-        observations.MapPost(string.Empty, async (
+        static async Task<IResult> HandleIngest(
             CreateObservationRequest request,
             DeviceRepository deviceRepository,
             ObservationRepository observationRepository,
-            CancellationToken cancellationToken) =>
+            CancellationToken cancellationToken)
         {
             var device = await deviceRepository.GetByIdAsync(request.DeviceId, cancellationToken);
             if (device is null)
             {
-                return Results.ValidationProblem(new Dictionary<string, string[]> { ["deviceId"] = ["Device was not found."] });
+                return Results.ValidationProblem(
+                    new Dictionary<string, string[]> { ["deviceId"] = ["Device was not found."] },
+                    statusCode: StatusCodes.Status422UnprocessableEntity);
             }
 
             var observation = new Observation
@@ -58,7 +60,10 @@ public static class ObservationEndpoints
 
             created = await observationRepository.GetByIdAsync(created.Id, cancellationToken) ?? created;
             return Results.Created($"/api/observations/{created.Id}", Map(created));
-        });
+        }
+
+        observations.MapPost(string.Empty, HandleIngest);
+        observations.MapPost("/ingest", HandleIngest);
 
         return group;
     }
