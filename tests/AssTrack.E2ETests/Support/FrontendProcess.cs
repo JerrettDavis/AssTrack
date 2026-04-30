@@ -67,20 +67,8 @@ public class FrontendProcess : IDisposable
     {
         try
         {
-            var killProcess = new Process
-            {
-                StartInfo = new ProcessStartInfo
-                {
-                    FileName = "taskkill",
-                    Arguments = $"/PID {processId} /T /F",
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true
-                }
-            };
-            killProcess.Start();
-            killProcess.WaitForExit();
+            using var proc = Process.GetProcessById(processId);
+            proc.Kill(entireProcessTree: true);
         }
         catch
         {
@@ -90,7 +78,14 @@ public class FrontendProcess : IDisposable
 
     private static string ResolveNodeCommand()
     {
-        var knownPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "nodejs", "node.exe");
-        return File.Exists(knownPath) ? knownPath : "node";
+        // On Windows, check the standard install location; on other platforms just use "node"
+        if (OperatingSystem.IsWindows())
+        {
+            var knownPath = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+                "nodejs", "node.exe");
+            if (File.Exists(knownPath)) return knownPath;
+        }
+        return "node";
     }
 }

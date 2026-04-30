@@ -75,9 +75,15 @@ The frontend is a single-page app built with Vite + React 19 + TypeScript. Depen
 | `/` | `AssetsPage` | Fleet overview – assets, metrics, and recent observations |
 | `/devices` | `DevicesPage` | Table of all registered devices |
 | `/map` | `MapPage` | Live Leaflet map showing the latest position of every device |
-| `/alerts` | `AlertsPage` | Table of speed alerts |
+| `/alerts` | `AlertsPage` | Speed alerts and geofence breach alerts |
 
 The Vite dev server runs on `http://localhost:5174` and proxies `/api` requests to `VITE_E2E_PROXY_TARGET` when set, otherwise `http://localhost:5019`.
+
+Set `VITE_API_KEY` in a `.env.local` file (or environment) to send `X-Api-Key` with every request:
+
+```
+VITE_API_KEY=your-secret-key
+```
 
 ## Local startup
 
@@ -100,6 +106,33 @@ npm run dev
 ```
 
 The dev server starts on `http://localhost:5174` and proxies `/api` to the backend at `http://localhost:5019` by default.
+
+## Docker / containerised startup
+
+> Prerequisites: Docker Desktop (or Docker Engine + Compose plugin).
+
+```bash
+# Copy and optionally customise the env file
+cp .env.example .env
+
+# Build and start the full stack
+docker compose up --build
+
+# API: http://localhost:5019
+# Frontend: http://localhost:5174
+# Swagger: http://localhost:5019/swagger
+```
+
+To set an API key:
+```bash
+echo "ASSTRACK_API_KEY=mysecretkey" > .env
+docker compose up --build
+```
+
+The SQLite database is persisted in the `asstrack-data` Docker volume. To reset:
+```bash
+docker compose down -v
+```
 
 ## Sample observation ingest flow
 
@@ -176,13 +209,27 @@ cd C:\git\AssTrack
 .\tests\run-e2e.ps1
 ```
 
+## CI
+
+GitHub Actions runs on every push and pull request:
+
+| Job | What it does |
+|---|---|
+| `backend` | `dotnet restore` → `dotnet build` → `dotnet test` (unit + integration) |
+| `frontend` | `npm ci` → `npm run build` |
+| `docker-build` | Builds both Docker images to validate Dockerfiles |
+| `e2e` | Starts real backend + Vite dev server, runs Reqnroll + Playwright scenarios headlessly |
+
+The E2E job runs on `ubuntu-latest` after `backend` and `frontend` succeed. Playwright Chromium browsers are cached by browser version. You can also run E2E tests locally on Windows with `.\tests\run-e2e.ps1`.
+
 ## Capabilities
 
 - Manage assets and devices
 - Ingest telemetry observations (lat/lon, altitude, speed, heading, metadata)
 - Automatic speed alerts triggered above 120 km/h
+- Automatic geofence breach records when an observation lands inside an active circular geofence
 - Latest-position feed per device for live-map consumption
-- Geofence inclusion checked with haversine distance
+- API key authentication (`X-Api-Key` header); empty key = open access for dev environments
 - Browse all contracts via Swagger/OpenAPI at `/swagger`
 
 ## Health & readiness endpoints
@@ -205,8 +252,17 @@ Copy `appsettings.Production.json` and set the following environment variables o
   },
   "Cors": {
     "AllowedOrigins": ["https://your-frontend.example.com"]
+  },
+  "Auth": {
+    "ApiKey": "your-production-api-key"
   }
 }
+```
+
+Or via environment variables:
+```
+Auth__ApiKey=your-production-api-key
+Cors__AllowedOrigins__0=https://your-frontend.example.com
 ```
 
 Run migrations on startup automatically (already configured via `Migrate()`).

@@ -5,6 +5,7 @@ using AssTrack.Infrastructure.Repositories;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Microsoft.OpenApi;
 using System.Text.Json;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -37,7 +38,23 @@ builder.Services
 builder.Services.AddAuthorization();
 
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(options =>
+{
+    options.AddSecurityDefinition("ApiKey", new OpenApiSecurityScheme
+    {
+        Name = "X-Api-Key",
+        In = ParameterLocation.Header,
+        Type = SecuritySchemeType.ApiKey,
+        Description = "API key authentication"
+    });
+    options.AddSecurityRequirement(doc => new OpenApiSecurityRequirement
+    {
+        {
+            new OpenApiSecuritySchemeReference("ApiKey"),
+            new List<string>()
+        }
+    });
+});
 builder.Services.AddHealthChecks().AddDbContextCheck<AssTrackDbContext>("database");
 builder.Services.AddProblemDetails();
 

@@ -36,6 +36,9 @@ coverage/
 *.coverage
 *.coveragexml
 
+# Environment variables
+.env
+
 # OS files
 Thumbs.db
 Desktop.ini

@@ -10,6 +10,7 @@ public class ApiClient
     public ApiClient()
     {
         _client = new HttpClient { BaseAddress = new Uri(E2ESettings.BackendUrl) };
+        _client.DefaultRequestHeaders.Add("X-Api-Key", E2ESettings.ApiKey);
     }
 
     public async Task<string> CreateAssetAsync(Dictionary<string, object> data)

@@ -15,7 +15,11 @@ public class LifecycleHooks
     [BeforeTestRun]
     public static async Task BeforeTestRun()
     {
-        Microsoft.Playwright.Program.Main(new[] { "install", "chromium" });
+        // On Linux CI, install OS-level dependencies for Chromium
+        var installArgs = OperatingSystem.IsLinux()
+            ? new[] { "install", "--with-deps", "chromium" }
+            : new[] { "install", "chromium" };
+        Microsoft.Playwright.Program.Main(installArgs);
         
         _dbPath = E2ESettings.GetTempDbPath();
         

@@ -36,6 +36,7 @@ public class BackendProcess : IDisposable
         _process.StartInfo.Environment["ConnectionStrings__DefaultConnection"] = $"Data Source={_dbPath}";
         _process.StartInfo.Environment["ConnectionStrings__AssTrack"] = $"Data Source={_dbPath}";
         _process.StartInfo.Environment["ASPNETCORE_ENVIRONMENT"] = "Development";
+        _process.StartInfo.Environment["Auth__ApiKey"] = E2ESettings.ApiKey;
 
         _process.Start();
 
@@ -50,7 +51,7 @@ public class BackendProcess : IDisposable
         {
             try
             {
-                var response = await client.GetAsync($"{E2ESettings.BackendUrl}/api/assets");
+                var response = await client.GetAsync($"{E2ESettings.BackendUrl}/healthz/live");
                 if (response.IsSuccessStatusCode)
                     return;
             }
@@ -76,20 +77,8 @@ public class BackendProcess : IDisposable
     {
         try
         {
-            var killProcess = new Process
-            {
-                StartInfo = new ProcessStartInfo
-                {
-                    FileName = "taskkill",
-                    Arguments = $"/PID {processId} /T /F",
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true
-                }
-            };
-            killProcess.Start();
-            killProcess.WaitForExit();
+            using var proc = Process.GetProcessById(processId);
+            proc.Kill(entireProcessTree: true);
         }
         catch
         {
@@ -99,21 +88,24 @@ public class BackendProcess : IDisposable
 
     private static string ResolveDotnetCommand()
     {
-        var candidates = new[]
+        // Check DOTNET_ROOT env var first (set by setup-dotnet in CI)
+        var dotnetRoot = Environment.GetEnvironmentVariable("DOTNET_ROOT");
+        if (!string.IsNullOrWhiteSpace(dotnetRoot))
         {
-            Environment.GetEnvironmentVariable("DOTNET_ROOT"),
-            Environment.GetEnvironmentVariable("DOTNET_ROOT(x86)"),
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "dotnet"),
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "dotnet")
-        };
+            var exe = Path.Combine(dotnetRoot, OperatingSystem.IsWindows() ? "dotnet.exe" : "dotnet");
+            if (File.Exists(exe)) return exe;
+        }
 
-        foreach (var candidate in candidates.Where(x => !string.IsNullOrWhiteSpace(x)))
+        // Windows: check standard install locations
+        if (OperatingSystem.IsWindows())
         {
-            var dotnetPath = Path.Combine(candidate!, "dotnet.exe");
-            if (File.Exists(dotnetPath))
+            var candidates = new[]
             {
-                return dotnetPath;
-            }
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "dotnet", "dotnet.exe"),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "dotnet", "dotnet.exe")
+            };
+            foreach (var c in candidates.Where(File.Exists))
+                return c;
         }
 
         return "dotnet";

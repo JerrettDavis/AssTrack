@@ -1,0 +1,33 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: src/AssTrack.Api/Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__DefaultConnection: "Data Source=/data/asstrack.db"
+      # Set ASSTRACK_API_KEY in your .env file or environment to enable API key auth
+      Auth__ApiKey: ${ASSTRACK_API_KEY:-}
+      # Override CORS origins via environment: Cors__AllowedOrigins__0=https://your-frontend
+    volumes:
+      - asstrack-data:/data
+    ports:
+      - "5019:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/healthz/live || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  frontend:
+    build:
+      context: frontend
+      dockerfile: Dockerfile
+    ports:
+      - "5174:80"
+    depends_on:
+      - api
+
+volumes:
+  asstrack-data:
