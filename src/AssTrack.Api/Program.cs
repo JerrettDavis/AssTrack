@@ -138,6 +138,7 @@ api.MapDeviceEndpoints();
 api.MapObservationEndpoints();
 api.MapGeofenceEndpoints();
 api.MapSpeedAlertEndpoints();
+api.MapWebhookEndpoints();
 api.MapGet("/alerts/summary", async (SpeedAlertRepository speedAlerts, GeofenceBreachRepository breaches, CancellationToken ct) =>
 {
     var speedCount = await speedAlerts.GetUnacknowledgedCountAsync(ct);

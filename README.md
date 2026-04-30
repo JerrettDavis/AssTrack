@@ -30,6 +30,8 @@ The API is built with ASP.NET Core minimal APIs on .NET 10. The route prefix for
 | POST | `/api/assets` | Create an asset |
 | GET | `/api/devices` | List all devices |
 | POST | `/api/devices` | Create a device (returns 409 if identifier already exists) |
+| GET | `/api/devices/{id}` | Get a single device by ID |
+| GET | `/api/devices/{id}/summary` | Get device summary with latest observation and alert counts |
 | GET | `/api/observations` | Recent observations (last 100) |
 | GET | `/api/observations/latest-positions` | Latest observation per device (live map feed) |
 | GET | `/api/observations/latest/{deviceId}` | Latest observation for a specific device |
@@ -46,7 +48,6 @@ The API is built with ASP.NET Core minimal APIs on .NET 10. The route prefix for
 | GET | `/api/assets/{id}` | Get a single asset by ID |
 | PUT | `/api/devices/{id}` | Update a device (returns 404 if not found) |
 | DELETE | `/api/devices/{id}` | Delete a device (returns 204 or 404) |
-| GET | `/api/devices/{id}` | Get a single device by ID |
 | PUT | `/api/geofences/{id}` | Update a geofence (returns 404 if not found) |
 | DELETE | `/api/geofences/{id}` | Delete a geofence (returns 204 or 404) |
 
@@ -176,6 +177,17 @@ The alert system provides comprehensive management of speed alerts and geofence 
 | POST | `/api/geofences/breaches/bulk-acknowledge` | Acknowledge multiple breaches |
 | GET | `/api/alerts/summary` | Get count of unacknowledged speed alerts and breaches |
 
+## Map Features
+
+The live map provides real-time asset tracking and situational awareness:
+
+- **Live Device Positions**: View the latest position of all devices with color-coded staleness indicators (blue for fresh, orange for stale, gray for very stale)
+- **Device Selection**: Choose a device from the trail selector to focus on its recent movement
+- **Trail Visualization**: Render 20, 50, or 100 recent points as an on-map trail polyline
+- **Device Health Panel**: When a device is selected, display last seen time, latest speed, heading, and counts of unacknowledged alerts
+- **Geofence Overlay**: Active geofence zones are rendered as blue circles on the map
+- **Real-time Updates**: Map positions, selected trails, and device health refresh every 30 seconds
+
 ## Webhook Alert Delivery
 
 AssTrack can deliver alert events to an external HTTP endpoint the moment they are created, giving operators immediate integration value with their own tooling (Slack, PagerDuty, IFTTT, custom dashboards, etc.) without polling the API.
@@ -250,6 +262,78 @@ Webhooks__TimeoutSeconds=10
 - All payloads are sent as `HTTP POST` with `Content-Type: application/json`.
 - Failures (non-2xx responses, timeouts, network errors) are **logged and silently dropped** — they never fail the ingest request.
 - No retries or queuing. If reliable delivery is required, point the URL at a durable intermediary (e.g. a message queue webhook adapter).
+- Every delivery attempt (success or failure) is persisted as a `WebhookDeliveryLog` row for observability.
+
+## Webhook Delivery Logs
+
+Every outbound webhook attempt — whether successful or not — is recorded in a standalone delivery log table.  Logs are never FK-constrained to alert or breach records, so they are safe to query even after data has been deleted.
+
+### GET /api/webhooks/deliveries
+
+Retrieve paginated delivery logs with optional filtering.
+
+#### Query Parameters
+
+| Parameter | Type | Optional | Default | Description |
+|---|---|---|---|---|
+| `success` | bool | Yes | — | Filter by delivery outcome (`true` = succeeded, `false` = failed) |
+| `eventType` | string | Yes | — | Filter by event type, e.g. `speed_alert` or `geofence_breach` |
+| `since` | ISO 8601 | Yes | — | Only return attempts on or after this timestamp |
+| `page` | int | Yes | 1 | Page number |
+| `pageSize` | int | Yes | 50 | Page size (max 200) |
+
+#### Example
+
+```
+GET /api/webhooks/deliveries?success=false&eventType=speed_alert&page=1&pageSize=50
+```
+
+#### Response
+
+```json
+{
+  "items": [
+    {
+      "id": 1,
+      "attemptedAt": "2025-06-15T14:30:00Z",
+      "eventType": "speed_alert",
+      "targetUrl": "https://hooks.yourcompany.example/asstrack",
+      "success": false,
+      "httpStatusCode": 503,
+      "durationMs": 4820,
+      "errorMessage": "HTTP 503",
+      "requestPayloadSummary": "{\"eventType\":\"speed_alert\", ...}"
+    }
+  ],
+  "totalCount": 1,
+  "page": 1,
+  "pageSize": 50
+}
+```
+
+### GET /api/webhooks/status
+
+Returns webhook configuration state and 24-hour delivery statistics.
+
+#### Response
+
+```json
+{
+  "configured": true,
+  "last24hDeliveries": 42,
+  "last24hFailures": 3,
+  "lastDeliveredAt": "2025-06-15T14:30:00Z",
+  "avgDurationMs": 312.5
+}
+```
+
+| Field | Description |
+|---|---|
+| `configured` | `true` when `Webhooks:Url` is set |
+| `last24hDeliveries` | Total attempts in the last 24 hours |
+| `last24hFailures` | Failed attempts (non-2xx or exception) in the last 24 hours |
+| `lastDeliveredAt` | Timestamp of the most recent attempt (any outcome) |
+| `avgDurationMs` | Average response time (ms) over the last 24 hours |
 
 
 

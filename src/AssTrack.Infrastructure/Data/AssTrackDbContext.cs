@@ -12,6 +12,7 @@ public class AssTrackDbContext(DbContextOptions<AssTrackDbContext> options) : Db
     public DbSet<SpeedAlert> SpeedAlerts => Set<SpeedAlert>();
     public DbSet<GeofenceBreach> GeofenceBreaches => Set<GeofenceBreach>();
     public DbSet<DeviceGeofenceState> DeviceGeofenceStates => Set<DeviceGeofenceState>();
+    public DbSet<WebhookDeliveryLog> WebhookDeliveryLogs => Set<WebhookDeliveryLog>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -104,6 +105,17 @@ public class AssTrackDbContext(DbContextOptions<AssTrackDbContext> options) : Db
             entity.HasKey(x => new { x.DeviceId, x.GeofenceId });
             entity.HasOne(x => x.Device).WithMany().HasForeignKey(x => x.DeviceId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne(x => x.Geofence).WithMany().HasForeignKey(x => x.GeofenceId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<WebhookDeliveryLog>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.EventType).IsRequired().HasMaxLength(100);
+            entity.Property(x => x.TargetUrl).IsRequired().HasMaxLength(2000);
+            entity.Property(x => x.ErrorMessage).HasMaxLength(2000);
+            entity.Property(x => x.RequestPayloadSummary).HasMaxLength(500);
+            entity.HasIndex(x => x.AttemptedAt);
+            entity.HasIndex(x => x.EventType);
         });
     }
 }

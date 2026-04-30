@@ -13,7 +13,7 @@ namespace AssTrack.Tests.Api;
 /// <summary>
 /// Captures the last HTTP request sent through it for assertion.
 /// </summary>
-internal sealed class CapturingHttpMessageHandler : HttpMessageHandler
+public sealed class CapturingHttpMessageHandler : HttpMessageHandler
 {
     public HttpRequestMessage? LastRequest { get; private set; }
     public string? LastRequestBody { get; private set; }
