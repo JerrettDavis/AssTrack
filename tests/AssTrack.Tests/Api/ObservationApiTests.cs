@@ -139,4 +139,49 @@ public class ObservationApiTests : IClassFixture<TestWebApplicationFactory>
 
         response.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
     }
+
+    [Fact]
+    public async Task Ingest_InvalidLatitude_Returns422()
+    {
+        var request = new
+        {
+            deviceIdentifier = "VALID_DEV",
+            latitude = 91.0,
+            longitude = 0.0,
+            speedKmh = 50.0,
+            observedAt = DateTime.UtcNow
+        };
+        var response = await _factory.CreateClient().PostAsJsonAsync("/api/observations", request);
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Ingest_InvalidLongitude_Returns422()
+    {
+        var request = new
+        {
+            deviceIdentifier = "VALID_DEV",
+            latitude = 0.0,
+            longitude = 181.0,
+            speedKmh = 50.0,
+            observedAt = DateTime.UtcNow
+        };
+        var response = await _factory.CreateClient().PostAsJsonAsync("/api/observations", request);
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Ingest_NegativeSpeed_Returns422()
+    {
+        var request = new
+        {
+            deviceIdentifier = "VALID_DEV",
+            latitude = 0.0,
+            longitude = 0.0,
+            speedKmh = -1.0,
+            observedAt = DateTime.UtcNow
+        };
+        var response = await _factory.CreateClient().PostAsJsonAsync("/api/observations", request);
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+    }
 }

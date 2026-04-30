@@ -32,7 +32,7 @@ public static class DeviceEndpoints
             var existing = await repository.GetByIdentifierAsync(request.Identifier.Trim(), cancellationToken);
             if (existing is not null)
             {
-                return Results.Conflict(new { message = "Device identifier must be unique." });
+                return Results.Problem(title: "Conflict", detail: "A device with this identifier already exists.", statusCode: StatusCodes.Status409Conflict);
             }
 
             var device = new Device

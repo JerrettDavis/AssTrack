@@ -57,7 +57,7 @@ The frontend is a single-page app built with Vite + React 19 + TypeScript. Depen
 | `/map` | `MapPage` | Live Leaflet map showing the latest position of every device |
 | `/alerts` | `AlertsPage` | Table of speed alerts |
 
-The Vite dev server proxies `/api` requests to `http://localhost:5019`.
+The Vite dev server runs on `http://localhost:5174` and proxies `/api` requests to `VITE_E2E_PROXY_TARGET` when set, otherwise `http://localhost:5019`.
 
 ## Local startup
 
@@ -79,7 +79,7 @@ npm install
 npm run dev
 ```
 
-The dev server starts on `http://localhost:5173` and proxies `/api` to the backend at `http://localhost:5019`.
+The dev server starts on `http://localhost:5174` and proxies `/api` to the backend at `http://localhost:5019` by default.
 
 ## Sample observation ingest flow
 
@@ -117,6 +117,45 @@ cd frontend
 npm run build
 ```
 
+## End-to-end tests (Reqnroll + Playwright)
+
+Full-stack E2E tests that start the real backend and Vite dev server, seed data via the API, and drive a headless Chromium browser.
+
+| | |
+|---|---|
+| **Test runner** | xUnit via Reqnroll (BDD scenarios in `tests\AssTrack.E2ETests\Features\CoreFlows.feature`) |
+| **Browser automation** | Playwright .NET — headless Chromium |
+| **Backend** | Starts on `http://localhost:5099` with a temporary isolated SQLite DB |
+| **Frontend** | Vite dev server on `http://localhost:5174`, proxying `/api` to port 5099 |
+| **Data setup** | Seeded via direct HTTP calls in step definitions (no UI forms required) |
+
+### Scenarios covered
+
+1. **App loads** — navigate to `/`, verify "Fleet overview" heading
+2. **Asset appears in UI** — seed asset via API, navigate to `/`, verify asset name visible
+3. **Device appears in UI** — seed device via API, navigate to `/devices`, verify row
+4. **Live map renders** — seed observation, navigate to `/map`, verify "Live Map" heading
+5. **Speed alert in UI** — seed observation at 150 km/h, navigate to `/alerts`, verify "150.0" in table
+
+### Run command
+
+```powershell
+cd C:\git\AssTrack
+# Ensure frontend deps are installed
+npm install --prefix frontend
+# Build the API (needed by --no-build in test startup)
+dotnet build src\AssTrack.Api
+# Run E2E tests (auto-installs Chromium on first run)
+dotnet test tests\AssTrack.E2ETests
+```
+
+Or use the helper script (Windows PowerShell):
+
+```powershell
+cd C:\git\AssTrack
+.\tests\run-e2e.ps1
+```
+
 ## Capabilities
 
 - Manage assets and devices
@@ -125,3 +164,29 @@ npm run build
 - Latest-position feed per device for live-map consumption
 - Geofence inclusion checked with haversine distance
 - Browse all contracts via Swagger/OpenAPI at `/swagger`
+
+## Health & readiness endpoints
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /healthz` | Overall health (ASP.NET HealthChecks JSON) |
+| `GET /healthz/live` | Liveness probe – always 200 |
+| `GET /healthz/ready` | Readiness probe – checks DB |
+| `GET /api/health` | Legacy health + DB connectivity probe |
+
+## Production configuration
+
+Copy `appsettings.Production.json` and set the following environment variables or override in your deployment:
+
+```json
+{
+  "ConnectionStrings": {
+    "DefaultConnection": "Data Source=data/asstrack.db"
+  },
+  "Cors": {
+    "AllowedOrigins": ["https://your-frontend.example.com"]
+  }
+}
+```
+
+Run migrations on startup automatically (already configured via `Migrate()`).

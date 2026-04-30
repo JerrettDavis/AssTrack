@@ -37,7 +37,7 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
         using var scope = Services.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<AssTrackDbContext>();
         await dbContext.Database.EnsureDeletedAsync();
-        await dbContext.Database.EnsureCreatedAsync();
+        await dbContext.Database.MigrateAsync();
     }
 
     protected override void Dispose(bool disposing)
