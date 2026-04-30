@@ -1,12 +1,15 @@
 using AssTrack.Api.Auth;
 using AssTrack.Api.Endpoints;
+using AssTrack.Api.Services;
 using AssTrack.Domain.Contracts;
 using AssTrack.Infrastructure.Data;
 using AssTrack.Infrastructure.Repositories;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.OpenApi;
+using System.Threading.RateLimiting;
 using System.Text.Json;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -37,6 +40,16 @@ builder.Services
     .AddAuthentication(ApiKeyAuthenticationOptions.DefaultScheme)
     .AddScheme<ApiKeyAuthenticationOptions, ApiKeyAuthenticationHandler>(ApiKeyAuthenticationOptions.DefaultScheme, _ => { });
 builder.Services.AddAuthorization();
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddFixedWindowLimiter("ingest", limiterOptions =>
+    {
+        limiterOptions.PermitLimit = builder.Configuration.GetValue<int>("RateLimiting:IngestPermitLimit");
+        limiterOptions.Window = TimeSpan.FromSeconds(builder.Configuration.GetValue<int>("RateLimiting:IngestWindowSeconds"));
+        limiterOptions.QueueLimit = 0;
+    });
+});
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
@@ -58,6 +71,9 @@ builder.Services.AddSwaggerGen(options =>
 });
 builder.Services.AddHealthChecks().AddDbContextCheck<AssTrackDbContext>("database");
 builder.Services.AddProblemDetails();
+
+builder.Services.Configure<WebhookOptions>(builder.Configuration.GetSection(WebhookOptions.SectionName));
+builder.Services.AddHttpClient<IWebhookNotificationService, WebhookNotificationService>();
 
 var app = builder.Build();
 
@@ -95,6 +111,7 @@ app.UseStatusCodePages();
 app.UseCors("Frontend");
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
 
 if (swaggerEnabled)
 {

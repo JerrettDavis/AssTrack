@@ -1,8 +1,11 @@
+using AssTrack.Api.Services;
 using AssTrack.Domain.Contracts;
 using AssTrack.Domain.Models;
 using AssTrack.Domain.Services;
 using AssTrack.Infrastructure.Repositories;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.EntityFrameworkCore;
 
 namespace AssTrack.Api.Endpoints;
 
@@ -37,6 +40,7 @@ public static class ObservationEndpoints
             GeofenceRepository geofenceRepository,
             GeofenceBreachRepository geofenceBreachRepository,
             SpeedAlertRepository speedAlertRepository,
+            IWebhookNotificationService webhookService,
             CancellationToken cancellationToken)
         {
             var validationErrors = new Dictionary<string, string[]>();
@@ -74,6 +78,12 @@ public static class ObservationEndpoints
                     statusCode: StatusCodes.Status422UnprocessableEntity);
             }
 
+            var existing = await observationRepository.GetByDeviceAndTimeAsync(device.Id, request.ObservedAt, cancellationToken);
+            if (existing is not null)
+            {
+                return Results.Ok(Map(existing));
+            }
+
             var observation = new Observation
             {
                 DeviceId = device.Id,
@@ -88,7 +98,18 @@ public static class ObservationEndpoints
                 Metadata = request.Metadata
             };
 
-            var created = await observationRepository.AddAsync(observation, cancellationToken);
+            Observation created;
+            try
+            {
+                created = await observationRepository.AddAsync(observation, cancellationToken);
+            }
+            catch (DbUpdateException ex) when (ex.InnerException?.Message.Contains("UNIQUE", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                var existingOnConflict = await observationRepository.GetByDeviceAndTimeAsync(device.Id, request.ObservedAt, cancellationToken);
+                if (existingOnConflict is not null)
+                    return Results.Ok(Map(existingOnConflict));
+                throw;
+            }
             var alert = SpeedAlertEvaluator.Evaluate(created, device.AssetId, device.Asset?.SpeedThresholdKmh ?? SpeedAlertEvaluator.DefaultThresholdKmh);
             if (alert is not null)
             {
@@ -96,6 +117,9 @@ public static class ObservationEndpoints
                 if (!hasCooldown)
                 {
                     await observationRepository.AddSpeedAlertAsync(alert, cancellationToken);
+                    alert.Device = device;
+                    alert.Asset = device.Asset;
+                    await webhookService.NotifySpeedAlertAsync(alert, cancellationToken);
                 }
             }
 
@@ -104,6 +128,7 @@ public static class ObservationEndpoints
             {
                 var isInside = GeofenceEvaluator.IsInside(geofence, created);
                 var state = await geofenceBreachRepository.GetStateAsync(device.Id, geofence.Id, cancellationToken);
+                if (state is not null && created.ObservedAt < state.LastObservationAt) continue;
                 var wasInside = state?.IsInside ?? false;
 
                 if (isInside && !wasInside)
@@ -118,6 +143,10 @@ public static class ObservationEndpoints
                         EventType = GeofenceBreachEventType.Enter
                     };
                     await geofenceBreachRepository.AddAsync(breach, cancellationToken);
+                    breach.Device = device;
+                    breach.Asset = device.Asset;
+                    breach.Geofence = geofence;
+                    await webhookService.NotifyGeofenceBreachAsync(breach, cancellationToken);
                 }
                 else if (!isInside && wasInside)
                 {
@@ -131,6 +160,10 @@ public static class ObservationEndpoints
                         EventType = GeofenceBreachEventType.Exit
                     };
                     await geofenceBreachRepository.AddAsync(breach, cancellationToken);
+                    breach.Device = device;
+                    breach.Asset = device.Asset;
+                    breach.Geofence = geofence;
+                    await webhookService.NotifyGeofenceBreachAsync(breach, cancellationToken);
                 }
 
                 await geofenceBreachRepository.UpsertStateAsync(new DeviceGeofenceState
@@ -138,6 +171,7 @@ public static class ObservationEndpoints
                     DeviceId = device.Id,
                     GeofenceId = geofence.Id,
                     IsInside = isInside,
+                    LastObservationAt = created.ObservedAt,
                     UpdatedAt = DateTime.UtcNow
                 }, cancellationToken);
             }
@@ -146,8 +180,8 @@ public static class ObservationEndpoints
             return Results.Created($"/api/observations/{created.Id}", Map(created));
         }
 
-        observations.MapPost(string.Empty, HandleIngest);
-        observations.MapPost("/ingest", HandleIngest);
+        observations.MapPost(string.Empty, HandleIngest).RequireRateLimiting("ingest");
+        observations.MapPost("/ingest", HandleIngest).RequireRateLimiting("ingest");
 
         return group;
     }

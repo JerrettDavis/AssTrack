@@ -1,3 +1,5 @@
+using AssTrack.Api.Services;
+using AssTrack.Domain.Models;
 using AssTrack.Infrastructure.Data;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -8,6 +10,16 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace AssTrack.Tests.Api;
+
+/// <summary>
+/// No-op webhook service used in tests that don't need to inspect webhook calls.
+/// Prevents any real outbound HTTP requests during test runs.
+/// </summary>
+file sealed class NullWebhookService : IWebhookNotificationService
+{
+    public Task NotifySpeedAlertAsync(SpeedAlert alert, CancellationToken cancellationToken = default) => Task.CompletedTask;
+    public Task NotifyGeofenceBreachAsync(GeofenceBreach breach, CancellationToken cancellationToken = default) => Task.CompletedTask;
+}
 
 public class TestWebApplicationFactory : WebApplicationFactory<Program>
 {
@@ -38,6 +50,10 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
             {
                 options.UseSqlite(_connection);
             });
+
+            // Replace the real webhook service with a no-op to avoid outbound HTTP in tests.
+            services.RemoveAll<IWebhookNotificationService>();
+            services.AddSingleton<IWebhookNotificationService, NullWebhookService>();
         });
     }
 
