@@ -57,6 +57,18 @@ public class AssTrackDbContext(DbContextOptions<AssTrackDbContext> options) : Db
             entity.HasKey(x => x.Id);
             entity.HasIndex(x => x.ObservationId);
             entity.HasIndex(x => new { x.DeviceId, x.TriggeredAt });
+            entity.HasOne(x => x.Observation)
+                .WithMany()
+                .HasForeignKey(x => x.ObservationId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Device)
+                .WithMany()
+                .HasForeignKey(x => x.DeviceId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Asset)
+                .WithMany()
+                .HasForeignKey(x => x.AssetId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
     }
 }

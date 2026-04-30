@@ -187,6 +187,8 @@ namespace AssTrack.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("AssetId");
+
                     b.HasIndex("ObservationId");
 
                     b.HasIndex("DeviceId", "TriggeredAt");
@@ -213,6 +215,32 @@ namespace AssTrack.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("Device");
+                });
+
+            modelBuilder.Entity("AssTrack.Domain.Models.SpeedAlert", b =>
+                {
+                    b.HasOne("AssTrack.Domain.Models.Observation", "Observation")
+                        .WithMany()
+                        .HasForeignKey("ObservationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("AssTrack.Domain.Models.Device", "Device")
+                        .WithMany()
+                        .HasForeignKey("DeviceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AssTrack.Domain.Models.Asset", "Asset")
+                        .WithMany()
+                        .HasForeignKey("AssetId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Observation");
+
+                    b.Navigation("Device");
+
+                    b.Navigation("Asset");
                 });
 
             modelBuilder.Entity("AssTrack.Domain.Models.Asset", b =>

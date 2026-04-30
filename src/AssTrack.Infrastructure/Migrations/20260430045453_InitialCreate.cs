@@ -46,23 +46,6 @@ namespace AssTrack.Infrastructure.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "SpeedAlerts",
-                columns: table => new
-                {
-                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
-                    ObservationId = table.Column<Guid>(type: "TEXT", nullable: false),
-                    DeviceId = table.Column<Guid>(type: "TEXT", nullable: false),
-                    AssetId = table.Column<Guid>(type: "TEXT", nullable: true),
-                    ObservedSpeedKmh = table.Column<double>(type: "REAL", nullable: false),
-                    ThresholdKmh = table.Column<double>(type: "REAL", nullable: false),
-                    TriggeredAt = table.Column<DateTime>(type: "TEXT", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_SpeedAlerts", x => x.Id);
-                });
-
-            migrationBuilder.CreateTable(
                 name: "Devices",
                 columns: table => new
                 {
@@ -111,6 +94,41 @@ namespace AssTrack.Infrastructure.Migrations
                         onDelete: ReferentialAction.Cascade);
                 });
 
+            migrationBuilder.CreateTable(
+                name: "SpeedAlerts",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
+                    ObservationId = table.Column<Guid>(type: "TEXT", nullable: false),
+                    DeviceId = table.Column<Guid>(type: "TEXT", nullable: false),
+                    AssetId = table.Column<Guid>(type: "TEXT", nullable: true),
+                    ObservedSpeedKmh = table.Column<double>(type: "REAL", nullable: false),
+                    ThresholdKmh = table.Column<double>(type: "REAL", nullable: false),
+                    TriggeredAt = table.Column<DateTime>(type: "TEXT", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_SpeedAlerts", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_SpeedAlerts_Observations_ObservationId",
+                        column: x => x.ObservationId,
+                        principalTable: "Observations",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_SpeedAlerts_Devices_DeviceId",
+                        column: x => x.DeviceId,
+                        principalTable: "Devices",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
+                    table.ForeignKey(
+                        name: "FK_SpeedAlerts_Assets_AssetId",
+                        column: x => x.AssetId,
+                        principalTable: "Assets",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.SetNull);
+                });
+
             migrationBuilder.CreateIndex(
                 name: "IX_Devices_AssetId",
                 table: "Devices",
@@ -128,6 +146,11 @@ namespace AssTrack.Infrastructure.Migrations
                 columns: new[] { "DeviceId", "ObservedAt" });
 
             migrationBuilder.CreateIndex(
+                name: "IX_SpeedAlerts_AssetId",
+                table: "SpeedAlerts",
+                column: "AssetId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_SpeedAlerts_DeviceId_TriggeredAt",
                 table: "SpeedAlerts",
                 columns: new[] { "DeviceId", "TriggeredAt" });
@@ -142,13 +165,13 @@ namespace AssTrack.Infrastructure.Migrations
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropTable(
-                name: "Geofences");
+                name: "SpeedAlerts");
 
             migrationBuilder.DropTable(
                 name: "Observations");
 
             migrationBuilder.DropTable(
-                name: "SpeedAlerts");
+                name: "Geofences");
 
             migrationBuilder.DropTable(
                 name: "Devices");
