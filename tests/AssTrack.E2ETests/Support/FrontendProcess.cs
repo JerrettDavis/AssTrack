@@ -27,6 +27,7 @@ public class FrontendProcess : IDisposable
         };
 
         _process.StartInfo.Environment["VITE_E2E_PROXY_TARGET"] = E2ESettings.BackendUrl;
+        _process.StartInfo.Environment["VITE_API_KEY"] = E2ESettings.ApiKey;
 
         _process.Start();
 

@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text;
 using AssTrack.Domain.Contracts;
 using AssTrack.Infrastructure.Data;
 using FluentAssertions;
@@ -104,4 +105,122 @@ public class AssetApiTests : IClassFixture<TestWebApplicationFactory>
         var get = await client.GetFromJsonAsync<AssetDto>($"/api/assets/{created!.Id}");
         get!.Name.Should().Be("SingleAsset");
     }
+
+    [Fact]
+    public async Task PostAsset_WithSpeedThreshold_ShouldPersistAndReturnThreshold()
+    {
+        await _factory.ResetDatabaseAsync();
+        using var client = _factory.CreateAuthenticatedClient();
+
+        var response = await client.PostAsJsonAsync("/api/assets", new CreateAssetRequest("Speedy Van", null, null, 75.0));
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+
+        var created = await response.Content.ReadFromJsonAsync<AssetDto>();
+        created.Should().NotBeNull();
+        created!.SpeedThresholdKmh.Should().Be(75.0);
+
+        var list = await client.GetFromJsonAsync<List<AssetDto>>("/api/assets");
+        list.Should().Contain(x => x.Id == created.Id && x.SpeedThresholdKmh == 75.0);
+    }
+
+    [Fact]
+    public async Task PostAsset_WithZeroSpeedThreshold_Returns400()
+    {
+        await _factory.ResetDatabaseAsync();
+        using var client = _factory.CreateAuthenticatedClient();
+
+        var response = await client.PostAsJsonAsync("/api/assets", new CreateAssetRequest("Test Van", null, null, 0.0));
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task PostAsset_WithNegativeSpeedThreshold_Returns400()
+    {
+        await _factory.ResetDatabaseAsync();
+        using var client = _factory.CreateAuthenticatedClient();
+
+        var response = await client.PostAsJsonAsync("/api/assets", new CreateAssetRequest("Test Van", null, null, -10.0));
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task PutAsset_WithZeroSpeedThreshold_Returns400()
+    {
+        await _factory.ResetDatabaseAsync();
+        using var client = _factory.CreateAuthenticatedClient();
+
+        var create = await client.PostAsJsonAsync("/api/assets", new CreateAssetRequest("Test Van", null, null));
+        var created = await create.Content.ReadFromJsonAsync<AssetDto>();
+
+        var update = await client.PutAsJsonAsync($"/api/assets/{created!.Id}", new UpdateAssetRequest("Test Van", null, null, 0.0));
+        update.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task PutAsset_WithNegativeSpeedThreshold_Returns400()
+    {
+        await _factory.ResetDatabaseAsync();
+        using var client = _factory.CreateAuthenticatedClient();
+
+        var create = await client.PostAsJsonAsync("/api/assets", new CreateAssetRequest("Test Van", null, null));
+        var created = await create.Content.ReadFromJsonAsync<AssetDto>();
+
+        var update = await client.PutAsJsonAsync($"/api/assets/{created!.Id}", new UpdateAssetRequest("Test Van", null, null, -10.0));
+        update.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task PostAsset_WithNaNSpeedThreshold_Returns400()
+    {
+        await _factory.ResetDatabaseAsync();
+        using var client = _factory.CreateAuthenticatedClient();
+
+        // double.NaN cannot be serialized as valid JSON; send the string "NaN" to trigger binding failure → 400
+        var content = new StringContent("""{"name":"Test Van","speedThresholdKmh":"NaN"}""", Encoding.UTF8, "application/json");
+        var response = await client.PostAsync("/api/assets", content);
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task PostAsset_WithInfinitySpeedThreshold_Returns400()
+    {
+        await _factory.ResetDatabaseAsync();
+        using var client = _factory.CreateAuthenticatedClient();
+
+        // double.PositiveInfinity cannot be serialized as valid JSON; send the string "Infinity" to trigger binding failure → 400
+        var content = new StringContent("""{"name":"Test Van","speedThresholdKmh":"Infinity"}""", Encoding.UTF8, "application/json");
+        var response = await client.PostAsync("/api/assets", content);
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task PutAsset_WithNaNSpeedThreshold_Returns400()
+    {
+        await _factory.ResetDatabaseAsync();
+        using var client = _factory.CreateAuthenticatedClient();
+
+        var create = await client.PostAsJsonAsync("/api/assets", new CreateAssetRequest("Test Van", null, null));
+        var created = await create.Content.ReadFromJsonAsync<AssetDto>();
+
+        // double.NaN cannot be serialized as valid JSON; send the string "NaN" to trigger binding failure → 400
+        var content = new StringContent($$"""{"name":"Test Van","speedThresholdKmh":"NaN"}""", Encoding.UTF8, "application/json");
+        var update = await client.PutAsync($"/api/assets/{created!.Id}", content);
+        update.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task PutAsset_WithInfinitySpeedThreshold_Returns400()
+    {
+        await _factory.ResetDatabaseAsync();
+        using var client = _factory.CreateAuthenticatedClient();
+
+        var create = await client.PostAsJsonAsync("/api/assets", new CreateAssetRequest("Test Van", null, null));
+        var created = await create.Content.ReadFromJsonAsync<AssetDto>();
+
+        // double.NegativeInfinity cannot be serialized as valid JSON; send the string "-Infinity" to trigger binding failure → 400
+        var content = new StringContent($$"""{"name":"Test Van","speedThresholdKmh":"-Infinity"}""", Encoding.UTF8, "application/json");
+        var update = await client.PutAsync($"/api/assets/{created!.Id}", content);
+        update.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
 }
+
