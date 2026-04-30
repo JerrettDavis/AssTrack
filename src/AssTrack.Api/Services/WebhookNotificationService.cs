@@ -1,11 +1,15 @@
 using System.Diagnostics;
+using System.Net;
 using System.Net.Http.Json;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using AssTrack.Domain.Contracts;
 using AssTrack.Domain.Models;
 using AssTrack.Infrastructure.Data;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using System.Threading.Channels;
 
 namespace AssTrack.Api.Services;
 
@@ -15,17 +19,26 @@ public sealed class WebhookNotificationService : IWebhookNotificationService
     private readonly WebhookOptions _options;
     private readonly ILogger<WebhookNotificationService> _logger;
     private readonly IServiceScopeFactory? _scopeFactory;
+    private readonly ChannelWriter<WebhookRetryJob>? _retryWriter;
+
+    private static readonly JsonSerializerOptions _jsonOptions = new(JsonSerializerDefaults.Web);
+
+    /// <summary>Status codes that warrant a background retry attempt.</summary>
+    public static readonly IReadOnlySet<int> TransientStatusCodes =
+        new HashSet<int> { 429, 500, 502, 503, 504 };
 
     public WebhookNotificationService(
         HttpClient httpClient,
         IOptions<WebhookOptions> options,
         ILogger<WebhookNotificationService> logger,
-        IServiceScopeFactory? scopeFactory = null)
+        IServiceScopeFactory? scopeFactory = null,
+        ChannelWriter<WebhookRetryJob>? retryWriter = null)
     {
         _httpClient = httpClient;
         _options = options.Value;
         _logger = logger;
         _scopeFactory = scopeFactory;
+        _retryWriter = retryWriter;
     }
 
     public async Task NotifySpeedAlertAsync(SpeedAlert alert, CancellationToken cancellationToken = default)
@@ -33,6 +46,7 @@ public sealed class WebhookNotificationService : IWebhookNotificationService
         if (string.IsNullOrWhiteSpace(_options.Url))
             return;
 
+        var correlationId = Guid.NewGuid().ToString();
         var payload = new SpeedAlertWebhookPayload(
             EventType: "speed_alert",
             AlertId: alert.Id,
@@ -45,7 +59,8 @@ public sealed class WebhookNotificationService : IWebhookNotificationService
             TriggeredAt: alert.TriggeredAt,
             DeliveredAt: DateTime.UtcNow);
 
-        await PostAsync(payload, "speed_alert", cancellationToken);
+        var rawJson = JsonSerializer.Serialize(payload, _jsonOptions);
+        await SendWebhookAttemptAsync(rawJson, "speed_alert", 1, correlationId, cancellationToken);
     }
 
     public async Task NotifyGeofenceBreachAsync(GeofenceBreach breach, CancellationToken cancellationToken = default)
@@ -53,6 +68,7 @@ public sealed class WebhookNotificationService : IWebhookNotificationService
         if (string.IsNullOrWhiteSpace(_options.Url))
             return;
 
+        var correlationId = Guid.NewGuid().ToString();
         var payload = new GeofenceBreachWebhookPayload(
             EventType: "geofence_breach",
             BreachId: breach.Id,
@@ -66,18 +82,38 @@ public sealed class WebhookNotificationService : IWebhookNotificationService
             DetectedAt: breach.DetectedAt,
             DeliveredAt: DateTime.UtcNow);
 
-        await PostAsync(payload, "geofence_breach", cancellationToken);
+        var rawJson = JsonSerializer.Serialize(payload, _jsonOptions);
+        await SendWebhookAttemptAsync(rawJson, "geofence_breach", 1, correlationId, cancellationToken);
     }
 
-    private async Task PostAsync<T>(T payload, string eventType, CancellationToken cancellationToken)
+    public async Task ExecuteRetryAsync(WebhookRetryJob job, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(_options.Url))
+            return;
+
+        // Determine event type from the stored payload summary fallback; use empty string if unknown
+        await SendWebhookAttemptAsync(job.Payload, eventType: job.EventType, job.AttemptNumber, job.CorrelationId, cancellationToken, isRetry: true);
+    }
+
+    /// <summary>
+    /// Core send method shared by first-attempt and retry paths.
+    /// On transient failure, enqueues the next retry if retries remain.
+    /// </summary>
+    internal async Task SendWebhookAttemptAsync(
+        string rawJson,
+        string eventType,
+        int attemptNumber,
+        string correlationId,
+        CancellationToken cancellationToken,
+        bool isRetry = false)
     {
         var attemptedAt = DateTime.UtcNow;
         var sw = Stopwatch.StartNew();
         int? httpStatusCode = null;
         bool success = false;
         string? errorMessage = null;
+        bool isTransient = false;
 
-        var rawJson = JsonSerializer.Serialize(payload);
         var payloadSummary = rawJson.Length > 500 ? rawJson[..500] : rawJson;
 
         try
@@ -85,26 +121,51 @@ public sealed class WebhookNotificationService : IWebhookNotificationService
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             cts.CancelAfter(TimeSpan.FromSeconds(_options.TimeoutSeconds));
 
-            var response = await _httpClient.PostAsJsonAsync(_options.Url, payload, cts.Token);
+            var content = new StringContent(rawJson, Encoding.UTF8, "application/json");
+            var request = new HttpRequestMessage(HttpMethod.Post, _options.Url) { Content = content };
+
+            if (!string.IsNullOrEmpty(_options.SigningSecret))
+            {
+                var keyBytes = Encoding.UTF8.GetBytes(_options.SigningSecret);
+                var bodyBytes = Encoding.UTF8.GetBytes(rawJson);
+                using var hmac = new HMACSHA256(keyBytes);
+                var hash = hmac.ComputeHash(bodyBytes);
+                var sig = "sha256=" + Convert.ToHexString(hash).ToLowerInvariant();
+                request.Headers.Add("X-AssTrack-Signature-256", sig);
+            }
+
+            var response = await _httpClient.SendAsync(request, cts.Token);
             httpStatusCode = (int)response.StatusCode;
             success = response.IsSuccessStatusCode;
 
-            if (!success)
+            if (success)
             {
-                _logger.LogWarning(
-                    "Webhook delivery to {Url} returned non-success status {StatusCode}",
-                    _options.Url, httpStatusCode);
-                errorMessage = $"HTTP {httpStatusCode}";
+                if (isRetry)
+                    _logger.LogInformation(
+                        "Webhook retry succeeded on attempt {Attempt} for correlation {CorrelationId} → {StatusCode}",
+                        attemptNumber, correlationId, httpStatusCode);
+                else
+                    _logger.LogDebug("Webhook delivered to {Url} with status {StatusCode}", _options.Url, httpStatusCode);
             }
             else
             {
-                _logger.LogDebug("Webhook delivered to {Url} with status {StatusCode}", _options.Url, httpStatusCode);
+                isTransient = httpStatusCode.HasValue && TransientStatusCodes.Contains(httpStatusCode.Value);
+                errorMessage = $"HTTP {httpStatusCode}";
+                _logger.LogWarning(
+                    "Webhook delivery to {Url} returned non-success status {StatusCode} (attempt {Attempt}, correlationId {CorrelationId})",
+                    _options.Url, httpStatusCode, attemptNumber, correlationId);
             }
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            isTransient = true;
+            errorMessage = ex.Message;
+            _logger.LogError(ex, "Webhook delivery to {Url} failed with transient error; continuing.", _options.Url);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Webhook delivery to {Url} failed; continuing.", _options.Url);
             errorMessage = ex.Message;
+            _logger.LogError(ex, "Webhook delivery to {Url} failed; continuing.", _options.Url);
         }
         finally
         {
@@ -118,8 +179,38 @@ public sealed class WebhookNotificationService : IWebhookNotificationService
                 HttpStatusCode = httpStatusCode,
                 DurationMs = (int)sw.ElapsedMilliseconds,
                 ErrorMessage = errorMessage,
-                RequestPayloadSummary = payloadSummary
+                RequestPayloadSummary = payloadSummary,
+                AttemptNumber = attemptNumber,
+                CorrelationId = correlationId
             });
+        }
+
+        // Enqueue retry if this was a transient failure and retries are configured
+        if (!success && isTransient && attemptNumber <= _options.MaxRetries && _retryWriter is not null)
+        {
+            var nextAttempt = attemptNumber + 1;
+            var job = new WebhookRetryJob(
+                WebhookId: Guid.NewGuid(),
+                Payload: rawJson,
+                EventType: eventType,
+                AttemptNumber: nextAttempt,
+                CorrelationId: correlationId,
+                ScheduledAt: DateTime.UtcNow);
+
+            if (_retryWriter.TryWrite(job))
+                _logger.LogWarning(
+                    "Webhook retry enqueued: attempt {NextAttempt}/{MaxRetries}, correlationId {CorrelationId}",
+                    nextAttempt, _options.MaxRetries, correlationId);
+            else
+                _logger.LogWarning(
+                    "Webhook retry channel full – dropped retry attempt {NextAttempt}, correlationId {CorrelationId}",
+                    nextAttempt, correlationId);
+        }
+        else if (!success && isTransient && attemptNumber > _options.MaxRetries && isRetry)
+        {
+            _logger.LogError(
+                "Webhook delivery failed after {MaxRetries} retries; giving up. CorrelationId {CorrelationId}",
+                _options.MaxRetries, correlationId);
         }
     }
 

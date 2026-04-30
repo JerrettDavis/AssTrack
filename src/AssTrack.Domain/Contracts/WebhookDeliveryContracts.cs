@@ -10,7 +10,9 @@ public sealed record WebhookDeliveryLogDto(
     int? HttpStatusCode,
     int DurationMs,
     string? ErrorMessage,
-    string? RequestPayloadSummary);
+    string? RequestPayloadSummary,
+    int AttemptNumber,
+    string CorrelationId);
 
 /// <summary>DTO returned from GET /api/webhooks/status.</summary>
 public sealed record WebhookStatusDto(
@@ -18,7 +20,9 @@ public sealed record WebhookStatusDto(
     int Last24hDeliveries,
     int Last24hFailures,
     DateTime? LastDeliveredAt,
-    double? AvgDurationMs);
+    double? AvgDurationMs,
+    int RetryQueueDepth = 0,
+    bool SigningEnabled = false);
 
 /// <summary>Request body for POST /api/webhooks/test.</summary>
 public sealed record TestWebhookRequest(string? EventType);
@@ -29,3 +33,4 @@ public sealed record TestWebhookFireResponse(
     string EventType,
     bool Configured,
     string Message);
+

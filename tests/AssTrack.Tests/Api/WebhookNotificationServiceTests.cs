@@ -206,4 +206,69 @@ public class WebhookNotificationServiceTests
         var doc = JsonDocument.Parse(handler.LastRequestBody!);
         doc.RootElement.GetProperty("breachEventType").GetString().Should().Be("Enter");
     }
+
+    // Helper overload for signing tests
+    private static (WebhookNotificationService Service, CapturingHttpMessageHandler Handler)
+        BuildWithSigning(string signingSecret, string? url = "https://hooks.example.com/asstrack")
+    {
+        var handler = new CapturingHttpMessageHandler();
+        var httpClient = new HttpClient(handler);
+        var options = Options.Create(new WebhookOptions { Url = url, TimeoutSeconds = 5, SigningSecret = signingSecret });
+        var logger = NullLogger<WebhookNotificationService>.Instance;
+        var service = new WebhookNotificationService(httpClient, options, logger);
+        return (service, handler);
+    }
+
+    [Fact]
+    public async Task SigningEnabled_AddsSignatureHeader()
+    {
+        var (service, handler) = BuildWithSigning("test-secret");
+        await service.NotifySpeedAlertAsync(MakeSpeedAlert());
+
+        handler.LastRequest.Should().NotBeNull();
+        handler.LastRequest!.Headers.TryGetValues("X-AssTrack-Signature-256", out var values).Should().BeTrue();
+        var sig = values!.First();
+        sig.Should().StartWith("sha256=");
+        sig.Length.Should().BeGreaterThan(7); // "sha256=" + 64 hex chars
+    }
+
+    [Fact]
+    public async Task SigningEnabled_SignatureMatchesHmacOfBody()
+    {
+        var secret = "my-signing-secret";
+        var (service, handler) = BuildWithSigning(secret);
+        await service.NotifySpeedAlertAsync(MakeSpeedAlert());
+
+        var body = handler.LastRequestBody!;
+        var sig = handler.LastRequest!.Headers.GetValues("X-AssTrack-Signature-256").First();
+
+        // Recompute HMAC-SHA256
+        var keyBytes = System.Text.Encoding.UTF8.GetBytes(secret);
+        var bodyBytes = System.Text.Encoding.UTF8.GetBytes(body);
+        using var hmac = new System.Security.Cryptography.HMACSHA256(keyBytes);
+        var hash = hmac.ComputeHash(bodyBytes);
+        var expected = "sha256=" + Convert.ToHexString(hash).ToLowerInvariant();
+
+        sig.Should().Be(expected);
+    }
+
+    [Fact]
+    public async Task SigningDisabled_NoSignatureHeader()
+    {
+        var (service, handler) = Build(); // no signing secret
+        await service.NotifySpeedAlertAsync(MakeSpeedAlert());
+
+        handler.LastRequest.Should().NotBeNull();
+        handler.LastRequest!.Headers.Contains("X-AssTrack-Signature-256").Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task SigningEnabled_EmptySecret_NoSignatureHeader()
+    {
+        var (service, handler) = BuildWithSigning(""); // empty = disabled
+        await service.NotifySpeedAlertAsync(MakeSpeedAlert());
+
+        handler.LastRequest.Should().NotBeNull();
+        handler.LastRequest!.Headers.Contains("X-AssTrack-Signature-256").Should().BeFalse();
+    }
 }

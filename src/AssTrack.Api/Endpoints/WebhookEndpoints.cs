@@ -5,6 +5,7 @@ using AssTrack.Infrastructure.Data;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using System.Threading.Channels;
 
 namespace AssTrack.Api.Endpoints;
 
@@ -49,7 +50,9 @@ public static class WebhookEndpoints
                     x.HttpStatusCode,
                     x.DurationMs,
                     x.ErrorMessage,
-                    x.RequestPayloadSummary))
+                    x.RequestPayloadSummary,
+                    x.AttemptNumber,
+                    x.CorrelationId))
                 .ToListAsync(ct);
 
             return Results.Ok(new PagedResult<WebhookDeliveryLogDto>(items, total, page, pageSize));
@@ -61,6 +64,7 @@ public static class WebhookEndpoints
         webhooks.MapGet("/status", async (
             AssTrackDbContext db,
             IOptions<WebhookOptions> webhookOptions,
+            ChannelReader<WebhookRetryJob> retryReader,
             CancellationToken ct) =>
         {
             var cutoff = DateTime.UtcNow.AddHours(-24);
@@ -86,7 +90,9 @@ public static class WebhookEndpoints
                 Last24hDeliveries: last24h.Count,
                 Last24hFailures: last24h.Count(x => !x.Success),
                 LastDeliveredAt: lastDeliveredAt,
-                AvgDurationMs: avgDurationMs));
+                AvgDurationMs: avgDurationMs,
+                RetryQueueDepth: retryReader.Count,
+                SigningEnabled: !string.IsNullOrWhiteSpace(webhookOptions.Value.SigningSecret)));
         })
         .WithName("GetWebhookStatus")
         .WithSummary("Get webhook configuration status and 24-hour delivery statistics.")
