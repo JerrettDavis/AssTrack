@@ -6,14 +6,26 @@ namespace AssTrack.Infrastructure.Repositories;
 
 public class GeofenceBreachRepository(AssTrackDbContext dbContext)
 {
-    public async Task<IReadOnlyList<GeofenceBreach>> GetRecentAsync(int count = 100, CancellationToken cancellationToken = default)
-        => await dbContext.GeofenceBreaches
+    public async Task<IReadOnlyList<GeofenceBreach>> GetRecentAsync(
+        int limit = 100,
+        bool? unacknowledgedOnly = null,
+        DateTime? since = null,
+        CancellationToken cancellationToken = default)
+    {
+        var query = dbContext.GeofenceBreaches
             .Include(x => x.Geofence)
             .Include(x => x.Device)
             .Include(x => x.Asset)
+            .AsQueryable();
+        if (unacknowledgedOnly == true)
+            query = query.Where(x => x.AcknowledgedAtUtc == null);
+        if (since.HasValue)
+            query = query.Where(x => x.DetectedAt >= since.Value);
+        return await query
             .OrderByDescending(x => x.DetectedAt)
-            .Take(count)
+            .Take(limit)
             .ToListAsync(cancellationToken);
+    }
 
     public async Task<GeofenceBreach> AddAsync(GeofenceBreach breach, CancellationToken cancellationToken = default)
     {
@@ -35,6 +47,24 @@ public class GeofenceBreachRepository(AssTrackDbContext dbContext)
         await dbContext.SaveChangesAsync(ct);
         return breach;
     }
+
+    public async Task<int> BulkAcknowledgeAsync(IEnumerable<Guid> ids, DateTime acknowledgedAt, string? acknowledgedBy, CancellationToken ct = default)
+    {
+        var idList = ids.ToList();
+        var breaches = await dbContext.GeofenceBreaches
+            .Where(b => idList.Contains(b.Id) && b.AcknowledgedAtUtc == null)
+            .ToListAsync(ct);
+        foreach (var breach in breaches)
+        {
+            breach.AcknowledgedAtUtc = acknowledgedAt;
+            breach.AcknowledgedBy = acknowledgedBy;
+        }
+        await dbContext.SaveChangesAsync(ct);
+        return breaches.Count;
+    }
+
+    public async Task<int> GetUnacknowledgedCountAsync(CancellationToken ct = default)
+        => await dbContext.GeofenceBreaches.CountAsync(b => b.AcknowledgedAtUtc == null, ct);
 
     public async Task<DeviceGeofenceState?> GetStateAsync(Guid deviceId, Guid geofenceId, CancellationToken ct = default)
         => await dbContext.DeviceGeofenceStates

@@ -16,6 +16,23 @@ L.Icon.Default.mergeOptions({
   shadowUrl: markerShadow,
 })
 
+function getStaleClass(observedAt: string): '' | 'stale' | 'very-stale' {
+  const ageMs = Date.now() - new Date(observedAt).getTime()
+  if (ageMs > 30 * 60 * 1000) return 'very-stale'
+  if (ageMs > 5 * 60 * 1000) return 'stale'
+  return ''
+}
+
+function makeMarkerIcon(staleClass: string) {
+  return L.divIcon({
+    className: '',
+    html: `<div class="device-marker ${staleClass}"></div>`,
+    iconSize: [20, 20],
+    iconAnchor: [10, 10],
+    popupAnchor: [0, -10],
+  })
+}
+
 function MapViewportUpdater({ center }: { center: [number, number] }) {
   const map = useMap()
   const hasUserMoved = useRef(false)
@@ -115,19 +132,22 @@ export default function MapPage() {
               </Popup>
             </Circle>
           ))}
-          {positions.map((position) => (
-            <Marker key={position.id} position={[position.latitude, position.longitude]}>
-              <Popup>
-                <strong>{position.assetName ?? position.deviceIdentifier}</strong>
-                <br />
-                {position.latitude.toFixed(4)}, {position.longitude.toFixed(4)}
-                <br />
-                {position.speedKmh != null ? `${position.speedKmh.toFixed(1)} km/h` : 'Speed N/A'}
-                <br />
-                {new Date(position.observedAt).toLocaleString()}
-              </Popup>
-            </Marker>
-          ))}
+          {positions.map((position) => {
+            const staleClass = getStaleClass(position.observedAt)
+            return (
+              <Marker key={position.id} position={[position.latitude, position.longitude]} icon={makeMarkerIcon(staleClass)}>
+                <Popup>
+                  <strong>{position.assetName ?? position.deviceIdentifier}</strong>
+                  <br />
+                  {position.latitude.toFixed(4)}, {position.longitude.toFixed(4)}
+                  <br />
+                  {position.speedKmh != null ? `${position.speedKmh.toFixed(1)} km/h` : 'Speed N/A'}
+                  <br />
+                  {new Date(position.observedAt).toLocaleString()}
+                </Popup>
+              </Marker>
+            )
+          })}
         </MapContainer>
       </div>
     </div>

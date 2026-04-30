@@ -9,9 +9,15 @@ public static class SpeedAlertEndpoints
     {
         var alerts = group.MapGroup("/speed-alerts");
 
-        alerts.MapGet(string.Empty, async (SpeedAlertRepository repository, CancellationToken cancellationToken) =>
+        alerts.MapGet(string.Empty, async (
+            SpeedAlertRepository repository,
+            bool? unacknowledged,
+            int? limit,
+            DateTimeOffset? since,
+            CancellationToken cancellationToken) =>
         {
-            var items = await repository.GetRecentAsync(cancellationToken: cancellationToken);
+            var sinceUtc = since?.UtcDateTime;
+            var items = await repository.GetRecentAsync(limit ?? 100, unacknowledged, sinceUtc, cancellationToken);
             return Results.Ok(items.Select(Map));
         });
 
@@ -19,6 +25,12 @@ public static class SpeedAlertEndpoints
         {
             var updated = await repository.AcknowledgeAsync(id, DateTime.UtcNow, request.AcknowledgedBy, cancellationToken);
             return updated is null ? Results.NotFound() : Results.Ok(Map(updated));
+        });
+
+        alerts.MapPost("/bulk-acknowledge", async (BulkAcknowledgeSpeedAlertsRequest request, SpeedAlertRepository repository, CancellationToken cancellationToken) =>
+        {
+            var count = await repository.BulkAcknowledgeAsync(request.Ids, DateTime.UtcNow, request.AcknowledgedBy, cancellationToken);
+            return Results.Ok(new { count });
         });
 
         return group;

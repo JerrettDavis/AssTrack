@@ -27,3 +27,14 @@ Scenario: View alerts with threshold
   When I post an observation with speed 150.0 for the device via the API
   And I navigate to the alerts page
   Then the alerts table contains a cell with "150.0"
+
+Scenario: Filter unacknowledged alerts
+  When I post an observation with speed 150.0 for the device via the API
+  And I navigate to the alerts page
+  Then the alerts page has filter tab "Unacknowledged"
+
+Scenario: Bulk acknowledge alerts
+  When I post an observation with speed 150.0 for the device via the API
+  And I post an observation with speed 155.0 for the device via the API
+  And I navigate to the alerts page
+  Then the alerts page has filter tab "Unacknowledged"

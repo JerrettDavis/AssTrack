@@ -306,6 +306,77 @@ await this.FeatureBackgroundAsync();
             await this.ScenarioCleanupAsync();
         }
         
+        [Xunit.SkippableFactAttribute(DisplayName="Filter unacknowledged alerts")]
+        [Xunit.TraitAttribute("FeatureTitle", "Core Flows")]
+        [Xunit.TraitAttribute("Description", "Filter unacknowledged alerts")]
+        public async global::System.Threading.Tasks.Task FilterUnacknowledgedAlerts()
+        {
+            string[] tagsOfScenario = ((string[])(null));
+            global::System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new global::System.Collections.Specialized.OrderedDictionary();
+            global::Reqnroll.ScenarioInfo scenarioInfo = new global::Reqnroll.ScenarioInfo("Filter unacknowledged alerts", null, tagsOfScenario, argumentsOfScenario, featureTags);
+#line 31
+this.ScenarioInitialize(scenarioInfo);
+#line hidden
+            if ((global::Reqnroll.TagHelper.ContainsIgnoreTag(scenarioInfo.CombinedTags) || global::Reqnroll.TagHelper.ContainsIgnoreTag(featureTags)))
+            {
+                testRunner.SkipScenario();
+            }
+            else
+            {
+                await this.ScenarioStartAsync();
+#line 3
+await this.FeatureBackgroundAsync();
+#line hidden
+#line 32
+  await testRunner.WhenAsync("I post an observation with speed 150.0 for the device via the API", ((string)(null)), ((global::Reqnroll.Table)(null)), "When ");
+#line hidden
+#line 33
+  await testRunner.AndAsync("I navigate to the alerts page", ((string)(null)), ((global::Reqnroll.Table)(null)), "And ");
+#line hidden
+#line 34
+  await testRunner.ThenAsync("the alerts page has filter tab \"Unacknowledged\"", ((string)(null)), ((global::Reqnroll.Table)(null)), "Then ");
+#line hidden
+            }
+            await this.ScenarioCleanupAsync();
+        }
+        
+        [Xunit.SkippableFactAttribute(DisplayName="Bulk acknowledge alerts")]
+        [Xunit.TraitAttribute("FeatureTitle", "Core Flows")]
+        [Xunit.TraitAttribute("Description", "Bulk acknowledge alerts")]
+        public async global::System.Threading.Tasks.Task BulkAcknowledgeAlerts()
+        {
+            string[] tagsOfScenario = ((string[])(null));
+            global::System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new global::System.Collections.Specialized.OrderedDictionary();
+            global::Reqnroll.ScenarioInfo scenarioInfo = new global::Reqnroll.ScenarioInfo("Bulk acknowledge alerts", null, tagsOfScenario, argumentsOfScenario, featureTags);
+#line 36
+this.ScenarioInitialize(scenarioInfo);
+#line hidden
+            if ((global::Reqnroll.TagHelper.ContainsIgnoreTag(scenarioInfo.CombinedTags) || global::Reqnroll.TagHelper.ContainsIgnoreTag(featureTags)))
+            {
+                testRunner.SkipScenario();
+            }
+            else
+            {
+                await this.ScenarioStartAsync();
+#line 3
+await this.FeatureBackgroundAsync();
+#line hidden
+#line 37
+  await testRunner.WhenAsync("I post an observation with speed 150.0 for the device via the API", ((string)(null)), ((global::Reqnroll.Table)(null)), "When ");
+#line hidden
+#line 38
+  await testRunner.AndAsync("I post an observation with speed 155.0 for the device via the API", ((string)(null)), ((global::Reqnroll.Table)(null)), "And ");
+#line hidden
+#line 39
+  await testRunner.AndAsync("I navigate to the alerts page", ((string)(null)), ((global::Reqnroll.Table)(null)), "And ");
+#line hidden
+#line 40
+  await testRunner.ThenAsync("the alerts page has filter tab \"Unacknowledged\"", ((string)(null)), ((global::Reqnroll.Table)(null)), "Then ");
+#line hidden
+            }
+            await this.ScenarioCleanupAsync();
+        }
+        
         [global::System.CodeDom.Compiler.GeneratedCodeAttribute("Reqnroll", "2.0.0.0")]
         [global::System.Runtime.CompilerServices.CompilerGeneratedAttribute()]
         public class FixtureData : object, Xunit.IAsyncLifetime

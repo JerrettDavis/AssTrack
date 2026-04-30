@@ -53,6 +53,29 @@ The API is built with ASP.NET Core minimal APIs on .NET 10. The route prefix for
 Speed alerts are created automatically when an observation is ingested with `SpeedKmh` exceeding the asset's `SpeedThresholdKmh` (if set) or the default of 120 km/h.
 Geofence breaches are recorded automatically when an ingested observation falls within any active geofence.
 
+## Alert Management
+
+The alert system provides comprehensive management of speed alerts and geofence breaches:
+
+- **Filter Tabs**: Switch between "All" and "Unacknowledged" views for both speed alerts and geofence breaches
+- **Bulk Acknowledge**: Select multiple alerts and acknowledge them in one action
+- **Navigation Badge**: The Alerts nav link displays a red badge showing total unacknowledged alerts (speed + breach)
+- **Map Staleness Indicators**: Device markers on the map show staleness:
+  - Blue: Fresh (< 5 minutes)
+  - Orange: Stale (5-30 minutes)
+  - Gray: Very stale (> 30 minutes)
+
+### API Endpoints
+
+| Method | Route | Description |
+|---|---|---|
+| GET | `/api/speed-alerts?unacknowledged=true&limit=100&since=<ISO>` | Get speed alerts with filters |
+| POST | `/api/speed-alerts/{id}/acknowledge` | Acknowledge a single speed alert |
+| POST | `/api/speed-alerts/bulk-acknowledge` | Acknowledge multiple speed alerts |
+| GET | `/api/geofences/breaches?unacknowledged=true&limit=100&since=<ISO>` | Get geofence breaches with filters |
+| POST | `/api/geofences/breaches/bulk-acknowledge` | Acknowledge multiple breaches |
+| GET | `/api/alerts/summary` | Get count of unacknowledged speed alerts and breaches |
+
 ## Alert Acknowledgement
 
 Both speed alerts and geofence breaches support acknowledgement. Use the acknowledge endpoints to mark an alert as reviewed:

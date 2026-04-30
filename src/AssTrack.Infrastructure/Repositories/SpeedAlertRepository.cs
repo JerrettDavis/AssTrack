@@ -6,13 +6,25 @@ namespace AssTrack.Infrastructure.Repositories;
 
 public class SpeedAlertRepository(AssTrackDbContext dbContext)
 {
-    public async Task<IReadOnlyList<SpeedAlert>> GetRecentAsync(int count = 100, CancellationToken cancellationToken = default)
-        => await dbContext.SpeedAlerts
+    public async Task<IReadOnlyList<SpeedAlert>> GetRecentAsync(
+        int limit = 100,
+        bool? unacknowledgedOnly = null,
+        DateTime? since = null,
+        CancellationToken cancellationToken = default)
+    {
+        var query = dbContext.SpeedAlerts
             .Include(x => x.Device)
             .Include(x => x.Asset)
+            .AsQueryable();
+        if (unacknowledgedOnly == true)
+            query = query.Where(x => x.AcknowledgedAtUtc == null);
+        if (since.HasValue)
+            query = query.Where(x => x.TriggeredAt >= since.Value);
+        return await query
             .OrderByDescending(x => x.TriggeredAt)
-            .Take(count)
+            .Take(limit)
             .ToListAsync(cancellationToken);
+    }
 
     public async Task<SpeedAlert?> AcknowledgeAsync(Guid id, DateTime acknowledgedAt, string? acknowledgedBy, CancellationToken ct = default)
     {
@@ -26,6 +38,24 @@ public class SpeedAlertRepository(AssTrackDbContext dbContext)
         await dbContext.SaveChangesAsync(ct);
         return alert;
     }
+
+    public async Task<int> BulkAcknowledgeAsync(IEnumerable<Guid> ids, DateTime acknowledgedAt, string? acknowledgedBy, CancellationToken ct = default)
+    {
+        var idList = ids.ToList();
+        var alerts = await dbContext.SpeedAlerts
+            .Where(a => idList.Contains(a.Id) && a.AcknowledgedAtUtc == null)
+            .ToListAsync(ct);
+        foreach (var alert in alerts)
+        {
+            alert.AcknowledgedAtUtc = acknowledgedAt;
+            alert.AcknowledgedBy = acknowledgedBy;
+        }
+        await dbContext.SaveChangesAsync(ct);
+        return alerts.Count;
+    }
+
+    public async Task<int> GetUnacknowledgedCountAsync(CancellationToken ct = default)
+        => await dbContext.SpeedAlerts.CountAsync(a => a.AcknowledgedAtUtc == null, ct);
 
     public async Task<bool> HasRecentAlertAsync(Guid deviceId, TimeSpan cooldown, CancellationToken ct = default)
     {

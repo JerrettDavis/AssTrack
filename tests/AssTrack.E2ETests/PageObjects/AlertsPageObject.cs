@@ -14,4 +14,7 @@ public class AlertsPageObject
 
     public async Task<bool> HasTableCellWithTextAsync(string text) =>
         await _page.Locator($"td:has-text('{text}')").CountAsync() > 0;
+
+    public async Task<bool> HasFilterTabAsync(string tabName) =>
+        await _page.Locator($".alert-tabs button:has-text('{tabName}')").CountAsync() > 0;
 }

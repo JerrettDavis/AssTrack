@@ -80,10 +80,22 @@ public static class GeofenceEndpoints
             return deleted ? Results.NoContent() : Results.NotFound();
         });
 
-        geofences.MapGet("/breaches", async (GeofenceBreachRepository breachRepository, CancellationToken cancellationToken) =>
+        geofences.MapGet("/breaches", async (
+            GeofenceBreachRepository breachRepository,
+            bool? unacknowledged,
+            int? limit,
+            DateTimeOffset? since,
+            CancellationToken cancellationToken) =>
         {
-            var items = await breachRepository.GetRecentAsync(cancellationToken: cancellationToken);
+            var sinceUtc = since?.UtcDateTime;
+            var items = await breachRepository.GetRecentAsync(limit ?? 100, unacknowledged, sinceUtc, cancellationToken);
             return Results.Ok(items.Select(MapBreach));
+        });
+
+        geofences.MapPost("/breaches/bulk-acknowledge", async (BulkAcknowledgeBreachesRequest request, GeofenceBreachRepository breachRepository, CancellationToken cancellationToken) =>
+        {
+            var count = await breachRepository.BulkAcknowledgeAsync(request.Ids, DateTime.UtcNow, request.AcknowledgedBy, cancellationToken);
+            return Results.Ok(new { count });
         });
 
         geofences.MapPost("/breaches/{id:guid}/acknowledge", async (Guid id, AcknowledgeBreachRequest request, GeofenceBreachRepository breachRepository, CancellationToken cancellationToken) =>

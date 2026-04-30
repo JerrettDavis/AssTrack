@@ -1,5 +1,6 @@
 using AssTrack.Api.Auth;
 using AssTrack.Api.Endpoints;
+using AssTrack.Domain.Contracts;
 using AssTrack.Infrastructure.Data;
 using AssTrack.Infrastructure.Repositories;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
@@ -103,6 +104,12 @@ api.MapDeviceEndpoints();
 api.MapObservationEndpoints();
 api.MapGeofenceEndpoints();
 api.MapSpeedAlertEndpoints();
+api.MapGet("/alerts/summary", async (SpeedAlertRepository speedAlerts, GeofenceBreachRepository breaches, CancellationToken ct) =>
+{
+    var speedCount = await speedAlerts.GetUnacknowledgedCountAsync(ct);
+    var breachCount = await breaches.GetUnacknowledgedCountAsync(ct);
+    return Results.Ok(new AlertSummaryDto(speedCount, breachCount));
+});
 api.MapGet("/health", async (AssTrackDbContext db) =>
 {
     try

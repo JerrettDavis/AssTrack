@@ -21,4 +21,12 @@ public class AlertSteps
         var hasValue = await page.HasTableCellWithTextAsync(value);
         hasValue.Should().BeTrue($"Expected alerts table to contain cell with value '{value}'");
     }
+
+    [Then(@"the alerts page has filter tab ""([^""]*)""")]
+    public async Task ThenTheAlertsPageHasFilterTab(string tabName)
+    {
+        var page = new AlertsPageObject(_context.Page);
+        var hasTab = await page.HasFilterTabAsync(tabName);
+        hasTab.Should().BeTrue($"Expected alerts page to have filter tab '{tabName}'");
+    }
 }

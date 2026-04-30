@@ -14,10 +14,34 @@ export type SpeedAlert = {
   acknowledgedBy?: string | null
 }
 
-export function getSpeedAlerts() {
-  return apiGet<SpeedAlert[]>('/api/speed-alerts')
+export type AlertSummary = {
+  unacknowledgedSpeedAlerts: number
+  unacknowledgedBreaches: number
+}
+
+export type AlertsQueryParams = {
+  unacknowledged?: boolean
+  limit?: number
+  since?: string
+}
+
+export function getSpeedAlerts(params?: AlertsQueryParams) {
+  const qs = new URLSearchParams()
+  if (params?.unacknowledged != null) qs.set('unacknowledged', String(params.unacknowledged))
+  if (params?.limit != null) qs.set('limit', String(params.limit))
+  if (params?.since != null) qs.set('since', params.since)
+  const query = qs.toString()
+  return apiGet<SpeedAlert[]>(`/api/speed-alerts${query ? `?${query}` : ''}`)
 }
 
 export async function acknowledgeSpeedAlert(id: string, acknowledgedBy?: string): Promise<SpeedAlert> {
   return apiPost<SpeedAlert>(`/api/speed-alerts/${id}/acknowledge`, { acknowledgedBy: acknowledgedBy ?? null })
+}
+
+export async function bulkAcknowledgeSpeedAlerts(ids: string[], acknowledgedBy?: string): Promise<{ count: number }> {
+  return apiPost<{ count: number }>('/api/speed-alerts/bulk-acknowledge', { ids, acknowledgedBy: acknowledgedBy ?? null })
+}
+
+export function getAlertSummary(): Promise<AlertSummary> {
+  return apiGet<AlertSummary>('/api/alerts/summary')
 }
