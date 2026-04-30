@@ -25,6 +25,7 @@ public static class SystemEndpoints
                 SimulationEnabled: simulationOptions.Value.Enabled,
                 WebhookConfigured: !string.IsNullOrEmpty(webhookOptions.Value.Url),
                 ApiKeyConfigured: !string.IsNullOrEmpty(configuration["Auth:ApiKey"]),
+                IngestApiKeyConfigured: !string.IsNullOrEmpty(configuration["Auth:IngestApiKey"]),
                 SwaggerEnabled: configuration.GetValue<bool>("Swagger:Enabled"),
                 RateLimitPermitLimit: configuration.GetValue<int>("RateLimiting:IngestPermitLimit", 60),
                 RateLimitWindowSeconds: configuration.GetValue<int>("RateLimiting:IngestWindowSeconds", 60),
@@ -34,7 +35,8 @@ public static class SystemEndpoints
             return Results.Ok(dto);
         })
         .WithName("GetSystemStatus")
-        .WithSummary("Get sanitized system configuration status.");
+        .WithSummary("Get sanitized system configuration status.")
+        .RequireAuthorization("Operator");
 
         return group;
     }

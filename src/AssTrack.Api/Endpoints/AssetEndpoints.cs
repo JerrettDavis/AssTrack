@@ -20,7 +20,7 @@ public static class AssetEndpoints
         {
             var asset = await repository.GetByIdAsync(id, cancellationToken);
             return asset is null ? Results.NotFound() : Results.Ok(Map(asset));
-        });
+        }).RequireAuthorization("Operator");
 
         assets.MapPost(string.Empty, async (CreateAssetRequest request, AssetRepository repository, CancellationToken cancellationToken) =>
         {

@@ -1,3 +1,5 @@
+import { getRuntimeApiKey } from './config'
+
 export type LiveEventType = 'observation' | 'speed_alert' | 'geofence_breach'
 
 export type ObservationEvent = {
@@ -39,10 +41,10 @@ let sseToken: string | null = null
 async function fetchSseToken(): Promise<string | null> {
   try {
     const base = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim() ?? ''
-    const key = (import.meta.env.VITE_API_KEY as string | undefined)?.trim() ?? ''
-    
+    const key = getRuntimeApiKey()
+
     if (!key) {
-      console.error('VITE_API_KEY is not configured')
+      console.error('API key is not configured (config.json not loaded or apiKey empty)')
       return null
     }
 
@@ -75,7 +77,7 @@ function getUrl(): string {
 async function connect(): Promise<void> {
   if (eventSource !== null) return
   status = 'connecting'
-  
+
   // Fetch a fresh token
   sseToken = await fetchSseToken()
   if (!sseToken) {

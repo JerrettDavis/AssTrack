@@ -22,6 +22,8 @@ public class ApiKeyAuthenticationHandler(
     protected override Task<AuthenticateResult> HandleAuthenticateAsync()
     {
         var configuredKey = configuration["Auth:ApiKey"];
+        var ingestKey = configuration["Auth:IngestApiKey"];
+
         if (string.IsNullOrWhiteSpace(configuredKey))
         {
             var isDevOrTesting = environment.IsDevelopment() ||
@@ -33,27 +35,47 @@ public class ApiKeyAuthenticationHandler(
                 return Task.FromResult(AuthenticateResult.Fail("API key is not configured"));
             }
 
-            // No key configured in Development/Testing – allow all
-            var anonPrincipal = new ClaimsPrincipal(new ClaimsIdentity(
-                [new Claim(ClaimTypes.Name, "anonymous")],
-                Scheme.Name));
+            // No key configured in Development/Testing – allow all with both roles
+            var anonClaims = new[]
+            {
+                new Claim(ClaimTypes.Name, "anonymous"),
+                new Claim(ClaimTypes.Role, "operator"),
+                new Claim(ClaimTypes.Role, "ingest")
+            };
+            var anonPrincipal = new ClaimsPrincipal(new ClaimsIdentity(anonClaims, Scheme.Name));
             return Task.FromResult(AuthenticateResult.Success(new AuthenticationTicket(anonPrincipal, Scheme.Name)));
         }
 
-        // Only try header (query param removed)
         Request.Headers.TryGetValue(Options.HeaderName, out var headerKey);
         var providedKey = headerKey.ToString();
 
-        if (providedKey != configuredKey)
+        if (providedKey == configuredKey)
         {
-            return Task.FromResult(AuthenticateResult.Fail("Invalid or missing API key"));
+            // Operator key: both roles
+            var claims = new[]
+            {
+                new Claim(ClaimTypes.Name, "api-client"),
+                new Claim(ClaimTypes.Role, "operator"),
+                new Claim(ClaimTypes.Role, "ingest")
+            };
+            var identity = new ClaimsIdentity(claims, Scheme.Name);
+            var principal = new ClaimsPrincipal(identity);
+            return Task.FromResult(AuthenticateResult.Success(new AuthenticationTicket(principal, Scheme.Name)));
         }
 
-        var claims = new[] { new Claim(ClaimTypes.Name, "api-client") };
-        var identity = new ClaimsIdentity(claims, Scheme.Name);
-        var principal = new ClaimsPrincipal(identity);
-        var ticket = new AuthenticationTicket(principal, Scheme.Name);
+        if (!string.IsNullOrWhiteSpace(ingestKey) && providedKey == ingestKey)
+        {
+            // Ingest-only key: ingest role only
+            var claims = new[]
+            {
+                new Claim(ClaimTypes.Name, "api-client"),
+                new Claim(ClaimTypes.Role, "ingest")
+            };
+            var identity = new ClaimsIdentity(claims, Scheme.Name);
+            var principal = new ClaimsPrincipal(identity);
+            return Task.FromResult(AuthenticateResult.Success(new AuthenticationTicket(principal, Scheme.Name)));
+        }
 
-        return Task.FromResult(AuthenticateResult.Success(ticket));
+        return Task.FromResult(AuthenticateResult.Fail("Invalid or missing API key"));
     }
 }

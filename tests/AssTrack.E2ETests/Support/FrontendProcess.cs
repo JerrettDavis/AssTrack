@@ -1,16 +1,24 @@
 using System.Diagnostics;
+using System.Text.Json;
 
 namespace AssTrack.E2ETests.Support;
 
 public class FrontendProcess : IDisposable
 {
     private Process? _process;
+    private string? _configJsonPath;
 
     public async Task StartAsync()
     {
         var repoRoot = E2ESettings.GetRepoRoot();
         var frontendPath = Path.Combine(repoRoot, "frontend");
         var vitePath = Path.Combine(frontendPath, "node_modules", "vite", "bin", "vite.js");
+
+        // Write runtime config to public/config.json so the Vite dev server serves it at /config.json
+        var publicDir = Path.Combine(frontendPath, "public");
+        Directory.CreateDirectory(publicDir);
+        _configJsonPath = Path.Combine(publicDir, "config.json");
+        await File.WriteAllTextAsync(_configJsonPath, JsonSerializer.Serialize(new { apiKey = E2ESettings.ApiKey }));
 
         _process = new Process
         {
@@ -27,7 +35,6 @@ public class FrontendProcess : IDisposable
         };
 
         _process.StartInfo.Environment["VITE_E2E_PROXY_TARGET"] = E2ESettings.BackendUrl;
-        _process.StartInfo.Environment["VITE_API_KEY"] = E2ESettings.ApiKey;
 
         _process.Start();
 
@@ -61,6 +68,10 @@ public class FrontendProcess : IDisposable
         {
             KillProcessTree(_process.Id);
             _process.Dispose();
+        }
+        if (_configJsonPath != null && File.Exists(_configJsonPath))
+        {
+            try { File.Delete(_configJsonPath); } catch { /* best effort */ }
         }
     }
 

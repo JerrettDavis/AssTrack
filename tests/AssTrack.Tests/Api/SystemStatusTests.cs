@@ -62,4 +62,15 @@ public class SystemStatusTests : IClassFixture<TestWebApplicationFactory>
         result.Should().NotBeNull();
         result!.RateLimitPermitLimit.Should().BeGreaterThan(0);
     }
+
+    [Fact]
+    public async Task GetSystemStatus_IngestApiKeyConfigured_IsTrue_WhenSet()
+    {
+        using var client = _factory.CreateAuthenticatedClient();
+        var response = await client.GetAsync("/api/system/status");
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var result = await response.Content.ReadFromJsonAsync<SystemStatusDto>();
+        result.Should().NotBeNull();
+        result!.IngestApiKeyConfigured.Should().BeTrue();
+    }
 }

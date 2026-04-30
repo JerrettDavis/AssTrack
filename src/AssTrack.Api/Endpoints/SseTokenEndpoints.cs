@@ -15,7 +15,8 @@ public static class SseTokenEndpoints
             return Results.Ok(new SseTokenResponse(token, expiresAt));
         })
         .WithName("IssueSseToken")
-        .WithSummary("Issue a short-lived SSE token (TTL configured via SseToken:TtlMinutes)");
+        .WithSummary("Issue a short-lived SSE token (TTL configured via SseToken:TtlMinutes)")
+        .RequireAuthorization("Operator");
 
         return group;
     }

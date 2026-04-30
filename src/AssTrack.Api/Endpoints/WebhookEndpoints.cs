@@ -55,7 +55,8 @@ public static class WebhookEndpoints
             return Results.Ok(new PagedResult<WebhookDeliveryLogDto>(items, total, page, pageSize));
         })
         .WithName("GetWebhookDeliveries")
-        .WithSummary("List webhook delivery logs with optional filtering.");
+        .WithSummary("List webhook delivery logs with optional filtering.")
+        .RequireAuthorization("Operator");
 
         webhooks.MapGet("/status", async (
             AssTrackDbContext db,
@@ -88,7 +89,8 @@ public static class WebhookEndpoints
                 AvgDurationMs: avgDurationMs));
         })
         .WithName("GetWebhookStatus")
-        .WithSummary("Get webhook configuration status and 24-hour delivery statistics.");
+        .WithSummary("Get webhook configuration status and 24-hour delivery statistics.")
+        .RequireAuthorization("Operator");
 
         webhooks.MapPost("/test", async (
             [FromBody] TestWebhookRequest? body,
@@ -141,7 +143,8 @@ public static class WebhookEndpoints
                 Message: message));
         })
         .WithName("TestWebhookFire")
-        .WithSummary("Fire a synthetic test webhook event to verify delivery configuration.");
+        .WithSummary("Fire a synthetic test webhook event to verify delivery configuration.")
+        .RequireAuthorization("Operator");
 
         return group;
     }

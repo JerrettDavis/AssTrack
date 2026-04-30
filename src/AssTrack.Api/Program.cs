@@ -162,7 +162,7 @@ api.MapGet("/alerts/summary", async (SpeedAlertRepository speedAlerts, GeofenceB
     var speedCount = await speedAlerts.GetUnacknowledgedCountAsync(ct);
     var breachCount = await breaches.GetUnacknowledgedCountAsync(ct);
     return Results.Ok(new AlertSummaryDto(speedCount, breachCount));
-});
+}).RequireAuthorization("Operator");
 api.MapGet("/health", async (AssTrackDbContext db) =>
 {
     try

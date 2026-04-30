@@ -8,6 +8,8 @@ services:
       ConnectionStrings__DefaultConnection: "Data Source=/data/asstrack.db"
       # Auth__ApiKey MUST be set in .env or environment before starting
       Auth__ApiKey: ${ASSTRACK_API_KEY:?ASSTRACK_API_KEY must be set in .env or environment before starting. See .env.example.}
+      # Optional: separate ingest-only key for device POSTs
+      Auth__IngestApiKey: ${ASSTRACK_INGEST_API_KEY:-}
       # Override CORS origins via environment: Cors__AllowedOrigins__0=https://your-frontend
     volumes:
       - asstrack-data:/data
@@ -24,6 +26,8 @@ services:
     build:
       context: frontend
       dockerfile: Dockerfile
+    environment:
+      ASSTRACK_API_KEY: ${ASSTRACK_API_KEY:?ASSTRACK_API_KEY must be set}
     ports:
       - "5174:80"
     depends_on:

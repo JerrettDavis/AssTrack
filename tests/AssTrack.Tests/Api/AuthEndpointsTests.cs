@@ -29,15 +29,11 @@ public class AuthEndpointsTests : IClassFixture<TestWebApplicationFactory>
     }
 
     [Fact]
-    public async Task AuthMe_WithIngestKey_Returns200AndIngestRoleOnly()
+    public async Task AuthMe_WithIngestKey_Returns403()
     {
         using var client = _factory.CreateIngestClient();
         var response = await client.GetAsync("/api/auth/me");
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var result = await response.Content.ReadFromJsonAsync<IdentityResponse>();
-        Assert.NotNull(result);
-        Assert.Single(result.Roles);
-        Assert.Contains("ingest", result.Roles);
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
 
     [Fact]

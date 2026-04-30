@@ -213,4 +213,148 @@ public class IngestKeyAuthorizationTests : IClassFixture<TestWebApplicationFacto
         Assert.NotEqual(HttpStatusCode.Unauthorized, response.StatusCode);
         Assert.NotEqual(HttpStatusCode.Forbidden, response.StatusCode);
     }
+
+    // -----------------------------------------------------------------------
+    // Asset by ID
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public async Task GetAssetById_WithIngestKey_Returns403()
+    {
+        using var client = _factory.CreateIngestClient();
+        var response = await client.GetAsync($"/api/assets/{KnownGuid}");
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    // -----------------------------------------------------------------------
+    // Device by ID and summary
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public async Task GetDeviceById_WithIngestKey_Returns403()
+    {
+        using var client = _factory.CreateIngestClient();
+        var response = await client.GetAsync($"/api/devices/{KnownGuid}");
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetDeviceSummary_WithIngestKey_Returns403()
+    {
+        using var client = _factory.CreateIngestClient();
+        var response = await client.GetAsync($"/api/devices/{KnownGuid}/summary");
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    // -----------------------------------------------------------------------
+    // Geofence breaches
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public async Task GetGeofenceBreaches_WithIngestKey_Returns403()
+    {
+        using var client = _factory.CreateIngestClient();
+        var response = await client.GetAsync("/api/geofences/breaches");
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    // -----------------------------------------------------------------------
+    // Speed alerts list
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public async Task GetSpeedAlerts_WithIngestKey_Returns403()
+    {
+        using var client = _factory.CreateIngestClient();
+        var response = await client.GetAsync("/api/speed-alerts");
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    // -----------------------------------------------------------------------
+    // Observations read endpoints
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public async Task GetObservations_WithIngestKey_Returns403()
+    {
+        using var client = _factory.CreateIngestClient();
+        var response = await client.GetAsync("/api/observations");
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetLatestObservationForDevice_WithIngestKey_Returns403()
+    {
+        using var client = _factory.CreateIngestClient();
+        var response = await client.GetAsync($"/api/observations/latest/{KnownGuid}");
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetLatestPositions_WithIngestKey_Returns403()
+    {
+        using var client = _factory.CreateIngestClient();
+        var response = await client.GetAsync("/api/observations/latest-positions");
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetObservationHistory_WithIngestKey_Returns403()
+    {
+        using var client = _factory.CreateIngestClient();
+        var response = await client.GetAsync("/api/observations/history");
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    // -----------------------------------------------------------------------
+    // Webhooks
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public async Task GetWebhookDeliveries_WithIngestKey_Returns403()
+    {
+        using var client = _factory.CreateIngestClient();
+        var response = await client.GetAsync("/api/webhooks/deliveries");
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetWebhookStatus_WithIngestKey_Returns403()
+    {
+        using var client = _factory.CreateIngestClient();
+        var response = await client.GetAsync("/api/webhooks/status");
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task PostWebhookTest_WithIngestKey_Returns403()
+    {
+        using var client = _factory.CreateIngestClient();
+        var response = await client.PostAsJsonAsync("/api/webhooks/test", new { });
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    // -----------------------------------------------------------------------
+    // Auth/me
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public async Task GetAuthMe_WithIngestKey_Returns403()
+    {
+        using var client = _factory.CreateIngestClient();
+        var response = await client.GetAsync("/api/auth/me");
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    // -----------------------------------------------------------------------
+    // Alerts summary
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public async Task GetAlertsSummary_WithIngestKey_Returns403()
+    {
+        using var client = _factory.CreateIngestClient();
+        var response = await client.GetAsync("/api/alerts/summary");
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
 }

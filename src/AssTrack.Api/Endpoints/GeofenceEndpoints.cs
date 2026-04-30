@@ -116,7 +116,7 @@ public static class GeofenceEndpoints
             }
             
             return Results.Ok(items.Select(MapBreach));
-        });
+        }).RequireAuthorization("Operator");
 
         geofences.MapPost("/breaches/bulk-acknowledge", async (BulkAcknowledgeBreachesRequest request, GeofenceBreachRepository breachRepository, CancellationToken cancellationToken) =>
         {

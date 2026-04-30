@@ -24,6 +24,7 @@ file sealed class NullWebhookService : IWebhookNotificationService
 public class TestWebApplicationFactory : WebApplicationFactory<Program>
 {
     public const string TestApiKey = "test-api-key";
+    public const string TestIngestApiKey = "test-ingest-key";
     private SqliteConnection? _connection;
     private readonly string _databaseName = $"AssTrackTests-{Guid.NewGuid():N}";
     private readonly int? _ttlMinutes;
@@ -42,7 +43,8 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
         {
             var configDict = new Dictionary<string, string?>
             {
-                ["Auth:ApiKey"] = TestApiKey
+                ["Auth:ApiKey"] = TestApiKey,
+                ["Auth:IngestApiKey"] = TestIngestApiKey
             };
             
             if (_ttlMinutes.HasValue)
@@ -76,6 +78,13 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
     {
         var client = CreateClient();
         client.DefaultRequestHeaders.Add("X-Api-Key", TestApiKey);
+        return client;
+    }
+
+    public HttpClient CreateIngestClient()
+    {
+        var client = CreateClient();
+        client.DefaultRequestHeaders.Add("X-Api-Key", TestIngestApiKey);
         return client;
     }
 

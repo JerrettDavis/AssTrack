@@ -45,7 +45,7 @@ public static class SpeedAlertEndpoints
             }
             
             return Results.Ok(items.Select(Map));
-        });
+        }).RequireAuthorization("Operator");
 
         alerts.MapPost("/{id:guid}/acknowledge", async (Guid id, AcknowledgeSpeedAlertRequest request, SpeedAlertRepository repository, CancellationToken cancellationToken) =>
         {

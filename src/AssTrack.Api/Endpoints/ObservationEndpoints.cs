@@ -17,19 +17,19 @@ public static class ObservationEndpoints
         {
             var items = await repository.GetRecentAsync(cancellationToken: cancellationToken);
             return Results.Ok(items.Select(Map));
-        });
+        }).RequireAuthorization("Operator");
 
         observations.MapGet("/latest/{deviceId:guid}", async (Guid deviceId, ObservationRepository repository, CancellationToken cancellationToken) =>
         {
             var observation = await repository.GetLatestForDeviceAsync(deviceId, cancellationToken);
             return observation is null ? Results.NotFound() : Results.Ok(Map(observation));
-        });
+        }).RequireAuthorization("Operator");
 
         observations.MapGet("/latest-positions", async (ObservationRepository repository, CancellationToken cancellationToken) =>
         {
             var items = await repository.GetLatestPerDeviceAsync(cancellationToken);
             return Results.Ok(items.Select(Map));
-        });
+        }).RequireAuthorization("Operator");
 
         static async Task<IResult> HandleIngest(
             [FromBody] CreateObservationRequest request,
@@ -49,8 +49,8 @@ public static class ObservationEndpoints
             }
         }
 
-        observations.MapPost(string.Empty, HandleIngest).RequireRateLimiting("ingest");
-        observations.MapPost("/ingest", HandleIngest).RequireRateLimiting("ingest");
+        observations.MapPost(string.Empty, HandleIngest).RequireRateLimiting("ingest").RequireAuthorization("Ingest");
+        observations.MapPost("/ingest", HandleIngest).RequireRateLimiting("ingest").RequireAuthorization("Ingest");
 
         observations.MapPost("/simulate", async (
             [FromBody] SimulateRequest request,
@@ -66,7 +66,7 @@ public static class ObservationEndpoints
             {
                 return Results.Problem("Simulation is disabled in this environment.", statusCode: 403);
             }
-        });
+        }).RequireAuthorization("Operator");
 
         observations.MapGet("/history", async (
             ObservationRepository observationRepository,
@@ -130,7 +130,7 @@ public static class ObservationEndpoints
             );
             
             return Results.Ok(result);
-        });
+        }).RequireAuthorization("Operator");
 
         return group;
     }

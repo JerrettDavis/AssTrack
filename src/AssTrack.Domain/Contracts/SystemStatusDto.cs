@@ -5,6 +5,7 @@ public record SystemStatusDto(
     bool SimulationEnabled,
     bool WebhookConfigured,
     bool ApiKeyConfigured,
+    bool IngestApiKeyConfigured,
     bool SwaggerEnabled,
     int RateLimitPermitLimit,
     int RateLimitWindowSeconds,

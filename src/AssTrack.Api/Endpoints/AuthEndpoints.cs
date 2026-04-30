@@ -14,7 +14,7 @@ public static class AuthEndpoints
                 .ToArray();
             return Results.Ok(new IdentityDto(roles));
         })
-        .RequireAuthorization();
+        .RequireAuthorization("Operator");
     }
 
     private record IdentityDto(string[] Roles);

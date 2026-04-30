@@ -20,7 +20,7 @@ public static class DeviceEndpoints
         {
             var device = await repository.GetByIdAsync(id, cancellationToken);
             return device is null ? Results.NotFound() : Results.Ok(Map(device));
-        });
+        }).RequireAuthorization("Operator");
 
         devices.MapGet("/{id:guid}/summary", async (Guid id, DeviceRepository deviceRepository, ObservationRepository observationRepository, SpeedAlertRepository speedAlertRepository, GeofenceBreachRepository geofenceBreachRepository, CancellationToken cancellationToken) =>
         {
@@ -49,7 +49,7 @@ public static class DeviceEndpoints
             );
 
             return Results.Ok(summary);
-        });
+        }).RequireAuthorization("Operator");
 
         devices.MapPost(string.Empty, async (CreateDeviceRequest request, DeviceRepository repository, CancellationToken cancellationToken) =>
         {

@@ -1,11 +1,11 @@
+import { getRuntimeApiKey } from './config'
+
 const apiBaseUrl =
   (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim() || ''
 
-const apiKey =
-  (import.meta.env.VITE_API_KEY as string | undefined)?.trim() || ''
-
 function authHeaders(): Record<string, string> {
-  return apiKey ? { 'X-Api-Key': apiKey } : {}
+  const key = getRuntimeApiKey()
+  return key ? { 'X-Api-Key': key } : {}
 }
 
 export async function apiGet<T>(path: string): Promise<T> {

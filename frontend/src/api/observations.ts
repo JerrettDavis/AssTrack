@@ -1,4 +1,5 @@
 import { apiGet } from './client'
+import { getRuntimeApiKey } from './config'
 
 export type Observation = {
   id: string
@@ -64,8 +65,7 @@ export async function exportObservationsCsv(params: ObservationHistoryParams): P
 
   const apiBaseUrl =
     (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim() || ''
-  const apiKey =
-    (import.meta.env.VITE_API_KEY as string | undefined)?.trim() || ''
+  const apiKey = getRuntimeApiKey()
 
   const response = await fetch(`${apiBaseUrl}/api/observations/history?${query}`, {
     headers: apiKey ? { 'X-Api-Key': apiKey } : {},
