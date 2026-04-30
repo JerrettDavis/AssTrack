@@ -21,7 +21,7 @@ public class AssetApiTests : IClassFixture<TestWebApplicationFactory>
     public async Task PostAsset_Should_CreateAsset_AndBeReturnedFromGet()
     {
         await _factory.ResetDatabaseAsync();
-        using var client = _factory.CreateClient();
+        using var client = _factory.CreateAuthenticatedClient();
 
         var response = await client.PostAsJsonAsync("/api/assets", new CreateAssetRequest("Fleet Van 7", "Primary field vehicle", "Vehicle"));
         response.StatusCode.Should().Be(HttpStatusCode.Created);
@@ -38,7 +38,7 @@ public class AssetApiTests : IClassFixture<TestWebApplicationFactory>
     public async Task PostAsset_Should_PersistToDatabase()
     {
         await _factory.ResetDatabaseAsync();
-        using var client = _factory.CreateClient();
+        using var client = _factory.CreateAuthenticatedClient();
         await client.PostAsJsonAsync("/api/assets", new CreateAssetRequest("Excavator", "Yard asset", "Equipment"));
 
         using var scope = _factory.Services.CreateScope();

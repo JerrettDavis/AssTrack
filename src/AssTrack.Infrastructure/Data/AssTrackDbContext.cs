@@ -10,6 +10,7 @@ public class AssTrackDbContext(DbContextOptions<AssTrackDbContext> options) : Db
     public DbSet<Observation> Observations => Set<Observation>();
     public DbSet<Geofence> Geofences => Set<Geofence>();
     public DbSet<SpeedAlert> SpeedAlerts => Set<SpeedAlert>();
+    public DbSet<GeofenceBreach> GeofenceBreaches => Set<GeofenceBreach>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -60,6 +61,29 @@ public class AssTrackDbContext(DbContextOptions<AssTrackDbContext> options) : Db
             entity.HasOne(x => x.Observation)
                 .WithMany()
                 .HasForeignKey(x => x.ObservationId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Device)
+                .WithMany()
+                .HasForeignKey(x => x.DeviceId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Asset)
+                .WithMany()
+                .HasForeignKey(x => x.AssetId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<GeofenceBreach>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => x.ObservationId);
+            entity.HasIndex(x => new { x.DeviceId, x.DetectedAt });
+            entity.HasOne(x => x.Observation)
+                .WithMany()
+                .HasForeignKey(x => x.ObservationId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Geofence)
+                .WithMany()
+                .HasForeignKey(x => x.GeofenceId)
                 .OnDelete(DeleteBehavior.Cascade);
             entity.HasOne(x => x.Device)
                 .WithMany()

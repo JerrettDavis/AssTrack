@@ -34,7 +34,7 @@ public class ObservationApiTests : IClassFixture<TestWebApplicationFactory>
             deviceId = device.Id;
         }
 
-        using var client = _factory.CreateClient();
+        using var client = _factory.CreateAuthenticatedClient();
         var request = new CreateObservationRequest(deviceId, DateTime.UtcNow, 40.7128, -74.0060, 12, 3, 130, 180, "{\"battery\":82}");
 
         var response = await client.PostAsJsonAsync("/api/observations", request);
@@ -60,7 +60,7 @@ public class ObservationApiTests : IClassFixture<TestWebApplicationFactory>
             deviceId = device.Id;
         }
 
-        using var client = _factory.CreateClient();
+        using var client = _factory.CreateAuthenticatedClient();
         var request = new CreateObservationRequest(deviceId, DateTime.UtcNow, 51.5074, -0.1278, null, 5, 121, 45, null);
         var response = await client.PostAsJsonAsync("/api/observations", request);
 
@@ -89,7 +89,7 @@ public class ObservationApiTests : IClassFixture<TestWebApplicationFactory>
             deviceId = device.Id;
         }
 
-        using var client = _factory.CreateClient();
+        using var client = _factory.CreateAuthenticatedClient();
         var request = new CreateObservationRequest(deviceId, DateTime.UtcNow, 40.7128, -74.0060, 12, 3, 130, 180, "{\"battery\":75}");
 
         var response = await client.PostAsJsonAsync("/api/observations/ingest", request);
@@ -115,7 +115,7 @@ public class ObservationApiTests : IClassFixture<TestWebApplicationFactory>
             deviceId = device.Id;
         }
 
-        using var client = _factory.CreateClient();
+        using var client = _factory.CreateAuthenticatedClient();
         var request = new CreateObservationRequest(deviceId, DateTime.UtcNow, 51.5074, -0.1278, null, 5, 125, 45, null);
         var response = await client.PostAsJsonAsync("/api/observations/ingest", request);
 
@@ -132,7 +132,7 @@ public class ObservationApiTests : IClassFixture<TestWebApplicationFactory>
     public async Task PostObservation_Should_Return422_WhenDeviceNotFound()
     {
         await _factory.ResetDatabaseAsync();
-        using var client = _factory.CreateClient();
+        using var client = _factory.CreateAuthenticatedClient();
         var request = new CreateObservationRequest(Guid.NewGuid(), DateTime.UtcNow, 0, 0, null, null, null, null, null);
 
         var response = await client.PostAsJsonAsync("/api/observations", request);
@@ -151,7 +151,7 @@ public class ObservationApiTests : IClassFixture<TestWebApplicationFactory>
             speedKmh = 50.0,
             observedAt = DateTime.UtcNow
         };
-        var response = await _factory.CreateClient().PostAsJsonAsync("/api/observations", request);
+        var response = await _factory.CreateAuthenticatedClient().PostAsJsonAsync("/api/observations", request);
         Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
     }
 
@@ -166,7 +166,7 @@ public class ObservationApiTests : IClassFixture<TestWebApplicationFactory>
             speedKmh = 50.0,
             observedAt = DateTime.UtcNow
         };
-        var response = await _factory.CreateClient().PostAsJsonAsync("/api/observations", request);
+        var response = await _factory.CreateAuthenticatedClient().PostAsJsonAsync("/api/observations", request);
         Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
     }
 
@@ -181,7 +181,7 @@ public class ObservationApiTests : IClassFixture<TestWebApplicationFactory>
             speedKmh = -1.0,
             observedAt = DateTime.UtcNow
         };
-        var response = await _factory.CreateClient().PostAsJsonAsync("/api/observations", request);
+        var response = await _factory.CreateAuthenticatedClient().PostAsJsonAsync("/api/observations", request);
         Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
     }
 }

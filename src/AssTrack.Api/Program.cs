@@ -1,3 +1,4 @@
+using AssTrack.Api.Auth;
 using AssTrack.Api.Endpoints;
 using AssTrack.Infrastructure.Data;
 using AssTrack.Infrastructure.Repositories;
@@ -16,6 +17,7 @@ builder.Services.AddScoped<DeviceRepository>();
 builder.Services.AddScoped<ObservationRepository>();
 builder.Services.AddScoped<GeofenceRepository>();
 builder.Services.AddScoped<SpeedAlertRepository>();
+builder.Services.AddScoped<GeofenceBreachRepository>();
 
 var corsOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
 builder.Services.AddCors(options =>
@@ -28,6 +30,11 @@ builder.Services.AddCors(options =>
             policy.AllowAnyHeader().AllowAnyMethod().AllowAnyOrigin();
     });
 });
+
+builder.Services
+    .AddAuthentication(ApiKeyAuthenticationOptions.DefaultScheme)
+    .AddScheme<ApiKeyAuthenticationOptions, ApiKeyAuthenticationHandler>(ApiKeyAuthenticationOptions.DefaultScheme, _ => { });
+builder.Services.AddAuthorization();
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
@@ -45,23 +52,25 @@ using (var scope = app.Services.CreateScope())
 app.UseExceptionHandler();
 app.UseStatusCodePages();
 app.UseCors("Frontend");
+app.UseAuthentication();
+app.UseAuthorization();
 app.UseSwagger();
 app.UseSwaggerUI();
 
 app.MapHealthChecks("/healthz", new HealthCheckOptions
 {
     ResponseWriter = WriteHealthCheckResponse
-});
+}).AllowAnonymous();
 app.MapHealthChecks("/healthz/live", new HealthCheckOptions
 {
     Predicate = _ => false
-});
+}).AllowAnonymous();
 app.MapHealthChecks("/healthz/ready", new HealthCheckOptions
 {
     ResponseWriter = WriteHealthCheckResponse
-});
+}).AllowAnonymous();
 
-var api = app.MapGroup("/api");
+var api = app.MapGroup("/api").RequireAuthorization();
 api.MapAssetEndpoints();
 api.MapDeviceEndpoints();
 api.MapObservationEndpoints();
@@ -78,7 +87,7 @@ api.MapGet("/health", async (AssTrackDbContext db) =>
     {
         return Results.Json(new { status = "unhealthy", database = ex.Message }, statusCode: 503);
     }
-});
+}).AllowAnonymous();
 
 app.MapGet("/", () => Results.Redirect("/swagger"));
 
@@ -101,3 +110,4 @@ static Task WriteHealthCheckResponse(HttpContext ctx, HealthReport report)
 }
 
 public partial class Program;
+

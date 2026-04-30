@@ -38,8 +38,28 @@ The API is built with ASP.NET Core minimal APIs on .NET 10. The route prefix for
 | GET | `/api/speed-alerts` | Recent speed alerts |
 | GET | `/api/geofences` | List geofences |
 | POST | `/api/geofences` | Create a geofence |
+| GET | `/api/geofences/breaches` | Recent geofence breaches (last 100) |
 
 Speed alerts are created automatically when an observation is ingested with `SpeedKmh > 120`.
+Geofence breaches are recorded automatically when an ingested observation falls within any active geofence.
+
+## API Authentication
+
+The API supports optional key-based authentication via the `X-Api-Key` header.
+
+Configure the key in `appsettings.json` or via environment variable:
+
+```json
+{
+  "Auth": {
+    "ApiKey": "your-secret-key"
+  }
+}
+```
+
+Or via environment variable: `Auth__ApiKey=your-secret-key`
+
+When `Auth:ApiKey` is empty (default), all requests are allowed. When a key is configured, all `/api/*` endpoints require the header `X-Api-Key: <your-key>`. Health check endpoints (`/healthz/*` and `/api/health`) are always public.
 
 ## Frontend overview
 

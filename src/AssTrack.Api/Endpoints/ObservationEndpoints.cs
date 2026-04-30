@@ -34,6 +34,8 @@ public static class ObservationEndpoints
             [FromBody] CreateObservationRequest request,
             DeviceRepository deviceRepository,
             ObservationRepository observationRepository,
+            GeofenceRepository geofenceRepository,
+            GeofenceBreachRepository geofenceBreachRepository,
             CancellationToken cancellationToken)
         {
             var validationErrors = new Dictionary<string, string[]>();
@@ -92,6 +94,23 @@ public static class ObservationEndpoints
                 await observationRepository.AddSpeedAlertAsync(alert, cancellationToken);
             }
 
+            var activeGeofences = await geofenceRepository.GetActiveAsync(cancellationToken);
+            foreach (var geofence in activeGeofences)
+            {
+                if (GeofenceEvaluator.IsInside(geofence, created))
+                {
+                    var breach = new GeofenceBreach
+                    {
+                        ObservationId = created.Id,
+                        GeofenceId = geofence.Id,
+                        DeviceId = device.Id,
+                        AssetId = device.AssetId,
+                        DetectedAt = DateTime.UtcNow
+                    };
+                    await geofenceBreachRepository.AddAsync(breach, cancellationToken);
+                }
+            }
+
             created = await observationRepository.GetByIdAsync(created.Id, cancellationToken) ?? created;
             return Results.Created($"/api/observations/{created.Id}", Map(created));
         }
@@ -118,3 +137,4 @@ public static class ObservationEndpoints
         observation.HeadingDegrees,
         observation.Metadata);
 }
+

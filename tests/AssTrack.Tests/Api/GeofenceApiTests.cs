@@ -10,7 +10,7 @@ public class GeofenceApiTests : IClassFixture<TestWebApplicationFactory>
 
     public GeofenceApiTests(TestWebApplicationFactory factory)
     {
-        _client = factory.CreateClient();
+        _client = factory.CreateAuthenticatedClient();
     }
 
     [Fact]

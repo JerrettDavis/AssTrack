@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, NavLink } from 'react-router-dom'
-import AssetsPage from './pages/AssetsPage'
+import { AssetsPage } from './pages/AssetsPage'
 import DevicesPage from './pages/DevicesPage'
 import MapPage from './pages/MapPage'
 import AlertsPage from './pages/AlertsPage'

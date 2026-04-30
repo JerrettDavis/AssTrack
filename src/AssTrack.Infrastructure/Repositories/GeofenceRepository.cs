@@ -6,6 +6,12 @@ namespace AssTrack.Infrastructure.Repositories;
 
 public class GeofenceRepository(AssTrackDbContext dbContext)
 {
+    public async Task<IReadOnlyList<Geofence>> GetActiveAsync(CancellationToken cancellationToken = default)
+        => await dbContext.Geofences
+            .Where(x => x.IsActive)
+            .OrderBy(x => x.Name)
+            .ToListAsync(cancellationToken);
+
     public async Task<IReadOnlyList<Geofence>> GetAllAsync(CancellationToken cancellationToken = default)
         => await dbContext.Geofences
             .OrderBy(x => x.Name)

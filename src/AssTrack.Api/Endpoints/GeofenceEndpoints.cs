@@ -51,6 +51,12 @@ public static class GeofenceEndpoints
             return Results.Created($"/api/geofences/{geofence.Id}", Map(geofence));
         });
 
+        geofences.MapGet("/breaches", async (GeofenceBreachRepository breachRepository, CancellationToken cancellationToken) =>
+        {
+            var items = await breachRepository.GetRecentAsync(cancellationToken: cancellationToken);
+            return Results.Ok(items.Select(MapBreach));
+        });
+
         return group;
     }
 
@@ -63,4 +69,14 @@ public static class GeofenceEndpoints
         geofence.RadiusMeters,
         geofence.IsActive,
         geofence.CreatedAt);
+
+    internal static GeofenceBreachDto MapBreach(GeofenceBreach breach) => new(
+        breach.Id,
+        breach.ObservationId,
+        breach.GeofenceId,
+        breach.Geofence.Name,
+        breach.DeviceId,
+        breach.AssetId,
+        breach.DetectedAt);
 }
+

@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
@@ -10,12 +11,20 @@ namespace AssTrack.Tests.Api;
 
 public class TestWebApplicationFactory : WebApplicationFactory<Program>
 {
+    public const string TestApiKey = "test-api-key";
     private SqliteConnection? _connection;
     private readonly string _databaseName = $"AssTrackTests-{Guid.NewGuid():N}";
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
+        builder.ConfigureAppConfiguration((_, config) =>
+        {
+            config.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Auth:ApiKey"] = TestApiKey
+            });
+        });
         builder.ConfigureServices(services =>
         {
             services.RemoveAll<DbContextOptions<AssTrackDbContext>>();
@@ -30,6 +39,13 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
                 options.UseSqlite(_connection);
             });
         });
+    }
+
+    public HttpClient CreateAuthenticatedClient()
+    {
+        var client = CreateClient();
+        client.DefaultRequestHeaders.Add("X-Api-Key", TestApiKey);
+        return client;
     }
 
     public async Task ResetDatabaseAsync()
@@ -49,3 +65,4 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
         }
     }
 }
+
