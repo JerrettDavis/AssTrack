@@ -1,11 +1,9 @@
 using AssTrack.Api.Services;
 using AssTrack.Domain.Contracts;
 using AssTrack.Domain.Models;
-using AssTrack.Domain.Services;
 using AssTrack.Infrastructure.Repositories;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
-using Microsoft.EntityFrameworkCore;
 
 namespace AssTrack.Api.Endpoints;
 
@@ -35,153 +33,40 @@ public static class ObservationEndpoints
 
         static async Task<IResult> HandleIngest(
             [FromBody] CreateObservationRequest request,
-            DeviceRepository deviceRepository,
-            ObservationRepository observationRepository,
-            GeofenceRepository geofenceRepository,
-            GeofenceBreachRepository geofenceBreachRepository,
-            SpeedAlertRepository speedAlertRepository,
-            IWebhookNotificationService webhookService,
+            IObservationIngestService ingestService,
             CancellationToken cancellationToken)
         {
-            var validationErrors = new Dictionary<string, string[]>();
-            if (request.Latitude < -90 || request.Latitude > 90)
-                validationErrors["latitude"] = ["Latitude must be between -90 and 90."];
-            if (request.Longitude < -180 || request.Longitude > 180)
-                validationErrors["longitude"] = ["Longitude must be between -180 and 180."];
-            if (request.SpeedKmh < 0 || request.SpeedKmh > 5000)
-                validationErrors["speedKmh"] = ["Speed must be between 0 and 5000 km/h."];
-            if (request.ObservedAt > DateTime.UtcNow.AddMinutes(5))
-                validationErrors["observedAt"] = ["ObservedAt cannot be more than 5 minutes in the future."];
-            if (validationErrors.Count > 0)
-                return Results.ValidationProblem(validationErrors, statusCode: StatusCodes.Status422UnprocessableEntity);
-
-            if (request.DeviceId == Guid.Empty && string.IsNullOrWhiteSpace(request.DeviceIdentifier))
-            {
-                return Results.ValidationProblem(
-                    new Dictionary<string, string[]> { ["deviceId"] = ["Either DeviceId or DeviceIdentifier must be provided."] },
-                    statusCode: StatusCodes.Status422UnprocessableEntity);
-            }
-
-            var device = request.DeviceId != Guid.Empty
-                ? await deviceRepository.GetByIdAsync(request.DeviceId, cancellationToken)
-                : null;
-
-            if (device is null && !string.IsNullOrWhiteSpace(request.DeviceIdentifier))
-            {
-                device = await deviceRepository.GetByIdentifierAsync(request.DeviceIdentifier.Trim(), cancellationToken);
-            }
-
-            if (device is null)
-            {
-                return Results.ValidationProblem(
-                    new Dictionary<string, string[]> { ["deviceId"] = ["Device was not found."] },
-                    statusCode: StatusCodes.Status422UnprocessableEntity);
-            }
-
-            var existing = await observationRepository.GetByDeviceAndTimeAsync(device.Id, request.ObservedAt, cancellationToken);
-            if (existing is not null)
-            {
-                return Results.Ok(Map(existing));
-            }
-
-            var observation = new Observation
-            {
-                DeviceId = device.Id,
-                ObservedAt = request.ObservedAt,
-                ReceivedAt = DateTime.UtcNow,
-                Latitude = request.Latitude,
-                Longitude = request.Longitude,
-                Altitude = request.Altitude,
-                AccuracyMeters = request.AccuracyMeters,
-                SpeedKmh = request.SpeedKmh,
-                HeadingDegrees = request.HeadingDegrees,
-                Metadata = request.Metadata
-            };
-
-            Observation created;
             try
             {
-                created = await observationRepository.AddAsync(observation, cancellationToken);
+                var result = await ingestService.IngestAsync(request, cancellationToken);
+                if (result.IsDuplicate)
+                    return Results.Ok(Map(result.Created!));
+                return Results.Created($"/api/observations/{result.Created!.Id}", Map(result.Created!));
             }
-            catch (DbUpdateException ex) when (ex.InnerException?.Message.Contains("UNIQUE", StringComparison.OrdinalIgnoreCase) == true)
+            catch (ObservationIngestException ex)
             {
-                var existingOnConflict = await observationRepository.GetByDeviceAndTimeAsync(device.Id, request.ObservedAt, cancellationToken);
-                if (existingOnConflict is not null)
-                    return Results.Ok(Map(existingOnConflict));
-                throw;
+                return Results.ValidationProblem(ex.ValidationErrors, statusCode: StatusCodes.Status422UnprocessableEntity);
             }
-            var alert = SpeedAlertEvaluator.Evaluate(created, device.AssetId, device.Asset?.SpeedThresholdKmh ?? SpeedAlertEvaluator.DefaultThresholdKmh);
-            if (alert is not null)
-            {
-                var hasCooldown = await speedAlertRepository.HasRecentAlertAsync(device.Id, SpeedAlertEvaluator.AlertCooldown, cancellationToken);
-                if (!hasCooldown)
-                {
-                    await observationRepository.AddSpeedAlertAsync(alert, cancellationToken);
-                    alert.Device = device;
-                    alert.Asset = device.Asset;
-                    await webhookService.NotifySpeedAlertAsync(alert, cancellationToken);
-                }
-            }
-
-            var activeGeofences = await geofenceRepository.GetActiveAsync(cancellationToken);
-            foreach (var geofence in activeGeofences)
-            {
-                var isInside = GeofenceEvaluator.IsInside(geofence, created);
-                var state = await geofenceBreachRepository.GetStateAsync(device.Id, geofence.Id, cancellationToken);
-                if (state is not null && created.ObservedAt < state.LastObservationAt) continue;
-                var wasInside = state?.IsInside ?? false;
-
-                if (isInside && !wasInside)
-                {
-                    var breach = new GeofenceBreach
-                    {
-                        ObservationId = created.Id,
-                        GeofenceId = geofence.Id,
-                        DeviceId = device.Id,
-                        AssetId = device.AssetId,
-                        DetectedAt = DateTime.UtcNow,
-                        EventType = GeofenceBreachEventType.Enter
-                    };
-                    await geofenceBreachRepository.AddAsync(breach, cancellationToken);
-                    breach.Device = device;
-                    breach.Asset = device.Asset;
-                    breach.Geofence = geofence;
-                    await webhookService.NotifyGeofenceBreachAsync(breach, cancellationToken);
-                }
-                else if (!isInside && wasInside)
-                {
-                    var breach = new GeofenceBreach
-                    {
-                        ObservationId = created.Id,
-                        GeofenceId = geofence.Id,
-                        DeviceId = device.Id,
-                        AssetId = device.AssetId,
-                        DetectedAt = DateTime.UtcNow,
-                        EventType = GeofenceBreachEventType.Exit
-                    };
-                    await geofenceBreachRepository.AddAsync(breach, cancellationToken);
-                    breach.Device = device;
-                    breach.Asset = device.Asset;
-                    breach.Geofence = geofence;
-                    await webhookService.NotifyGeofenceBreachAsync(breach, cancellationToken);
-                }
-
-                await geofenceBreachRepository.UpsertStateAsync(new DeviceGeofenceState
-                {
-                    DeviceId = device.Id,
-                    GeofenceId = geofence.Id,
-                    IsInside = isInside,
-                    LastObservationAt = created.ObservedAt,
-                    UpdatedAt = DateTime.UtcNow
-                }, cancellationToken);
-            }
-
-            created = await observationRepository.GetByIdAsync(created.Id, cancellationToken) ?? created;
-            return Results.Created($"/api/observations/{created.Id}", Map(created));
         }
 
         observations.MapPost(string.Empty, HandleIngest).RequireRateLimiting("ingest");
         observations.MapPost("/ingest", HandleIngest).RequireRateLimiting("ingest");
+
+        observations.MapPost("/simulate", async (
+            [FromBody] SimulateRequest request,
+            ISimulationService simulationService,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                var result = await simulationService.SimulateAsync(request, cancellationToken);
+                return Results.Ok(result);
+            }
+            catch (SimulationDisabledException)
+            {
+                return Results.Problem("Simulation is disabled in this environment.", statusCode: 403);
+            }
+        });
 
         observations.MapGet("/history", async (
             ObservationRepository observationRepository,

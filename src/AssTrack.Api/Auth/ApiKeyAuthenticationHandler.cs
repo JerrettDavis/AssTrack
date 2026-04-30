@@ -40,7 +40,11 @@ public class ApiKeyAuthenticationHandler(
             return Task.FromResult(AuthenticateResult.Success(new AuthenticationTicket(anonPrincipal, Scheme.Name)));
         }
 
-        if (!Request.Headers.TryGetValue(Options.HeaderName, out var extractedKey) || extractedKey != configuredKey)
+        // Only try header (query param removed)
+        Request.Headers.TryGetValue(Options.HeaderName, out var headerKey);
+        var providedKey = headerKey.ToString();
+
+        if (providedKey != configuredKey)
         {
             return Task.FromResult(AuthenticateResult.Fail("Invalid or missing API key"));
         }

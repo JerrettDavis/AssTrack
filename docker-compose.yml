@@ -6,8 +6,8 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ConnectionStrings__DefaultConnection: "Data Source=/data/asstrack.db"
-      # Set ASSTRACK_API_KEY in your .env file or environment to enable API key auth
-      Auth__ApiKey: ${ASSTRACK_API_KEY:-}
+      # Auth__ApiKey MUST be set in .env or environment before starting
+      Auth__ApiKey: ${ASSTRACK_API_KEY:?ASSTRACK_API_KEY must be set in .env or environment before starting. See .env.example.}
       # Override CORS origins via environment: Cors__AllowedOrigins__0=https://your-frontend
     volumes:
       - asstrack-data:/data

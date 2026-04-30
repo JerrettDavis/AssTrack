@@ -54,6 +54,25 @@ The API is built with ASP.NET Core minimal APIs on .NET 10. The route prefix for
 Speed alerts are created automatically when an observation is ingested with `SpeedKmh` exceeding the asset's `SpeedThresholdKmh` (if set) or the default of 120 km/h.
 Geofence breaches are recorded automatically when an ingested observation falls within any active geofence.
 
+## Live Events Authentication
+
+The `/api/events` Server-Sent Events (SSE) endpoint delivers real-time observations, speed alerts, and geofence breaches. To establish a connection, clients must follow a two-step token-based authentication flow:
+
+1. **Issue a token** via `POST /api/events/token` with `X-Api-Key` header
+   - Returns `{ "token": "...", "expiresAt": "2025-06-15T14:40:00Z" }`
+   - Token TTL: 10 minutes (configurable via `SseToken:TtlMinutes` setting)
+
+2. **Connect to SSE** via `GET /api/events?token=<your-token>`
+   - Token must be passed as a query parameter
+   - Connection persists until token expires or connection closes
+
+This approach is more secure than passing API keys in the URL query string, as tokens are:
+- Short-lived (10 minute default TTL)
+- Opaque (cannot be reverse-engineered)
+- Independent of long-lived API keys
+
+The frontend handles token management automatically: it fetches a fresh token on startup and reconnects gracefully if the token expires.
+
 ## Observation History & Export
 
 ### GET /api/observations/history
@@ -256,6 +275,34 @@ Webhooks__TimeoutSeconds=10
 ```
 
 `breachEventType` is either `"Enter"` or `"Exit"`.
+
+## Settings & System Status
+
+The frontend includes a **Settings** page at `/settings` for operators who need a safe view of environment-level configuration and a built-in simulation runner.
+
+### Authenticated status endpoint
+
+`GET /api/system/status` returns a sanitized configuration snapshot for authenticated clients only. It reports:
+
+- Current environment name
+- Whether simulation is enabled
+- Whether webhook delivery is configured
+- Whether an API key is configured
+- Whether Swagger is enabled
+- Ingest rate-limit settings
+- Database provider detection
+
+This endpoint intentionally avoids returning secrets or raw connection strings.
+
+### Simulation runner
+
+When simulation is enabled, the Settings page can trigger the existing `POST /api/observations/simulate` workflow with these presets:
+
+- `NormalRoute`
+- `SpeedViolation`
+- `GeofenceEntryExit`
+
+Operators can optionally provide a device identifier, inspect the result summary, and expand the event log returned by the API.
 
 ### Delivery semantics
 

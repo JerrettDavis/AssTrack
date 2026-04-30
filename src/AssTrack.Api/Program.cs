@@ -74,16 +74,27 @@ builder.Services.AddProblemDetails();
 
 builder.Services.Configure<WebhookOptions>(builder.Configuration.GetSection(WebhookOptions.SectionName));
 builder.Services.AddHttpClient<IWebhookNotificationService, WebhookNotificationService>();
+builder.Services.AddScoped<IObservationIngestService, ObservationIngestService>();
+builder.Services.Configure<SimulationOptions>(builder.Configuration.GetSection(SimulationOptions.SectionName));
+builder.Services.AddScoped<ISimulationService, SimulationService>();
+builder.Services.AddSingleton<ILiveEventBroadcaster, LiveEventBroadcaster>();
+builder.Services.AddSingleton<ISseTokenService, SseTokenService>();
 
 var app = builder.Build();
 
 {
     var apiKey = builder.Configuration["Auth:ApiKey"];
-    if (string.IsNullOrWhiteSpace(apiKey) && !builder.Environment.IsDevelopment() &&
-        !string.Equals(builder.Environment.EnvironmentName, "Testing", StringComparison.OrdinalIgnoreCase))
+    if (string.IsNullOrWhiteSpace(apiKey))
     {
-        var startupLogger = app.Services.GetRequiredService<ILogger<Program>>();
-        startupLogger.LogCritical("Auth:ApiKey is not configured. All authenticated API requests will be rejected.");
+        var isDevOrTesting = app.Environment.IsDevelopment() ||
+            string.Equals(app.Environment.EnvironmentName, "Testing", StringComparison.OrdinalIgnoreCase);
+        
+        if (!isDevOrTesting)
+        {
+            throw new InvalidOperationException(
+                "Auth:ApiKey is not configured. Set Auth__ApiKey environment variable or configure in appsettings. " +
+                "See .env.example for details.");
+        }
     }
 }
 
@@ -139,6 +150,8 @@ api.MapObservationEndpoints();
 api.MapGeofenceEndpoints();
 api.MapSpeedAlertEndpoints();
 api.MapWebhookEndpoints();
+api.MapSystemEndpoints();
+api.MapSseTokenEndpoints();
 api.MapGet("/alerts/summary", async (SpeedAlertRepository speedAlerts, GeofenceBreachRepository breaches, CancellationToken ct) =>
 {
     var speedCount = await speedAlerts.GetUnacknowledgedCountAsync(ct);
@@ -157,6 +170,9 @@ api.MapGet("/health", async (AssTrackDbContext db) =>
         return Results.Json(new { status = "unhealthy", database = ex.Message }, statusCode: 503);
     }
 }).AllowAnonymous();
+
+// SSE endpoint is anonymous but requires a token query parameter
+app.MapGet("/api/events", EventsEndpoints.HandleSseAsync).AllowAnonymous();
 
 if (swaggerEnabled)
     app.MapGet("/", () => Results.Redirect("/swagger"));

@@ -26,16 +26,31 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
     public const string TestApiKey = "test-api-key";
     private SqliteConnection? _connection;
     private readonly string _databaseName = $"AssTrackTests-{Guid.NewGuid():N}";
+    private readonly int? _ttlMinutes;
+
+    public TestWebApplicationFactory() { }
+
+    internal TestWebApplicationFactory(int? ttlMinutes)
+    {
+        _ttlMinutes = ttlMinutes;
+    }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
         builder.ConfigureAppConfiguration((_, config) =>
         {
-            config.AddInMemoryCollection(new Dictionary<string, string?>
+            var configDict = new Dictionary<string, string?>
             {
                 ["Auth:ApiKey"] = TestApiKey
-            });
+            };
+            
+            if (_ttlMinutes.HasValue)
+            {
+                configDict["SseToken:TtlMinutes"] = _ttlMinutes.ToString();
+            }
+
+            config.AddInMemoryCollection(configDict);
         });
         builder.ConfigureServices(services =>
         {

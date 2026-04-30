@@ -8,8 +8,23 @@ public static class EventsEndpoints
 {
     private static readonly JsonSerializerOptions _jsonOptions = new(JsonSerializerDefaults.Web);
 
-    public static async Task HandleSseAsync(HttpContext context, ILiveEventBroadcaster broadcaster, CancellationToken ct)
+    public static async Task HandleSseAsync(HttpContext context, ILiveEventBroadcaster broadcaster, ISseTokenService tokenService, CancellationToken ct)
     {
+        // Validate token from query parameter
+        if (!context.Request.Query.TryGetValue("token", out var tokenValue) || string.IsNullOrWhiteSpace(tokenValue))
+        {
+            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            await context.Response.WriteAsJsonAsync(new { error = "SSE token is required" }, cancellationToken: ct);
+            return;
+        }
+
+        if (!tokenService.ValidateToken(tokenValue.ToString()))
+        {
+            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            await context.Response.WriteAsJsonAsync(new { error = "Invalid or expired SSE token" }, cancellationToken: ct);
+            return;
+        }
+
         var response = context.Response;
         response.Headers["Content-Type"] = "text/event-stream";
         response.Headers["Cache-Control"] = "no-cache";

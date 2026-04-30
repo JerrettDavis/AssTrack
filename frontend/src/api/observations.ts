@@ -77,3 +77,8 @@ export async function exportObservationsCsv(params: ObservationHistoryParams): P
 
   return response.blob()
 }
+
+export async function getDeviceTrail(deviceId: string, limit: number): Promise<Observation[]> {
+  const result = await getObservationHistory({ deviceId, page: 1, pageSize: limit })
+  return result.items
+}

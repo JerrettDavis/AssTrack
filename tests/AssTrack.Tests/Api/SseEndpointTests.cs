@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Json;
 using AssTrack.Api.Services;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
@@ -15,7 +16,7 @@ public class SseEndpointTests : IClassFixture<TestWebApplicationFactory>
     }
 
     [Fact]
-    public async Task GetEvents_WithoutApiKey_Returns401()
+    public async Task GetEvents_WithoutToken_Returns401()
     {
         using var client = _factory.CreateClient();
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
@@ -24,35 +25,39 @@ public class SseEndpointTests : IClassFixture<TestWebApplicationFactory>
     }
 
     [Fact]
-    public async Task GetEvents_WithValidKeyInHeader_Returns200WithEventStream()
-    {
-        using var client = _factory.CreateAuthenticatedClient();
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        var response = await client.GetAsync("/api/events", HttpCompletionOption.ResponseHeadersRead, cts.Token);
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Equal("text/event-stream", response.Content.Headers.ContentType?.MediaType);
-    }
-
-    [Fact]
-    public async Task GetEvents_WithValidKeyAsQueryParam_Returns200WithEventStream()
+    public async Task GetEvents_WithInvalidToken_Returns401()
     {
         using var client = _factory.CreateClient();
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        var response = await client.GetAsync(
-            $"/api/events?apiKey={TestWebApplicationFactory.TestApiKey}",
-            HttpCompletionOption.ResponseHeadersRead,
-            cts.Token);
+        var response = await client.GetAsync("/api/events?token=invalid-token", HttpCompletionOption.ResponseHeadersRead, cts.Token);
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetEvents_WithValidToken_Returns200WithEventStream()
+    {
+        // First, issue a token
+        var tokenService = _factory.Services.GetRequiredService<ISseTokenService>();
+        var (token, _) = tokenService.IssueToken();
+
+        using var client = _factory.CreateClient();
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var response = await client.GetAsync($"/api/events?token={token}", HttpCompletionOption.ResponseHeadersRead, cts.Token);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal("text/event-stream", response.Content.Headers.ContentType?.MediaType);
     }
 
     [Fact]
-    public async Task GetEvents_ConnectedClient_ReceivesPublishedEvent()
+    public async Task GetEvents_WithValidToken_ReceivesPublishedEvent()
     {
-        using var client = _factory.CreateAuthenticatedClient();
+        // Issue a token
+        var tokenService = _factory.Services.GetRequiredService<ISseTokenService>();
+        var (token, _) = tokenService.IssueToken();
+
+        using var client = _factory.CreateClient();
 
         using var connectCts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
-        var response = await client.GetAsync("/api/events", HttpCompletionOption.ResponseHeadersRead, connectCts.Token);
+        var response = await client.GetAsync($"/api/events?token={token}", HttpCompletionOption.ResponseHeadersRead, connectCts.Token);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
         var broadcaster = _factory.Services.GetRequiredService<ILiveEventBroadcaster>();
@@ -91,4 +96,43 @@ public class SseEndpointTests : IClassFixture<TestWebApplicationFactory>
         Assert.Contains(lines, l => l.StartsWith("event: observation"));
         Assert.Contains(lines, l => l.StartsWith("data: "));
     }
+
+    [Fact]
+    public async Task GetEvents_WithExpiredToken_Returns401()
+    {
+        // Create a token service configured with 0 minute TTL (expires immediately)
+        using var factory = new TestWebApplicationFactory(ttlMinutes: 0);
+        var tokenService = factory.Services.GetRequiredService<ISseTokenService>();
+        var (token, _) = tokenService.IssueToken();
+
+        // Wait a bit to ensure expiration
+        await Task.Delay(100);
+
+        using var client = factory.CreateClient();
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var response = await client.GetAsync($"/api/events?token={token}", HttpCompletionOption.ResponseHeadersRead, cts.Token);
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task PostEventsToken_WithoutAuth_Returns401()
+    {
+        using var client = _factory.CreateClient();
+        var response = await client.PostAsync("/api/events/token", null);
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task PostEventsToken_WithValidAuth_Returns200AndToken()
+    {
+        using var client = _factory.CreateAuthenticatedClient();
+        var response = await client.PostAsync("/api/events/token", null);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<SseTokenResponse>();
+        Assert.NotNull(body);
+        Assert.False(string.IsNullOrWhiteSpace(body.Token));
+        Assert.True(body.ExpiresAt > DateTimeOffset.UtcNow);
+    }
+
+    private sealed record SseTokenResponse(string Token, DateTimeOffset ExpiresAt);
 }

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { acknowledgeSpeedAlert, bulkAcknowledgeSpeedAlerts, getSpeedAlerts, type SpeedAlert } from '../api/alerts'
 import { acknowledgeBreach, bulkAcknowledgeBreaches, getGeofenceBreaches, type GeofenceBreach } from '../api/geofenceBreaches'
+import { useLiveEvents } from '../hooks/useLiveEvents'
 
 type FilterTab = 'all' | 'unacknowledged'
 
@@ -45,6 +46,12 @@ export default function AlertsPage() {
       }
     }
   }, [speedFilter, breachFilter])
+
+  useLiveEvents((type, _data) => {
+    if (type === 'speed_alert' || type === 'geofence_breach') {
+      void load()
+    }
+  })
 
   async function handleAcknowledgeAlert(id: string) {
     const acknowledgedBy = window.prompt('Your name (optional):') ?? undefined

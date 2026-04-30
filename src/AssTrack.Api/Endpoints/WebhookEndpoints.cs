@@ -1,6 +1,8 @@
 using AssTrack.Api.Services;
 using AssTrack.Domain.Contracts;
+using AssTrack.Domain.Models;
 using AssTrack.Infrastructure.Data;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
@@ -87,6 +89,59 @@ public static class WebhookEndpoints
         })
         .WithName("GetWebhookStatus")
         .WithSummary("Get webhook configuration status and 24-hour delivery statistics.");
+
+        webhooks.MapPost("/test", async (
+            [FromBody] TestWebhookRequest? body,
+            IWebhookNotificationService webhookService,
+            IOptions<WebhookOptions> webhookOptions,
+            CancellationToken ct) =>
+        {
+            var eventType = string.IsNullOrWhiteSpace(body?.EventType) ? "speed_alert" : body.EventType;
+            var configured = !string.IsNullOrWhiteSpace(webhookOptions.Value.Url);
+
+            if (eventType == "geofence_breach")
+            {
+                var breach = new GeofenceBreach
+                {
+                    Id = Guid.NewGuid(),
+                    DeviceId = Guid.NewGuid(),
+                    AssetId = null,
+                    GeofenceId = Guid.NewGuid(),
+                    ObservationId = Guid.Empty,
+                    EventType = GeofenceBreachEventType.Enter,
+                    DetectedAt = DateTime.UtcNow
+                };
+                await webhookService.NotifyGeofenceBreachAsync(breach, ct);
+            }
+            else
+            {
+                var alert = new SpeedAlert
+                {
+                    Id = Guid.NewGuid(),
+                    DeviceId = Guid.NewGuid(),
+                    AssetId = null,
+                    ObservationId = Guid.Empty,
+                    ObservedSpeedKmh = 120,
+                    ThresholdKmh = 100,
+                    TriggeredAt = DateTime.UtcNow
+                };
+                await webhookService.NotifySpeedAlertAsync(alert, ct);
+            }
+
+            await Task.Delay(100, ct);
+
+            var message = configured
+                ? "Test webhook event sent. Check delivery logs for outcome."
+                : "No webhook URL configured. Test event processed but no HTTP request was made.";
+
+            return Results.Ok(new TestWebhookFireResponse(
+                Fired: true,
+                EventType: eventType,
+                Configured: configured,
+                Message: message));
+        })
+        .WithName("TestWebhookFire")
+        .WithSummary("Fire a synthetic test webhook event to verify delivery configuration.");
 
         return group;
     }

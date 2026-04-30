@@ -22,6 +22,35 @@ public static class DeviceEndpoints
             return device is null ? Results.NotFound() : Results.Ok(Map(device));
         });
 
+        devices.MapGet("/{id:guid}/summary", async (Guid id, DeviceRepository deviceRepository, ObservationRepository observationRepository, SpeedAlertRepository speedAlertRepository, GeofenceBreachRepository geofenceBreachRepository, CancellationToken cancellationToken) =>
+        {
+            var device = await deviceRepository.GetByIdAsync(id, cancellationToken);
+            if (device is null)
+                return Results.NotFound();
+
+            var latestObservation = await observationRepository.GetLatestForDeviceAsync(id, cancellationToken);
+            var unacknowledgedSpeedAlerts = await speedAlertRepository.GetRecentAsync(limit: int.MaxValue, unacknowledgedOnly: true, since: null, deviceId: id, assetId: null, cancellationToken: cancellationToken);
+            var unacknowledgedBreaches = await geofenceBreachRepository.GetRecentAsync(limit: int.MaxValue, unacknowledgedOnly: true, since: null, deviceId: id, assetId: null, cancellationToken: cancellationToken);
+
+            var summary = new DeviceSummaryDto(
+                device.Id,
+                device.Identifier,
+                device.Label,
+                device.AssetId,
+                device.Asset?.Name,
+                device.Asset?.SpeedThresholdKmh,
+                latestObservation?.ObservedAt,
+                latestObservation?.Latitude,
+                latestObservation?.Longitude,
+                latestObservation?.SpeedKmh,
+                latestObservation?.HeadingDegrees,
+                unacknowledgedSpeedAlerts.Count,
+                unacknowledgedBreaches.Count
+            );
+
+            return Results.Ok(summary);
+        });
+
         devices.MapPost(string.Empty, async (CreateDeviceRequest request, DeviceRepository repository, CancellationToken cancellationToken) =>
         {
             if (string.IsNullOrWhiteSpace(request.Identifier))

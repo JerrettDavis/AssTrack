@@ -6,7 +6,10 @@ import MapPage from './pages/MapPage'
 import AlertsPage from './pages/AlertsPage'
 import GeofencesPage from './pages/GeofencesPage'
 import HistoryPage from './pages/HistoryPage'
+import WebhooksPage from './pages/WebhooksPage'
+import SettingsPage from './pages/SettingsPage'
 import { getAlertSummary } from './api/alerts'
+import { useLiveEvents } from './hooks/useLiveEvents'
 import './styles.css'
 
 export default function App() {
@@ -35,6 +38,12 @@ export default function App() {
     }
   }, [])
 
+  useLiveEvents((type, _data) => {
+    if (type === 'speed_alert' || type === 'geofence_breach') {
+      void loadSummary()
+    }
+  })
+
   return (
     <BrowserRouter>
       <nav className="app-nav">
@@ -47,6 +56,8 @@ export default function App() {
           {unacknowledgedCount > 0 && <span className="nav-badge">{unacknowledgedCount}</span>}
         </NavLink>
         <NavLink to="/history">History</NavLink>
+        <NavLink to="/webhooks">Webhooks</NavLink>
+        <NavLink to="/settings">⚙ Settings</NavLink>
       </nav>
       <main className="app-main">
         <Routes>
@@ -56,6 +67,8 @@ export default function App() {
           <Route path="/geofences" element={<GeofencesPage />} />
           <Route path="/alerts" element={<AlertsPage />} />
           <Route path="/history" element={<HistoryPage />} />
+          <Route path="/webhooks" element={<WebhooksPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
         </Routes>
       </main>
     </BrowserRouter>

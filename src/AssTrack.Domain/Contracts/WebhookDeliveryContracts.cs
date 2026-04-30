@@ -19,3 +19,13 @@ public sealed record WebhookStatusDto(
     int Last24hFailures,
     DateTime? LastDeliveredAt,
     double? AvgDurationMs);
+
+/// <summary>Request body for POST /api/webhooks/test.</summary>
+public sealed record TestWebhookRequest(string? EventType);
+
+/// <summary>Response from POST /api/webhooks/test.</summary>
+public sealed record TestWebhookFireResponse(
+    bool Fired,
+    string EventType,
+    bool Configured,
+    string Message);
