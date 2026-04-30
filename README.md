@@ -76,9 +76,82 @@ The alert system provides comprehensive management of speed alerts and geofence 
 | POST | `/api/geofences/breaches/bulk-acknowledge` | Acknowledge multiple breaches |
 | GET | `/api/alerts/summary` | Get count of unacknowledged speed alerts and breaches |
 
-## Alert Acknowledgement
+## Webhook Alert Delivery
 
-Both speed alerts and geofence breaches support acknowledgement. Use the acknowledge endpoints to mark an alert as reviewed:
+AssTrack can deliver alert events to an external HTTP endpoint the moment they are created, giving operators immediate integration value with their own tooling (Slack, PagerDuty, IFTTT, custom dashboards, etc.) without polling the API.
+
+### Configuration
+
+Set `Webhooks:Url` to your target endpoint. Leave it empty (the default) to disable webhook delivery entirely — there is no impact on ingest when unconfigured.
+
+**appsettings.json / environment variables:**
+
+```json
+{
+  "Webhooks": {
+    "Url": "https://hooks.yourcompany.example/asstrack",
+    "TimeoutSeconds": 10
+  }
+}
+```
+
+Or via environment variables:
+```
+Webhooks__Url=https://hooks.yourcompany.example/asstrack
+Webhooks__TimeoutSeconds=10
+```
+
+### Events delivered
+
+| Event | `eventType` field | Trigger |
+|---|---|---|
+| Speed alert created | `speed_alert` | Observation ingested with speed exceeding asset/default threshold |
+| Geofence breach created | `geofence_breach` | Observation lands inside or exits an active geofence |
+
+### Payload – `speed_alert`
+
+```json
+{
+  "eventType": "speed_alert",
+  "alertId": "3fa85f64-...",
+  "deviceId": "c3a12...",
+  "deviceIdentifier": "VAN-001",
+  "assetId": "b2f91...",
+  "assetName": "Fleet Van 1",
+  "observedSpeedKmh": 148.3,
+  "thresholdKmh": 120.0,
+  "triggeredAt": "2025-06-01T14:22:00Z",
+  "deliveredAt": "2025-06-01T14:22:00.123Z"
+}
+```
+
+### Payload – `geofence_breach`
+
+```json
+{
+  "eventType": "geofence_breach",
+  "breachId": "7ab34...",
+  "deviceId": "c3a12...",
+  "deviceIdentifier": "VAN-001",
+  "assetId": "b2f91...",
+  "assetName": "Fleet Van 1",
+  "geofenceId": "88cd1...",
+  "geofenceName": "Depot Zone",
+  "breachEventType": "Enter",
+  "detectedAt": "2025-06-01T14:22:05Z",
+  "deliveredAt": "2025-06-01T14:22:05.210Z"
+}
+```
+
+`breachEventType` is either `"Enter"` or `"Exit"`.
+
+### Delivery semantics
+
+- All payloads are sent as `HTTP POST` with `Content-Type: application/json`.
+- Failures (non-2xx responses, timeouts, network errors) are **logged and silently dropped** — they never fail the ingest request.
+- No retries or queuing. If reliable delivery is required, point the URL at a durable intermediary (e.g. a message queue webhook adapter).
+
+
 
 - `POST /api/speed-alerts/{id}/acknowledge` — body: `{ "acknowledgedBy": "operator-name" }`
 - `POST /api/geofences/breaches/{id}/acknowledge` — body: `{ "acknowledgedBy": "operator-name" }`
@@ -270,10 +343,23 @@ The E2E job runs on `ubuntu-latest` after `backend` and `frontend` succeed. Play
 - Ingest telemetry observations (lat/lon, altitude, speed, heading, metadata)
 - Automatic speed alerts triggered above the per-asset `SpeedThresholdKmh` (nullable; defaults to 120 km/h if not set)
 - Automatic geofence breach records when an observation lands inside an active circular geofence
+- **Out-of-band webhook delivery** on speed alert and geofence breach creation (opt-in via `Webhooks:Url`)
 - Alert acknowledgement for both speed alerts and geofence breaches (`POST .../acknowledge`)
 - Latest-position feed per device for live-map consumption
 - API key authentication (`X-Api-Key` header); empty key = open access for dev environments
 - Browse all contracts via Swagger/OpenAPI at `/swagger`
+
+## Ingest Hardening
+
+- Idempotency prevents duplicate observation rows by returning the existing observation when the same device and `ObservedAt` timestamp are ingested again.
+- Out-of-order protection ignores older observations when a newer geofence state has already been recorded for the same device/geofence pair.
+- Rate limiting applies a fixed-window `ingest` policy to both observation POST routes to return HTTP 429 when the configured ingest threshold is exceeded.
+
+### Edit & Reassign
+
+- Edit asset details (name, description, category, speed threshold) inline on the Assets page
+- Edit device details inline and reassign a device to any asset from the Devices page
+- Edit geofence properties inline including name, coordinates, radius, and active state on the Geofences page
 
 ## Health & readiness endpoints
 
