@@ -186,7 +186,7 @@ The live map provides real-time asset tracking and situational awareness:
 - **Trail Visualization**: Render 20, 50, or 100 recent points as an on-map trail polyline
 - **Device Health Panel**: When a device is selected, display last seen time, latest speed, heading, and counts of unacknowledged alerts
 - **Geofence Overlay**: Active geofence zones are rendered as blue circles on the map
-- **Real-time Updates**: Map positions, selected trails, and device health refresh every 30 seconds
+- **Real-time Updates**: Map positions update live via SSE (`observation` events). Trails and device health refresh automatically when the selected device receives an event. A 30-second polling interval acts as a reconcile fallback.
 
 ## Webhook Alert Delivery
 
@@ -335,12 +335,105 @@ Returns webhook configuration state and 24-hour delivery statistics.
 | `lastDeliveredAt` | Timestamp of the most recent attempt (any outcome) |
 | `avgDurationMs` | Average response time (ms) over the last 24 hours |
 
+### POST /api/webhooks/test
+
+Fire a synthetic test webhook event to verify your delivery configuration without requiring live data.
+
+#### Request body (optional)
+
+```json
+{ "eventType": "speed_alert" }
+```
+
+| Field | Values | Default |
+|---|---|---|
+| `eventType` | `speed_alert`, `geofence_breach` | `speed_alert` |
+
+#### Response
+
+```json
+{
+  "fired": true,
+  "eventType": "speed_alert",
+  "configured": true,
+  "message": "Test webhook event sent. Check delivery logs for outcome."
+}
+```
+
+When `configured` is `false` (no `Webhooks:Url` set), the synthetic payload is still processed internally but no outbound HTTP request is made.
+
+#### Operator workflow
+
+1. Set `Webhooks:Url` in your configuration (see [Configuration](#configuration) above).
+2. Navigate to **Settings → Webhooks** (`/webhooks`) in the AssTrack UI.
+3. Click **Send test event** — this calls `POST /api/webhooks/test`.
+4. Check the delivery log table on the same page (populated from `GET /api/webhooks/deliveries`) to confirm delivery outcome.
+
 
 
 - `POST /api/speed-alerts/{id}/acknowledge` — body: `{ "acknowledgedBy": "operator-name" }`
 - `POST /api/geofences/breaches/{id}/acknowledge` — body: `{ "acknowledgedBy": "operator-name" }`
 
 The `acknowledgedAtUtc` and `acknowledgedBy` fields are returned in list responses so the UI can show acknowledgement status.
+
+## Live Events (SSE)
+
+AssTrack streams real-time telemetry events to browser clients using Server-Sent Events (SSE). The frontend connects once and receives push notifications for new observations, speed alerts, and geofence breaches — no polling required for these events.
+
+### GET /api/events
+
+Long-lived `text/event-stream` connection. On connect, the server sends a `: connected` keepalive comment, then streams events as they occur.
+
+#### Authentication
+
+`EventSource` cannot send custom headers. Pass the API key as a query parameter:
+
+```
+GET /api/events?apiKey=<your-api-key>
+```
+
+When no API key is configured (development), the parameter is not required.
+
+#### Event types
+
+| SSE event name | Trigger | Key fields |
+|---|---|---|
+| `observation` | New telemetry observation ingested | `id`, `deviceId`, `assetId`, `latitude`, `longitude`, `speedKmh`, `observedAt` |
+| `speed_alert` | Speed threshold exceeded | `id`, `deviceId`, `assetId`, `observedSpeedKmh`, `thresholdKmh`, `triggeredAt` |
+| `geofence_breach` | Device enters or exits a geofence | `id`, `deviceId`, `assetId`, `geofenceId`, `eventType` (`Enter`/`Exit`), `detectedAt` |
+
+#### Example stream
+
+```
+: connected
+
+event: observation
+data: {"id":"...","deviceId":"...","latitude":51.5074,"longitude":-0.1278,"speedKmh":85,"observedAt":"2025-06-15T14:30:00Z"}
+
+event: speed_alert
+data: {"id":"...","deviceId":"...","observedSpeedKmh":148.3,"thresholdKmh":120,"triggeredAt":"2025-06-15T14:31:00Z"}
+```
+
+#### Capacity and backpressure
+
+Each connected client gets a bounded channel (capacity 100). If the channel is full when an event is published, the **oldest** event is dropped (DropOldest). Publishing is always non-blocking — ingest is never delayed by slow consumers. A warning is logged per dropped event.
+
+#### nginx configuration
+
+The frontend Nginx config already includes a dedicated `/api/events` location with:
+- `proxy_buffering off` — disables output buffering so events flow immediately
+- `proxy_read_timeout 86400s` / `proxy_send_timeout 86400s` — 24-hour connection lifetime
+- `chunked_transfer_encoding on`
+
+#### Frontend behaviour
+
+The frontend maintains a **singleton SSE connection** (`sseClient.ts`) shared across all pages:
+- **Map page**: Live positions update on each `observation` event; the selected device's trail and health panel refresh automatically.
+- **Alert badge**: Increments immediately on `speed_alert` and `geofence_breach` events.
+- **Alerts page**: Reloads on `speed_alert` and `geofence_breach` events.
+- **Status indicator**: Map page shows `● Live` when the SSE connection is open, `○ Polling` when disconnected.
+- **Polling fallback**: All pages retain a 30-second polling interval as a reconcile mechanism for reconnect gaps or missed events.
+- **Automatic reconnect**: On connection error, the client waits 5 seconds and reconnects. Polling continues during the gap.
 
 ## API Authentication
 
@@ -359,6 +452,8 @@ Configure the key in `appsettings.json` or via environment variable:
 Or via environment variable: `Auth__ApiKey=your-secret-key`
 
 When `Auth:ApiKey` is empty (default), all requests are allowed. When a key is configured, all `/api/*` endpoints require the header `X-Api-Key: <your-key>`. Health check endpoints (`/healthz/*` and `/api/health`) are always public.
+
+> **SSE exception**: The browser `EventSource` API cannot send custom headers. For `GET /api/events`, pass the key as a query parameter: `?apiKey=<your-key>`. The server accepts this as equivalent to the header. Set `VITE_API_KEY` in your frontend `.env.local` — the SSE client appends it automatically.
 
 ## Frontend overview
 
@@ -530,6 +625,7 @@ The E2E job runs on `ubuntu-latest` after `backend` and `frontend` succeed. Play
 - **Out-of-band webhook delivery** on speed alert and geofence breach creation (opt-in via `Webhooks:Url`)
 - Alert acknowledgement for both speed alerts and geofence breaches (`POST .../acknowledge`)
 - Latest-position feed per device for live-map consumption
+- **Real-time SSE stream** (`GET /api/events`) pushing `observation`, `speed_alert`, and `geofence_breach` events to the browser; polling retained as reconcile fallback
 - API key authentication (`X-Api-Key` header); empty key = open access for dev environments
 - Browse all contracts via Swagger/OpenAPI at `/swagger`
 
@@ -604,3 +700,128 @@ Or in `appsettings.Production.json`:
 In Development, Swagger is always enabled regardless of the config flag.
 
 Run migrations on startup automatically (already configured via `Migrate()`).
+
+## Simulation / Demo Mode
+
+The simulation feature generates synthetic telemetry so you can quickly populate the system with realistic data for demos, exploratory testing, or smoke-checking a fresh deployment — without needing real GPS devices.
+
+### POST /api/observations/simulate
+
+**Request body:**
+
+```json
+{
+  "preset": "NormalRoute",
+  "deviceIdentifier": "optional-custom-device-id"
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `preset` | string | One of `NormalRoute`, `SpeedViolation`, `GeofenceEntryExit` |
+| `deviceIdentifier` | string? | Optional. Uses an existing device with this identifier, or creates a new one. If omitted, a temporary device and asset are auto-created. |
+
+**Response (200):**
+
+```json
+{
+  "observationsCreated": 10,
+  "speedAlertsTriggered": 0,
+  "geofenceBreaches": 0,
+  "deviceId": "3fa85f64-...",
+  "deviceIdentifier": "sim-NormalRoute-20250601120000",
+  "assetId": "b2f91a...",
+  "eventLog": [
+    "Created temporary device 'sim-NormalRoute-20250601120000' (id=...) with asset 'Sim Asset - NormalRoute'.",
+    "..."
+  ]
+}
+```
+
+### Presets
+
+| Preset | Points | Description |
+|---|---|---|
+| `NormalRoute` | 10 | Central London route, speeds 30–80 km/h. No speed violations. |
+| `SpeedViolation` | 8 | Route with speeds 50/50/50/140/155/160/60/60 km/h. First violation fires a speed alert; the next two are suppressed by the 5-minute cooldown. |
+| `GeofenceEntryExit` | 10 | Creates a temporary geofence (center 51.5100, -0.1000, radius 1000 m), runs a route that enters around point 4 and exits around point 8, then deactivates the geofence for test isolation. Generates ≥ 2 breach events. |
+
+### Example curl calls
+
+```bash
+# NormalRoute – 10 observations, no alerts
+curl -s -X POST http://localhost:5019/api/observations/simulate \
+  -H "Content-Type: application/json" \
+  -H "X-Api-Key: your-api-key" \
+  -d '{"preset":"NormalRoute"}' | jq .
+
+# SpeedViolation – triggers at least one speed alert
+curl -s -X POST http://localhost:5019/api/observations/simulate \
+  -H "Content-Type: application/json" \
+  -H "X-Api-Key: your-api-key" \
+  -d '{"preset":"SpeedViolation"}' | jq .
+
+# GeofenceEntryExit – creates geofence, generates enter + exit breaches
+curl -s -X POST http://localhost:5019/api/observations/simulate \
+  -H "Content-Type: application/json" \
+  -H "X-Api-Key: your-api-key" \
+  -d '{"preset":"GeofenceEntryExit"}' | jq .
+
+# Use a custom / existing device identifier
+curl -s -X POST http://localhost:5019/api/observations/simulate \
+  -H "Content-Type: application/json" \
+  -H "X-Api-Key: your-api-key" \
+  -d '{"preset":"NormalRoute","deviceIdentifier":"my-test-device"}' | jq .
+```
+
+### Enabling / disabling simulation
+
+- **Enabled by default** in Development (`appsettings.json`: `"Simulation": { "Enabled": true }`).
+- **Disabled in Production** (`appsettings.Production.json`: `"Simulation": { "Enabled": false }`). Calling the endpoint when disabled returns HTTP 403.
+- Override via environment variable: `Simulation__Enabled=false`
+
+> **Note:** `Simulation:Enabled=false` disables the endpoint entirely in production to prevent synthetic data from contaminating live environments.
+
+## Live Updates (SSE)
+
+AssTrack streams real-time events to connected browser clients over **Server-Sent Events (SSE)**.
+
+### Endpoint
+
+```
+GET /api/events
+```
+
+### Event Types
+
+| Event | Payload fields |
+|---|---|
+| `observation` | `id`, `deviceId`, `assetId`, `latitude`, `longitude`, `speedKmh`, `observedAt` |
+| `speed_alert` | `id`, `deviceId`, `assetId`, `observedSpeedKmh`, `thresholdKmh`, `triggeredAt` |
+| `geofence_breach` | `id`, `deviceId`, `assetId`, `geofenceId`, `eventType`, `detectedAt` |
+
+### Authentication
+
+The SSE endpoint requires the same API key as all other endpoints. Two methods are supported:
+
+- **Header** (preferred): `X-Api-Key: <key>` — standard for programmatic clients
+- **Query parameter**: `?apiKey=<key>` — required for browser `EventSource` which cannot send custom headers
+
+> ⚠️ HTTPS is strongly recommended when using query-param auth to prevent key exposure in logs.
+
+### Frontend Behaviour
+
+- **Map page**: device positions update live as observations arrive; no page reload needed
+- **Alert badge**: the nav badge increments immediately on `speed_alert` or `geofence_breach` events
+- **Alerts page**: refreshes automatically when alert events arrive
+- **Status indicator**: the Map page shows "● Live" (green) when SSE is connected, "○ Polling" otherwise
+
+### Fallback
+
+30-second polling is retained in all pages as a reconciliation and fallback path.
+
+### Limitations
+
+- Browser `EventSource` cannot send custom headers; query-param auth is used as a pragmatic workaround
+- HTTPS is strongly recommended in production to protect the API key in the URL
+- Each connected client holds one open HTTP connection; ensure your load balancer / reverse proxy is configured for long-lived connections (the nginx config in `frontend/nginx.conf` handles this)
