@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react'
 import { createAsset, deleteAsset, getAssets, type Asset, updateAsset, type UpdateAssetRequest } from '../api/assets'
 import { getLatestPositions, getObservations, type Observation } from '../api/observations'
+import { useIdentityContext } from '../context/IdentityContext'
 
 function formatTimestamp(value: string) {
   return new Date(value).toLocaleString()
@@ -19,6 +20,7 @@ export function AssetsPage() {
   const [submitting, setSubmitting] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editForm, setEditForm] = useState<UpdateAssetRequest>({ name: '', description: null, category: null, speedThresholdKmh: null })
+  const { isOperator } = useIdentityContext()
 
   async function load() {
     try {
@@ -220,14 +222,16 @@ export function AssetsPage() {
                       <button className="button button-secondary" disabled={submitting} onClick={() => startEdit(asset)} type="button">
                         Edit
                       </button>
-                      <button
-                        className="button button-danger"
-                        disabled={submitting}
-                        onClick={() => void handleDeleteAsset(asset.id, asset.name)}
-                        type="button"
-                      >
-                        Delete
-                      </button>
+                      {isOperator && (
+                        <button
+                          className="button button-danger"
+                          disabled={submitting}
+                          onClick={() => void handleDeleteAsset(asset.id, asset.name)}
+                          type="button"
+                        >
+                          Delete
+                        </button>
+                      )}
                     </div>
                   </>
                 )}

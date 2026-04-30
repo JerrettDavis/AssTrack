@@ -1,6 +1,7 @@
 import { useEffect, useState, type CSSProperties } from 'react'
 import { apiPost } from '../api/client'
 import { getSystemStatus, type SystemStatus } from '../api/system'
+import { useIdentityContext } from '../context/IdentityContext'
 
 interface SimulateResult {
   observationsCreated: number
@@ -37,6 +38,17 @@ const tileStyle: CSSProperties = {
 }
 
 export default function SettingsPage() {
+  const { isOperator, loading: identityLoading } = useIdentityContext()
+
+  if (!isOperator && !identityLoading) {
+    return (
+      <div className="card">
+        <h1>Settings</h1>
+        <p className="muted">Settings are only accessible to operator keys.</p>
+      </div>
+    )
+  }
+
   const [status, setStatus] = useState<SystemStatus | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)

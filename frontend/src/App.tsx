@@ -10,11 +10,13 @@ import WebhooksPage from './pages/WebhooksPage'
 import SettingsPage from './pages/SettingsPage'
 import { getAlertSummary } from './api/alerts'
 import { useLiveEvents } from './hooks/useLiveEvents'
+import { IdentityProvider, useIdentityContext } from './context/IdentityContext'
 import './styles.css'
 
-export default function App() {
+function AppContent() {
   const [unacknowledgedCount, setUnacknowledgedCount] = useState(0)
   const pollRef = useRef<number | null>(null)
+  const { isOperator } = useIdentityContext()
 
   async function loadSummary() {
     try {
@@ -45,7 +47,7 @@ export default function App() {
   })
 
   return (
-    <BrowserRouter>
+    <>
       <nav className="app-nav">
         <NavLink to="/" end>Assets</NavLink>
         <NavLink to="/devices">Devices</NavLink>
@@ -56,8 +58,8 @@ export default function App() {
           {unacknowledgedCount > 0 && <span className="nav-badge">{unacknowledgedCount}</span>}
         </NavLink>
         <NavLink to="/history">History</NavLink>
-        <NavLink to="/webhooks">Webhooks</NavLink>
-        <NavLink to="/settings">⚙ Settings</NavLink>
+        {isOperator && <NavLink to="/webhooks">Webhooks</NavLink>}
+        {isOperator && <NavLink to="/settings">⚙ Settings</NavLink>}
       </nav>
       <main className="app-main">
         <Routes>
@@ -71,6 +73,16 @@ export default function App() {
           <Route path="/settings" element={<SettingsPage />} />
         </Routes>
       </main>
+    </>
+  )
+}
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <IdentityProvider>
+        <AppContent />
+      </IdentityProvider>
     </BrowserRouter>
   )
 }

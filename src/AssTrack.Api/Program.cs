@@ -39,7 +39,11 @@ builder.Services.AddCors(options =>
 builder.Services
     .AddAuthentication(ApiKeyAuthenticationOptions.DefaultScheme)
     .AddScheme<ApiKeyAuthenticationOptions, ApiKeyAuthenticationHandler>(ApiKeyAuthenticationOptions.DefaultScheme, _ => { });
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("Operator", policy => policy.RequireRole("operator"));
+    options.AddPolicy("Ingest", policy => policy.RequireRole("ingest"));
+});
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
@@ -152,6 +156,7 @@ api.MapSpeedAlertEndpoints();
 api.MapWebhookEndpoints();
 api.MapSystemEndpoints();
 api.MapSseTokenEndpoints();
+api.MapAuthEndpoints();
 api.MapGet("/alerts/summary", async (SpeedAlertRepository speedAlerts, GeofenceBreachRepository breaches, CancellationToken ct) =>
 {
     var speedCount = await speedAlerts.GetUnacknowledgedCountAsync(ct);

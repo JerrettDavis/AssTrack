@@ -1,7 +1,19 @@
 import { useEffect, useRef, useState } from 'react'
 import { getWebhookStatus, fireWebhookTest, getWebhookDeliveries, type WebhookStatus, type WebhookDeliveryLog } from '../api/webhooks'
+import { useIdentityContext } from '../context/IdentityContext'
 
 export default function WebhooksPage() {
+  const { isOperator, loading: identityLoading } = useIdentityContext()
+
+  if (!isOperator && !identityLoading) {
+    return (
+      <div className="card">
+        <h1>Webhooks</h1>
+        <p className="muted">Webhook management is only accessible to operator keys.</p>
+      </div>
+    )
+  }
+
   const [status, setStatus] = useState<WebhookStatus | null>(null)
   const [deliveries, setDeliveries] = useState<WebhookDeliveryLog[]>([])
   const [loading, setLoading] = useState(true)

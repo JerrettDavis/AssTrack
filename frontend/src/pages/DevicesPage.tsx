@@ -1,6 +1,7 @@
 import { Fragment, FormEvent, useEffect, useState } from 'react'
 import { getAssets, type Asset } from '../api/assets'
 import { createDevice, deleteDevice, getDevices, updateDevice, type DeviceListItem, type UpdateDeviceRequest } from '../api/devices'
+import { useIdentityContext } from '../context/IdentityContext'
 
 export default function DevicesPage() {
   const [devices, setDevices] = useState<DeviceListItem[]>([])
@@ -15,6 +16,7 @@ export default function DevicesPage() {
   const [submitting, setSubmitting] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editForm, setEditForm] = useState<UpdateDeviceRequest>({ identifier: '', label: null, protocol: null, assetId: null })
+  const { isOperator } = useIdentityContext()
 
   async function load() {
     try {
@@ -161,14 +163,16 @@ export default function DevicesPage() {
                       <button className="button button-secondary" disabled={submitting} onClick={() => startEdit(device)} type="button">
                         Edit
                       </button>
-                      <button
-                        className="button button-danger"
-                        disabled={submitting}
-                        onClick={() => void handleDeleteDevice(device.id, device.identifier)}
-                        type="button"
-                      >
-                        Delete
-                      </button>
+                      {isOperator && (
+                        <button
+                          className="button button-danger"
+                          disabled={submitting}
+                          onClick={() => void handleDeleteDevice(device.id, device.identifier)}
+                          type="button"
+                        >
+                          Delete
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>

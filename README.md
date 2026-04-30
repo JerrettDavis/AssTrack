@@ -73,6 +73,53 @@ This approach is more secure than passing API keys in the URL query string, as t
 
 The frontend handles token management automatically: it fetches a fresh token on startup and reconnects gracefully if the token expires.
 
+## Key Separation (Migration)
+
+AssTrack supports two API keys for role-based access control:
+
+| Key | Environment Variable | Role(s) | Purpose |
+|-----|---------------------|---------|---------|
+| Operator key | `ASSTRACK_API_KEY` | `operator`, `ingest` | Full control-plane access |
+| Ingest key | `ASSTRACK_INGEST_API_KEY` | `ingest` | Device POST-only access |
+
+### Backward Compatibility
+
+If `ASSTRACK_INGEST_API_KEY` is not set, the operator key (`ASSTRACK_API_KEY`) continues to work for all endpoints, including ingest. Existing deployments do not need to change anything.
+
+### Upgrading to Key Separation
+
+1. Generate a new ingest key:
+   ```sh
+   openssl rand -hex 32
+   ```
+2. Set `ASSTRACK_INGEST_API_KEY` in your `.env` or environment:
+   ```
+   ASSTRACK_INGEST_API_KEY=<your-new-ingest-key>
+   ```
+3. Update device firmware or ingestion clients to use the new ingest key in the `X-Api-Key` header.
+4. The operator key retains full access. The ingest key is restricted to `POST /api/observations` and `POST /api/observations/ingest`.
+
+### Policy Summary
+
+| Endpoint | Required Policy | Allowed Keys |
+|----------|----------------|--------------|
+| `POST /api/observations` | `Ingest` | operator key, ingest key |
+| `POST /api/observations/ingest` | `Ingest` | operator key, ingest key |
+| `GET /api/system/status` | `Operator` | operator key only |
+| `POST /api/events/token` | `Operator` | operator key only |
+| All other `/api/*` endpoints | authenticated | operator key only |
+
+### UI Access Control
+
+The frontend adapts its interface based on the authenticated key's roles:
+
+| Role | UI Behaviour |
+|------|-------------|
+| `operator` | Full access: all nav items visible, Settings and Webhooks pages accessible, delete buttons shown on Assets/Devices/Geofences |
+| `ingest` | Restricted access: Settings and Webhooks nav links hidden; those pages show an access-denied message if navigated to directly; delete buttons hidden on list pages |
+
+The frontend queries `GET /api/auth/me` on startup to determine the active role set. If the request fails (network error, misconfigured key), the UI defaults to the most restrictive behaviour (`isOperator: false`).
+
 ## Observation History & Export
 
 ### GET /api/observations/history
@@ -531,7 +578,7 @@ Or via environment variable: `Auth__ApiKey=your-secret-key`
 
 When `Auth:ApiKey` is empty (default), all requests are allowed. When a key is configured, all `/api/*` endpoints require the header `X-Api-Key: <your-key>`. Health check endpoints (`/healthz/*` and `/api/health`) are always public.
 
-> **SSE exception**: The browser `EventSource` API cannot send custom headers. For `GET /api/events`, pass the key as a query parameter: `?apiKey=<your-key>`. The server accepts this as equivalent to the header. Set `VITE_API_KEY` in your frontend `.env.local` — the SSE client appends it automatically.
+> **SSE exception**: The browser `EventSource` API cannot send custom headers. The frontend uses a short-lived token-based authentication: it fetches a token via `POST /api/events/token` (using the API key) and then connects to the SSE endpoint with `?token=<short-lived-token>`. This approach avoids exposing long-lived API keys in URLs. See [Live Events Authentication](#live-events-authentication) for details.
 
 ## Frontend overview
 
@@ -551,10 +598,10 @@ The frontend is a single-page app built with Vite + React 19 + TypeScript. Depen
 
 The Vite dev server runs on `http://localhost:5174` and proxies `/api` requests to `VITE_E2E_PROXY_TARGET` when set, otherwise `http://localhost:5019`.
 
-Set `VITE_API_KEY` in a `.env.local` file (or environment) to send `X-Api-Key` with every request:
+The API key is now injected at container runtime via the `ASSTRACK_API_KEY` environment variable, which the backend serves to the frontend as `/config.json`. The frontend loads this config before React mounts. During local development with the Vite dev server, you can optionally set `VITE_API_BASE_URL` to override the API base URL:
 
 ```
-VITE_API_KEY=your-secret-key
+VITE_API_BASE_URL=http://localhost:5019
 ```
 
 ## Local startup

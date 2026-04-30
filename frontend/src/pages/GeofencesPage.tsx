@@ -2,6 +2,7 @@ import { Fragment, FormEvent, useEffect, useMemo, useState } from 'react'
 import { Circle, MapContainer, Popup, TileLayer, useMap } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
 import { createGeofence, deleteGeofence, getGeofences, updateGeofence, type Geofence, type UpdateGeofenceRequest } from '../api/geofences'
+import { useIdentityContext } from '../context/IdentityContext'
 
 function MapViewportUpdater({ center }: { center: [number, number] }) {
   const map = useMap()
@@ -24,6 +25,7 @@ export default function GeofencesPage() {
   const [radiusMeters, setRadiusMeters] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editForm, setEditForm] = useState<UpdateGeofenceRequest>({ name: '', centerLatitude: 0, centerLongitude: 0, radiusMeters: 0, isActive: true })
+  const { isOperator } = useIdentityContext()
 
   async function load() {
     try {
@@ -171,14 +173,16 @@ export default function GeofencesPage() {
                         <button className="button button-secondary" disabled={submitting} onClick={() => startEdit(geofence)} type="button">
                           Edit
                         </button>
-                        <button
-                          className="button button-danger"
-                          disabled={submitting}
-                          onClick={() => void handleDeleteGeofence(geofence.id, geofence.name)}
-                          type="button"
-                        >
-                          Delete
-                        </button>
+                        {isOperator && (
+                          <button
+                            className="button button-danger"
+                            disabled={submitting}
+                            onClick={() => void handleDeleteGeofence(geofence.id, geofence.name)}
+                            type="button"
+                          >
+                            Delete
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
