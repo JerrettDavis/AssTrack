@@ -51,13 +51,13 @@ public static class SpeedAlertEndpoints
         {
             var updated = await repository.AcknowledgeAsync(id, DateTime.UtcNow, request.AcknowledgedBy, cancellationToken);
             return updated is null ? Results.NotFound() : Results.Ok(Map(updated));
-        });
+        }).RequireAuthorization("Operator");
 
         alerts.MapPost("/bulk-acknowledge", async (BulkAcknowledgeSpeedAlertsRequest request, SpeedAlertRepository repository, CancellationToken cancellationToken) =>
         {
             var count = await repository.BulkAcknowledgeAsync(request.Ids, DateTime.UtcNow, request.AcknowledgedBy, cancellationToken);
             return Results.Ok(new { count });
-        });
+        }).RequireAuthorization("Operator");
 
         return group;
     }

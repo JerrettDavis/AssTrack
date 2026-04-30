@@ -107,7 +107,7 @@ If `ASSTRACK_INGEST_API_KEY` is not set, the operator key (`ASSTRACK_API_KEY`) c
 | `POST /api/observations/ingest` | `Ingest` | operator key, ingest key |
 | `GET /api/system/status` | `Operator` | operator key only |
 | `POST /api/events/token` | `Operator` | operator key only |
-| All other `/api/*` endpoints | authenticated | operator key only |
+| All other `/api/*` endpoints | `Operator` | operator key only |
 
 ### UI Access Control
 

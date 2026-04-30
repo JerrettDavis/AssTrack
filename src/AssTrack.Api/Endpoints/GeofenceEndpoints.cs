@@ -15,7 +15,7 @@ public static class GeofenceEndpoints
         {
             var items = await repository.GetAllAsync(cancellationToken);
             return Results.Ok(items.Select(Map));
-        });
+        }).RequireAuthorization("Operator");
 
         geofences.MapPost(string.Empty, async ([FromBody] CreateGeofenceRequest request, GeofenceRepository repository, CancellationToken cancellationToken) =>
         {
@@ -49,7 +49,7 @@ public static class GeofenceEndpoints
 
             await repository.AddAsync(geofence, cancellationToken);
             return Results.Created($"/api/geofences/{geofence.Id}", Map(geofence));
-        });
+        }).RequireAuthorization("Operator");
 
         geofences.MapPut("/{id:guid}", async (Guid id, [FromBody] UpdateGeofenceRequest request, GeofenceRepository repository, CancellationToken cancellationToken) =>
         {
@@ -72,13 +72,13 @@ public static class GeofenceEndpoints
 
             var updated = await repository.UpdateAsync(id, request.Name.Trim(), request.Description, request.CenterLatitude, request.CenterLongitude, request.RadiusMeters, request.IsActive, cancellationToken);
             return updated is null ? Results.NotFound() : Results.Ok(Map(updated));
-        });
+        }).RequireAuthorization("Operator");
 
         geofences.MapDelete("/{id:guid}", async (Guid id, GeofenceRepository repository, CancellationToken cancellationToken) =>
         {
             var deleted = await repository.DeleteAsync(id, cancellationToken);
             return deleted ? Results.NoContent() : Results.NotFound();
-        });
+        }).RequireAuthorization("Operator");
 
         geofences.MapGet("/breaches", async (
             GeofenceBreachRepository breachRepository,
@@ -122,13 +122,13 @@ public static class GeofenceEndpoints
         {
             var count = await breachRepository.BulkAcknowledgeAsync(request.Ids, DateTime.UtcNow, request.AcknowledgedBy, cancellationToken);
             return Results.Ok(new { count });
-        });
+        }).RequireAuthorization("Operator");
 
         geofences.MapPost("/breaches/{id:guid}/acknowledge", async (Guid id, AcknowledgeBreachRequest request, GeofenceBreachRepository breachRepository, CancellationToken cancellationToken) =>
         {
             var updated = await breachRepository.AcknowledgeAsync(id, DateTime.UtcNow, request.AcknowledgedBy, cancellationToken);
             return updated is null ? Results.NotFound() : Results.Ok(MapBreach(updated));
-        });
+        }).RequireAuthorization("Operator");
 
         return group;
     }

@@ -14,7 +14,7 @@ public static class AssetEndpoints
         {
             var items = await repository.GetAllAsync(cancellationToken);
             return Results.Ok(items.Select(Map));
-        });
+        }).RequireAuthorization("Operator");
 
         assets.MapGet("/{id:guid}", async (Guid id, AssetRepository repository, CancellationToken cancellationToken) =>
         {
@@ -46,7 +46,7 @@ public static class AssetEndpoints
 
             await repository.AddAsync(asset, cancellationToken);
             return Results.Created($"/api/assets/{asset.Id}", Map(asset));
-        });
+        }).RequireAuthorization("Operator");
 
         assets.MapPut("/{id:guid}", async (Guid id, UpdateAssetRequest request, AssetRepository repository, CancellationToken cancellationToken) =>
         {
@@ -62,13 +62,13 @@ public static class AssetEndpoints
 
             var updated = await repository.UpdateAsync(id, request.Name.Trim(), request.Description, request.Category, request.SpeedThresholdKmh, cancellationToken);
             return updated is null ? Results.NotFound() : Results.Ok(Map(updated));
-        });
+        }).RequireAuthorization("Operator");
 
         assets.MapDelete("/{id:guid}", async (Guid id, AssetRepository repository, CancellationToken cancellationToken) =>
         {
             var deleted = await repository.DeleteAsync(id, cancellationToken);
             return deleted ? Results.NoContent() : Results.NotFound();
-        });
+        }).RequireAuthorization("Operator");
 
         return group;
     }

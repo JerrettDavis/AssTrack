@@ -88,5 +88,13 @@ public class SseTokenEndpointTests : IClassFixture<TestWebApplicationFactory>
         Assert.Equal("text/event-stream", response.Content.Headers.ContentType?.MediaType);
     }
 
+    [Fact]
+    public async Task PostEventsToken_WithIngestKey_Returns403()
+    {
+        using var client = _factory.CreateIngestClient();
+        var response = await client.PostAsJsonAsync("/api/events/token", new { });
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
     private sealed record SseTokenResponse(string Token, DateTimeOffset ExpiresAt);
 }

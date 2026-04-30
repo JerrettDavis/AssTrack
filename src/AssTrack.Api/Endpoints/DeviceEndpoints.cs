@@ -14,7 +14,7 @@ public static class DeviceEndpoints
         {
             var items = await repository.GetAllAsync(cancellationToken);
             return Results.Ok(items.Select(Map));
-        });
+        }).RequireAuthorization("Operator");
 
         devices.MapGet("/{id:guid}", async (Guid id, DeviceRepository repository, CancellationToken cancellationToken) =>
         {
@@ -75,7 +75,7 @@ public static class DeviceEndpoints
 
             var created = await repository.AddAsync(device, cancellationToken);
             return Results.Created($"/api/devices/{created.Id}", Map(created));
-        });
+        }).RequireAuthorization("Operator");
 
         devices.MapPut("/{id:guid}", async (Guid id, UpdateDeviceRequest request, DeviceRepository repository, CancellationToken cancellationToken) =>
         {
@@ -86,13 +86,13 @@ public static class DeviceEndpoints
 
             var updated = await repository.UpdateAsync(id, request.Identifier.Trim(), request.Label, request.Protocol, request.AssetId, cancellationToken);
             return updated is null ? Results.NotFound() : Results.Ok(Map(updated));
-        });
+        }).RequireAuthorization("Operator");
 
         devices.MapDelete("/{id:guid}", async (Guid id, DeviceRepository repository, CancellationToken cancellationToken) =>
         {
             var deleted = await repository.DeleteAsync(id, cancellationToken);
             return deleted ? Results.NoContent() : Results.NotFound();
-        });
+        }).RequireAuthorization("Operator");
 
         return group;
     }
