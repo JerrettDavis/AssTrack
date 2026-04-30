@@ -23,6 +23,12 @@ public static class ObservationEndpoints
             return observation is null ? Results.NotFound() : Results.Ok(Map(observation));
         });
 
+        observations.MapGet("/latest-positions", async (ObservationRepository repository, CancellationToken cancellationToken) =>
+        {
+            var items = await repository.GetLatestPerDeviceAsync(cancellationToken);
+            return Results.Ok(items.Select(Map));
+        });
+
         static async Task<IResult> HandleIngest(
             CreateObservationRequest request,
             DeviceRepository deviceRepository,

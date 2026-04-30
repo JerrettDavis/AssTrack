@@ -1,18 +1,27 @@
-import { AssetsPage } from './pages/AssetsPage'
+import { BrowserRouter, Routes, Route, NavLink } from 'react-router-dom'
+import AssetsPage from './pages/AssetsPage'
+import DevicesPage from './pages/DevicesPage'
+import MapPage from './pages/MapPage'
+import AlertsPage from './pages/AlertsPage'
+import './styles.css'
 
 export default function App() {
   return (
-    <main className="app-shell">
-      <section className="hero">
-        <p className="badge">Initial PoC</p>
-        <h1>AssTrack asset telemetry dashboard</h1>
-        <p>
-          Track assets, inspect device telemetry, and validate the proof-of-concept API and data
-          model foundation.
-        </p>
-      </section>
-
-      <AssetsPage />
-    </main>
+    <BrowserRouter>
+      <nav className="app-nav">
+        <NavLink to="/" end>Assets</NavLink>
+        <NavLink to="/devices">Devices</NavLink>
+        <NavLink to="/map">Map</NavLink>
+        <NavLink to="/alerts">Alerts</NavLink>
+      </nav>
+      <main className="app-main">
+        <Routes>
+          <Route path="/" element={<AssetsPage />} />
+          <Route path="/devices" element={<DevicesPage />} />
+          <Route path="/map" element={<MapPage />} />
+          <Route path="/alerts" element={<AlertsPage />} />
+        </Routes>
+      </main>
+    </BrowserRouter>
   )
 }

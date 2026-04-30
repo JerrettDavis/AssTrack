@@ -42,4 +42,17 @@ public class ObservationRepository(AssTrackDbContext dbContext)
             .OrderByDescending(x => x.ObservedAt)
             .ThenByDescending(x => x.ReceivedAt)
             .FirstOrDefaultAsync(cancellationToken);
+
+    public async Task<IReadOnlyList<Observation>> GetLatestPerDeviceAsync(CancellationToken cancellationToken = default)
+    {
+        var latestIds = dbContext.Observations
+            .GroupBy(o => o.DeviceId)
+            .Select(g => g.OrderByDescending(o => o.ObservedAt).ThenByDescending(o => o.ReceivedAt).Select(o => o.Id).First());
+
+        return await dbContext.Observations
+            .Where(o => latestIds.Contains(o.Id))
+            .Include(o => o.Device)
+            .ThenInclude(d => d.Asset)
+            .ToListAsync(cancellationToken);
+    }
 }

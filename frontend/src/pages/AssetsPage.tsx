@@ -102,3 +102,5 @@ export function AssetsPage() {
     </div>
   )
 }
+
+export default AssetsPage

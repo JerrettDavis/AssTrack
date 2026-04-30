@@ -20,3 +20,7 @@ export type Observation = {
 export function getObservations() {
   return apiGet<Observation[]>('/api/observations')
 }
+
+export function getLatestPositions() {
+  return apiGet<Observation[]>('/api/observations/latest-positions')
+}
