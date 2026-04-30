@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react'
-import { Asset, createAsset, deleteAsset, getAssets } from '../api/assets'
-import { getLatestPositions, getObservations, Observation } from '../api/observations'
+import { createAsset, deleteAsset, getAssets, type Asset, updateAsset, type UpdateAssetRequest } from '../api/assets'
+import { getLatestPositions, getObservations, type Observation } from '../api/observations'
 
 function formatTimestamp(value: string) {
   return new Date(value).toLocaleString()
@@ -17,6 +17,8 @@ export function AssetsPage() {
   const [description, setDescription] = useState('')
   const [speedThresholdKmh, setSpeedThresholdKmh] = useState<string>('')
   const [submitting, setSubmitting] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editForm, setEditForm] = useState<UpdateAssetRequest>({ name: '', description: null, category: null, speedThresholdKmh: null })
 
   async function load() {
     try {
@@ -71,6 +73,25 @@ export function AssetsPage() {
       await load()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to delete asset.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  function startEdit(asset: Asset) {
+    setEditingId(asset.id)
+    setEditForm({ name: asset.name, description: asset.description ?? null, category: asset.category ?? null, speedThresholdKmh: asset.speedThresholdKmh ?? null })
+  }
+
+  async function saveEdit() {
+    if (!editingId) return
+    setSubmitting(true)
+    try {
+      await updateAsset(editingId, editForm)
+      setEditingId(null)
+      await load()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to update asset.')
     } finally {
       setSubmitting(false)
     }
@@ -150,24 +171,66 @@ export function AssetsPage() {
           <div className="asset-grid">
             {assets.map((asset) => (
               <article className="list-card" key={asset.id}>
-                <header>
-                  <h3>{asset.name}</h3>
-                  <span className="badge">{asset.category ?? 'Uncategorized'}</span>
-                </header>
-                <p className="muted">{asset.description ?? 'No description provided.'}</p>
-                <p>Devices: {asset.devices.length}</p>
-                <p>Speed threshold: {asset.speedThresholdKmh != null ? `${asset.speedThresholdKmh} km/h` : 'Default'}</p>
-                <p>Updated: {formatTimestamp(asset.updatedAt)}</p>
-                <div className="button-row">
-                  <button
-                    className="button button-danger"
-                    disabled={submitting}
-                    onClick={() => void handleDeleteAsset(asset.id, asset.name)}
-                    type="button"
-                  >
-                    Delete
-                  </button>
-                </div>
+                {editingId === asset.id ? (
+                  <div className="inline-form">
+                    <div className="field-grid">
+                      <label className="field">
+                        <span>Name</span>
+                        <input onChange={(e) => setEditForm(f => ({ ...f, name: e.target.value }))} required value={editForm.name} />
+                      </label>
+                      <label className="field field-wide">
+                        <span>Description</span>
+                        <input onChange={(e) => setEditForm(f => ({ ...f, description: e.target.value || null }))} value={editForm.description ?? ''} />
+                      </label>
+                      <label className="field">
+                        <span>Category</span>
+                        <input onChange={(e) => setEditForm(f => ({ ...f, category: e.target.value || null }))} value={editForm.category ?? ''} />
+                      </label>
+                      <label className="field">
+                        <span>Speed Threshold (km/h)</span>
+                        <input
+                          min={0.001}
+                          onChange={(e) => setEditForm(f => ({ ...f, speedThresholdKmh: e.target.value ? parseFloat(e.target.value) : null }))}
+                          placeholder="Default 120 km/h"
+                          type="number"
+                          value={editForm.speedThresholdKmh ?? ''}
+                        />
+                      </label>
+                    </div>
+                    <div className="button-row">
+                      <button className="button" disabled={submitting} onClick={() => void saveEdit()} type="button">
+                        {submitting ? 'Saving…' : 'Save'}
+                      </button>
+                      <button className="button button-secondary" onClick={() => setEditingId(null)} type="button">
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <header>
+                      <h3>{asset.name}</h3>
+                      <span className="badge">{asset.category ?? 'Uncategorized'}</span>
+                    </header>
+                    <p className="muted">{asset.description ?? 'No description provided.'}</p>
+                    <p>Devices: {asset.devices.length}</p>
+                    <p>Speed threshold: {asset.speedThresholdKmh != null ? `${asset.speedThresholdKmh} km/h` : 'Default'}</p>
+                    <p>Updated: {formatTimestamp(asset.updatedAt)}</p>
+                    <div className="button-row">
+                      <button className="button button-secondary" disabled={submitting} onClick={() => startEdit(asset)} type="button">
+                        Edit
+                      </button>
+                      <button
+                        className="button button-danger"
+                        disabled={submitting}
+                        onClick={() => void handleDeleteAsset(asset.id, asset.name)}
+                        type="button"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </>
+                )}
               </article>
             ))}
           </div>

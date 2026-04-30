@@ -204,7 +204,7 @@ public class ObservationApiTests : IClassFixture<TestWebApplicationFactory>
         var response1 = await client.PostAsJsonAsync("/api/observations", request1);
         response1.StatusCode.Should().Be(HttpStatusCode.Created);
 
-        var request2 = new CreateObservationRequest(deviceId, DateTime.UtcNow, 51.5074, -0.1278, null, null, 135, null, null);
+        var request2 = new CreateObservationRequest(deviceId, DateTime.UtcNow.AddSeconds(-1), 51.5074, -0.1278, null, null, 135, null, null);
         var response2 = await client.PostAsJsonAsync("/api/observations", request2);
         response2.StatusCode.Should().Be(HttpStatusCode.Created);
 
@@ -212,5 +212,124 @@ public class ObservationApiTests : IClassFixture<TestWebApplicationFactory>
         var verificationDbContext = verificationScope.ServiceProvider.GetRequiredService<AssTrackDbContext>();
         var alerts = await verificationDbContext.SpeedAlerts.ToListAsync();
         alerts.Should().ContainSingle("second speed alert within cooldown window should be suppressed");
+    }
+
+    [Fact]
+    public async Task DuplicateIngest_Returns200_WithExistingObservation_AndCountRemainsOne()
+    {
+        await _factory.ResetDatabaseAsync();
+        Guid deviceId;
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<AssTrackDbContext>();
+            var device = new Device { Identifier = "dev-duplicate-01" };
+            dbContext.Devices.Add(device);
+            await dbContext.SaveChangesAsync();
+            deviceId = device.Id;
+        }
+
+        using var client = _factory.CreateAuthenticatedClient();
+        var observedAt = DateTime.UtcNow;
+        var request = new CreateObservationRequest(deviceId, observedAt, 51.5074, -0.1278, null, null, 80, null, null);
+
+        var response1 = await client.PostAsJsonAsync("/api/observations", request);
+        response1.StatusCode.Should().Be(HttpStatusCode.Created);
+        var created = await response1.Content.ReadFromJsonAsync<ObservationDto>();
+
+        var response2 = await client.PostAsJsonAsync("/api/observations", request);
+        response2.StatusCode.Should().Be(HttpStatusCode.OK);
+        var existing = await response2.Content.ReadFromJsonAsync<ObservationDto>();
+
+        existing.Should().NotBeNull();
+        existing!.Id.Should().Be(created!.Id);
+        existing!.DeviceIdentifier.Should().Be("dev-duplicate-01");
+
+        using var verificationScope = _factory.Services.CreateScope();
+        var verificationDbContext = verificationScope.ServiceProvider.GetRequiredService<AssTrackDbContext>();
+        var count = await verificationDbContext.Observations.CountAsync();
+        count.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task OutOfOrderObservation_DoesNotOverwriteNewerGeofenceState_AndOnlyRecordsInitialEnter()
+    {
+        await _factory.ResetDatabaseAsync();
+
+        Guid deviceId;
+        Guid geofenceId;
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<AssTrackDbContext>();
+            var device = new Device { Identifier = "dev-out-of-order-01" };
+            var geofence = new Geofence
+            {
+                Name = "Out Of Order Zone",
+                CenterLatitude = 51.5074,
+                CenterLongitude = -0.1278,
+                RadiusMeters = 5000,
+                IsActive = true
+            };
+            dbContext.Devices.Add(device);
+            dbContext.Geofences.Add(geofence);
+            await dbContext.SaveChangesAsync();
+            deviceId = device.Id;
+            geofenceId = geofence.Id;
+        }
+
+        using var client = _factory.CreateAuthenticatedClient();
+        var newerObservedAt = DateTime.UtcNow;
+        var olderObservedAt = newerObservedAt.AddSeconds(-10);
+
+        var newerRequest = new CreateObservationRequest(deviceId, newerObservedAt, 51.5074, -0.1278, null, null, 50, null, null);
+        var newerResponse = await client.PostAsJsonAsync("/api/observations", newerRequest);
+        newerResponse.StatusCode.Should().Be(HttpStatusCode.Created);
+
+        var olderRequest = new CreateObservationRequest(deviceId, olderObservedAt, 40.7128, -74.0060, null, null, 50, null, null);
+        var olderResponse = await client.PostAsJsonAsync("/api/observations", olderRequest);
+        olderResponse.StatusCode.Should().Be(HttpStatusCode.Created);
+
+        using var verificationScope = _factory.Services.CreateScope();
+        var verificationDbContext = verificationScope.ServiceProvider.GetRequiredService<AssTrackDbContext>();
+        var breaches = await verificationDbContext.GeofenceBreaches.OrderBy(b => b.DetectedAt).ToListAsync();
+        breaches.Should().ContainSingle();
+        breaches[0].EventType.Should().Be(GeofenceBreachEventType.Enter);
+
+        var state = await verificationDbContext.DeviceGeofenceStates.FirstAsync(x => x.DeviceId == deviceId && x.GeofenceId == geofenceId);
+        state.IsInside.Should().BeTrue();
+        state.LastObservationAt.Should().Be(newerObservedAt);
+    }
+}
+
+public class RateLimitTests : IClassFixture<RateLimitedTestWebApplicationFactory>
+{
+    private readonly RateLimitedTestWebApplicationFactory _factory;
+
+    public RateLimitTests(RateLimitedTestWebApplicationFactory factory)
+    {
+        _factory = factory;
+    }
+
+    [Fact]
+    public async Task RateLimiting_Returns429_AfterLimitExceeded()
+    {
+        await _factory.ResetDatabaseAsync();
+        Guid deviceId;
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<AssTrackDbContext>();
+            var device = new Device { Identifier = "dev-rate-limit-01" };
+            dbContext.Devices.Add(device);
+            await dbContext.SaveChangesAsync();
+            deviceId = device.Id;
+        }
+
+        using var client = _factory.CreateAuthenticatedClient();
+        var firstRequest = new CreateObservationRequest(deviceId, DateTime.UtcNow, 51.5074, -0.1278, null, null, 50, null, null);
+        var firstResponse = await client.PostAsJsonAsync("/api/observations", firstRequest);
+        firstResponse.StatusCode.Should().Be(HttpStatusCode.Created);
+
+        var secondRequest = new CreateObservationRequest(deviceId, DateTime.UtcNow.AddSeconds(1), 51.5074, -0.1278, null, null, 50, null, null);
+        var secondResponse = await client.PostAsJsonAsync("/api/observations", secondRequest);
+        secondResponse.StatusCode.Should().Be((HttpStatusCode)429);
     }
 }

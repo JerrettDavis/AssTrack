@@ -1,6 +1,6 @@
-import { FormEvent, useEffect, useState } from 'react'
+import { Fragment, FormEvent, useEffect, useState } from 'react'
 import { getAssets, type Asset } from '../api/assets'
-import { createDevice, deleteDevice, getDevices, type DeviceListItem } from '../api/devices'
+import { createDevice, deleteDevice, getDevices, updateDevice, type DeviceListItem, type UpdateDeviceRequest } from '../api/devices'
 
 export default function DevicesPage() {
   const [devices, setDevices] = useState<DeviceListItem[]>([])
@@ -13,6 +13,8 @@ export default function DevicesPage() {
   const [protocol, setProtocol] = useState('')
   const [assetId, setAssetId] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editForm, setEditForm] = useState<UpdateDeviceRequest>({ identifier: '', label: null, protocol: null, assetId: null })
 
   async function load() {
     try {
@@ -59,6 +61,25 @@ export default function DevicesPage() {
     setSubmitting(true)
     try {
       await deleteDevice(deviceId)
+      await load()
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  function startEdit(device: DeviceListItem) {
+    setEditingId(device.id)
+    setEditForm({ identifier: device.identifier, label: device.label ?? null, protocol: device.protocol ?? null, assetId: device.assetId ?? null })
+  }
+
+  async function saveEdit() {
+    if (!editingId) return
+    setSubmitting(true)
+    try {
+      await updateDevice(editingId, editForm)
+      setEditingId(null)
       await load()
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e))
@@ -128,23 +149,69 @@ export default function DevicesPage() {
           </thead>
           <tbody>
             {devices.map((device) => (
-              <tr key={device.id}>
-                <td>{device.identifier}</td>
-                <td>{device.label ?? '—'}</td>
-                <td>{device.protocol}</td>
-                <td>{device.assetName ?? '—'}</td>
-                <td>{new Date(device.createdAt).toLocaleString()}</td>
-                <td>
-                  <button
-                    className="button button-danger"
-                    disabled={submitting}
-                    onClick={() => void handleDeleteDevice(device.id, device.identifier)}
-                    type="button"
-                  >
-                    Delete
-                  </button>
-                </td>
-              </tr>
+              <Fragment key={device.id}>
+                <tr>
+                  <td>{device.identifier}</td>
+                  <td>{device.label ?? '—'}</td>
+                  <td>{device.protocol}</td>
+                  <td>{device.assetName ?? '—'}</td>
+                  <td>{new Date(device.createdAt).toLocaleString()}</td>
+                  <td>
+                    <div className="button-row">
+                      <button className="button button-secondary" disabled={submitting} onClick={() => startEdit(device)} type="button">
+                        Edit
+                      </button>
+                      <button
+                        className="button button-danger"
+                        disabled={submitting}
+                        onClick={() => void handleDeleteDevice(device.id, device.identifier)}
+                        type="button"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+                {editingId === device.id && (
+                  <tr key={`${device.id}-edit`}>
+                    <td colSpan={6}>
+                      <div className="inline-form">
+                        <div className="field-grid">
+                          <label className="field">
+                            <span>Identifier</span>
+                            <input onChange={(e) => setEditForm(f => ({ ...f, identifier: e.target.value }))} required value={editForm.identifier} />
+                          </label>
+                          <label className="field">
+                            <span>Label</span>
+                            <input onChange={(e) => setEditForm(f => ({ ...f, label: e.target.value || null }))} value={editForm.label ?? ''} />
+                          </label>
+                          <label className="field">
+                            <span>Protocol</span>
+                            <input onChange={(e) => setEditForm(f => ({ ...f, protocol: e.target.value || null }))} placeholder="e.g. https, mqtt, tcp" value={editForm.protocol ?? ''} />
+                          </label>
+                          <label className="field">
+                            <span>Asset</span>
+                            <select onChange={(e) => setEditForm(f => ({ ...f, assetId: e.target.value || null }))} value={editForm.assetId ?? ''}>
+                              <option value="">— Unassigned —</option>
+                              {assets.map((a) => (
+                                <option key={a.id} value={a.id}>{a.name}</option>
+                              ))}
+                            </select>
+                          </label>
+                        </div>
+                        <div className="button-row">
+                          <button className="button" disabled={submitting} onClick={() => void saveEdit()} type="button">
+                            {submitting ? 'Saving…' : 'Save'}
+                          </button>
+                          <button className="button button-secondary" onClick={() => setEditingId(null)} type="button">
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
             ))}
             {devices.length === 0 && (
               <tr>

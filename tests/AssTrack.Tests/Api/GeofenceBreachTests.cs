@@ -86,7 +86,7 @@ public class GeofenceBreachTests : IClassFixture<TestWebApplicationFactory>
         var request1 = new CreateObservationRequest(deviceId, DateTime.UtcNow, 51.5074, -0.1278, null, null, 50, null, null);
         await client.PostAsJsonAsync("/api/observations", request1);
 
-        var request2 = new CreateObservationRequest(deviceId, DateTime.UtcNow, 51.5074, -0.1278, null, null, 50, null, null);
+        var request2 = new CreateObservationRequest(deviceId, DateTime.UtcNow.AddSeconds(1), 51.5074, -0.1278, null, null, 50, null, null);
         await client.PostAsJsonAsync("/api/observations", request2);
 
         using var verifyScope = _factory.Services.CreateScope();
@@ -125,7 +125,7 @@ public class GeofenceBreachTests : IClassFixture<TestWebApplicationFactory>
         await client.PostAsJsonAsync("/api/observations", enterRequest);
 
         // Exit the geofence (far away from center)
-        var exitRequest = new CreateObservationRequest(deviceId, DateTime.UtcNow, 40.7128, -74.0060, null, null, 50, null, null);
+        var exitRequest = new CreateObservationRequest(deviceId, DateTime.UtcNow.AddSeconds(1), 40.7128, -74.0060, null, null, 50, null, null);
         await client.PostAsJsonAsync("/api/observations", exitRequest);
 
         using var verifyScope = _factory.Services.CreateScope();

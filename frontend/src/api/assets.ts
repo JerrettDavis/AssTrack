@@ -1,4 +1,4 @@
-import { apiDelete, apiGet, apiPost } from './client'
+import { apiDelete, apiGet, apiPost, apiPut } from './client'
 
 export type Device = {
   id: string
@@ -27,6 +27,17 @@ export function getAssets() {
 
 export async function createAsset(data: { name: string; description?: string; speedThresholdKmh?: number | null }): Promise<Asset> {
   return apiPost<Asset>('/api/assets', data)
+}
+
+export type UpdateAssetRequest = {
+  name: string
+  description?: string | null
+  category?: string | null
+  speedThresholdKmh?: number | null
+}
+
+export async function updateAsset(id: string, data: UpdateAssetRequest): Promise<Asset> {
+  return apiPut<Asset>(`/api/assets/${id}`, data)
 }
 
 export async function deleteAsset(id: string): Promise<void> {

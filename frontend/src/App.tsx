@@ -5,6 +5,7 @@ import DevicesPage from './pages/DevicesPage'
 import MapPage from './pages/MapPage'
 import AlertsPage from './pages/AlertsPage'
 import GeofencesPage from './pages/GeofencesPage'
+import HistoryPage from './pages/HistoryPage'
 import { getAlertSummary } from './api/alerts'
 import './styles.css'
 
@@ -45,6 +46,7 @@ export default function App() {
           Alerts
           {unacknowledgedCount > 0 && <span className="nav-badge">{unacknowledgedCount}</span>}
         </NavLink>
+        <NavLink to="/history">History</NavLink>
       </nav>
       <main className="app-main">
         <Routes>
@@ -53,6 +55,7 @@ export default function App() {
           <Route path="/map" element={<MapPage />} />
           <Route path="/geofences" element={<GeofencesPage />} />
           <Route path="/alerts" element={<AlertsPage />} />
+          <Route path="/history" element={<HistoryPage />} />
         </Routes>
       </main>
     </BrowserRouter>

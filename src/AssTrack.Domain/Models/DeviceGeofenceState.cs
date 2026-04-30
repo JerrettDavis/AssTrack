@@ -11,5 +11,6 @@ public class DeviceGeofenceState
     public Guid GeofenceId { get; set; }
     public Geofence Geofence { get; set; } = null!;
     public bool IsInside { get; set; }
+    public DateTime LastObservationAt { get; set; } = DateTime.MinValue;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 }

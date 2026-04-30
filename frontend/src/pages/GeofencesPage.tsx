@@ -1,7 +1,7 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react'
+import { Fragment, FormEvent, useEffect, useMemo, useState } from 'react'
 import { Circle, MapContainer, Popup, TileLayer, useMap } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
-import { createGeofence, deleteGeofence, getGeofences, type Geofence } from '../api/geofences'
+import { createGeofence, deleteGeofence, getGeofences, updateGeofence, type Geofence, type UpdateGeofenceRequest } from '../api/geofences'
 
 function MapViewportUpdater({ center }: { center: [number, number] }) {
   const map = useMap()
@@ -22,6 +22,8 @@ export default function GeofencesPage() {
   const [centerLatitude, setCenterLatitude] = useState('')
   const [centerLongitude, setCenterLongitude] = useState('')
   const [radiusMeters, setRadiusMeters] = useState('')
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editForm, setEditForm] = useState<UpdateGeofenceRequest>({ name: '', centerLatitude: 0, centerLongitude: 0, radiusMeters: 0, isActive: true })
 
   async function load() {
     try {
@@ -68,6 +70,32 @@ export default function GeofencesPage() {
       await load()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to delete geofence.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  function startEdit(geofence: Geofence) {
+    setEditingId(geofence.id)
+    setEditForm({
+      name: geofence.name,
+      description: geofence.description ?? null,
+      centerLatitude: geofence.centerLatitude,
+      centerLongitude: geofence.centerLongitude,
+      radiusMeters: geofence.radiusMeters,
+      isActive: geofence.isActive,
+    })
+  }
+
+  async function saveEdit() {
+    if (!editingId) return
+    setSubmitting(true)
+    try {
+      await updateGeofence(editingId, editForm)
+      setEditingId(null)
+      await load()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to update geofence.')
     } finally {
       setSubmitting(false)
     }
@@ -130,24 +158,73 @@ export default function GeofencesPage() {
             </thead>
             <tbody>
               {geofences.map((geofence) => (
-                <tr key={geofence.id}>
-                  <td>{geofence.name}</td>
-                  <td className="coords">
-                    {geofence.centerLatitude.toFixed(4)}, {geofence.centerLongitude.toFixed(4)}
-                  </td>
-                  <td>{geofence.radiusMeters} m</td>
-                  <td>{new Date(geofence.createdAt).toLocaleString()}</td>
-                  <td>
-                    <button
-                      className="button button-danger"
-                      disabled={submitting}
-                      onClick={() => void handleDeleteGeofence(geofence.id, geofence.name)}
-                      type="button"
-                    >
-                      Delete
-                    </button>
-                  </td>
-                </tr>
+                <Fragment key={geofence.id}>
+                  <tr>
+                    <td>{geofence.name}</td>
+                    <td className="coords">
+                      {geofence.centerLatitude.toFixed(4)}, {geofence.centerLongitude.toFixed(4)}
+                    </td>
+                    <td>{geofence.radiusMeters} m</td>
+                    <td>{new Date(geofence.createdAt).toLocaleString()}</td>
+                    <td>
+                      <div className="button-row">
+                        <button className="button button-secondary" disabled={submitting} onClick={() => startEdit(geofence)} type="button">
+                          Edit
+                        </button>
+                        <button
+                          className="button button-danger"
+                          disabled={submitting}
+                          onClick={() => void handleDeleteGeofence(geofence.id, geofence.name)}
+                          type="button"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                  {editingId === geofence.id && (
+                    <tr key={`${geofence.id}-edit`}>
+                      <td colSpan={5}>
+                        <div className="inline-form">
+                          <div className="field-grid">
+                            <label className="field">
+                              <span>Name</span>
+                              <input onChange={(e) => setEditForm(f => ({ ...f, name: e.target.value }))} required value={editForm.name} />
+                            </label>
+                            <label className="field field-wide">
+                              <span>Description</span>
+                              <input onChange={(e) => setEditForm(f => ({ ...f, description: e.target.value || null }))} value={editForm.description ?? ''} />
+                            </label>
+                            <label className="field">
+                              <span>Latitude</span>
+                              <input onChange={(e) => setEditForm(f => ({ ...f, centerLatitude: Number(e.target.value) }))} required step={0.0001} type="number" value={editForm.centerLatitude} />
+                            </label>
+                            <label className="field">
+                              <span>Longitude</span>
+                              <input onChange={(e) => setEditForm(f => ({ ...f, centerLongitude: Number(e.target.value) }))} required step={0.0001} type="number" value={editForm.centerLongitude} />
+                            </label>
+                            <label className="field">
+                              <span>Radius (m)</span>
+                              <input min={1} onChange={(e) => setEditForm(f => ({ ...f, radiusMeters: Number(e.target.value) }))} required type="number" value={editForm.radiusMeters} />
+                            </label>
+                            <label className="field" style={{ flexDirection: 'row', alignItems: 'center', gap: '0.5rem' }}>
+                              <input checked={editForm.isActive ?? true} onChange={(e) => setEditForm(f => ({ ...f, isActive: e.target.checked }))} type="checkbox" />
+                              <span>Active</span>
+                            </label>
+                          </div>
+                          <div className="button-row">
+                            <button className="button" disabled={submitting} onClick={() => void saveEdit()} type="button">
+                              {submitting ? 'Saving…' : 'Save'}
+                            </button>
+                            <button className="button button-secondary" onClick={() => setEditingId(null)} type="button">
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
               ))}
               {geofences.length === 0 && (
                 <tr>

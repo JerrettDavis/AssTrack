@@ -41,7 +41,8 @@ public class AssTrackDbContext(DbContextOptions<AssTrackDbContext> options) : Db
         {
             entity.HasKey(x => x.Id);
             entity.Property(x => x.Metadata).HasColumnType("TEXT");
-            entity.HasIndex(x => new { x.DeviceId, x.ObservedAt });
+            entity.HasIndex(x => new { x.DeviceId, x.ObservedAt }).IsUnique();
+            entity.HasIndex(x => x.ObservedAt);
             entity.HasOne(x => x.Device)
                 .WithMany(x => x.Observations)
                 .HasForeignKey(x => x.DeviceId)

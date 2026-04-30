@@ -85,10 +85,36 @@ public static class GeofenceEndpoints
             bool? unacknowledged,
             int? limit,
             DateTimeOffset? since,
+            Guid? deviceId,
+            Guid? assetId,
+            string? format,
             CancellationToken cancellationToken) =>
         {
             var sinceUtc = since?.UtcDateTime;
-            var items = await breachRepository.GetRecentAsync(limit ?? 100, unacknowledged, sinceUtc, cancellationToken);
+            var items = await breachRepository.GetRecentAsync(
+                limit ?? 100, 
+                unacknowledged, 
+                sinceUtc, 
+                deviceId, 
+                assetId, 
+                cancellationToken);
+            
+            if (format?.ToLowerInvariant() == "csv")
+            {
+                // CSV requires at least one filter
+                if (!deviceId.HasValue && !assetId.HasValue && !since.HasValue && !unacknowledged.HasValue)
+                {
+                    var errors = new Dictionary<string, string[]>
+                    {
+                        ["filters"] = ["CSV export requires at least one filter parameter (deviceId, assetId, since, or unacknowledged)."]
+                    };
+                    return Results.ValidationProblem(errors, statusCode: StatusCodes.Status422UnprocessableEntity);
+                }
+                
+                var csv = BuildGeofenceBreachCsv(items);
+                return Results.Content(csv, "text/csv", System.Text.Encoding.UTF8);
+            }
+            
             return Results.Ok(items.Select(MapBreach));
         });
 
@@ -130,5 +156,29 @@ public static class GeofenceEndpoints
         breach.DetectedAt,
         breach.AcknowledgedAtUtc,
         breach.AcknowledgedBy);
+
+    private static string BuildGeofenceBreachCsv(IReadOnlyList<GeofenceBreach> breaches)
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("Id,ObservationId,GeofenceId,GeofenceName,DeviceId,DeviceIdentifier,AssetId,AssetName,EventType,DetectedAt,AcknowledgedAtUtc,AcknowledgedBy");
+        
+        foreach (var breach in breaches)
+        {
+            sb.AppendLine($"{breach.Id},{breach.ObservationId},{breach.GeofenceId},{CsvEscape(breach.Geofence?.Name)},{breach.DeviceId},{CsvEscape(breach.Device?.Identifier)},{breach.AssetId},{CsvEscape(breach.Asset?.Name)},{CsvEscape(breach.EventType.ToString())},{breach.DetectedAt:O},{breach.AcknowledgedAtUtc?.ToString("O")},{CsvEscape(breach.AcknowledgedBy)}");
+        }
+        
+        return sb.ToString();
+    }
+
+    private static string CsvEscape(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return string.Empty;
+        
+        if (value.Contains(',') || value.Contains('"') || value.Contains('\n'))
+            return $"\"{value.Replace("\"", "\"\"")}\"";
+        
+        return value;
+    }
 }
 

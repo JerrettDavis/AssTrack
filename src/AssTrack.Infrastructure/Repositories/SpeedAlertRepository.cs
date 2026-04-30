@@ -10,6 +10,8 @@ public class SpeedAlertRepository(AssTrackDbContext dbContext)
         int limit = 100,
         bool? unacknowledgedOnly = null,
         DateTime? since = null,
+        Guid? deviceId = null,
+        Guid? assetId = null,
         CancellationToken cancellationToken = default)
     {
         var query = dbContext.SpeedAlerts
@@ -20,6 +22,10 @@ public class SpeedAlertRepository(AssTrackDbContext dbContext)
             query = query.Where(x => x.AcknowledgedAtUtc == null);
         if (since.HasValue)
             query = query.Where(x => x.TriggeredAt >= since.Value);
+        if (deviceId.HasValue)
+            query = query.Where(x => x.DeviceId == deviceId.Value);
+        if (assetId.HasValue)
+            query = query.Where(x => x.Device.AssetId == assetId.Value);
         return await query
             .OrderByDescending(x => x.TriggeredAt)
             .Take(limit)

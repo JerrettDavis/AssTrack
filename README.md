@@ -53,6 +53,106 @@ The API is built with ASP.NET Core minimal APIs on .NET 10. The route prefix for
 Speed alerts are created automatically when an observation is ingested with `SpeedKmh` exceeding the asset's `SpeedThresholdKmh` (if set) or the default of 120 km/h.
 Geofence breaches are recorded automatically when an ingested observation falls within any active geofence.
 
+## Observation History & Export
+
+### GET /api/observations/history
+
+Retrieve paginated observation history with optional filtering by device, asset, or date range. Supports both JSON and CSV export formats.
+
+#### Query Parameters
+
+| Parameter | Type | Optional | Default | Description |
+|---|---|---|---|---|
+| `deviceId` | Guid | Yes | — | Filter observations by a specific device |
+| `assetId` | Guid | Yes | — | Filter observations by a specific asset |
+| `from` | ISO 8601 | Yes | — | Start date/time for filtering (e.g., `2025-06-01T00:00:00Z`) |
+| `to` | ISO 8601 | Yes | — | End date/time for filtering (e.g., `2025-06-30T23:59:59Z`) |
+| `page` | int | Yes | 1 | Page number for pagination |
+| `pageSize` | int | Yes | 50 | Number of items per page |
+| `format` | string | Yes | json | Response format: `json` or `csv` |
+
+#### Response
+
+**JSON (default):**
+```json
+{
+  "items": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "deviceId": "c3a12345-b9c2-4d85-a78e-9f1d2e3c4b5a",
+      "assetId": "b2f91234-a1b2-3c4d-5e6f-7a8b9c0d1e2f",
+      "observedAt": "2025-06-15T14:30:00Z",
+      "latitude": 51.5074,
+      "longitude": -0.1278,
+      "altitude": 45.2,
+      "speedKmh": 85.5,
+      "heading": 270,
+      "metadata": {}
+    }
+  ],
+  "totalCount": 1250,
+  "page": 1,
+  "pageSize": 50
+}
+```
+
+**CSV (`format=csv`):**
+```
+ObservationId,DeviceId,AssetId,ObservedAt,Latitude,Longitude,Altitude,SpeedKmh,Heading
+550e8400-e29b-41d4-a716-446655440000,c3a12345-b9c2-4d85-a78e-9f1d2e3c4b5a,b2f91234-a1b2-3c4d-5e6f-7a8b9c0d1e2f,2025-06-15T14:30:00Z,51.5074,-0.1278,45.2,85.5,270
+```
+
+#### Examples
+
+Get all observations for a device (page 1, 50 items):
+```
+GET /api/observations/history?deviceId=c3a12345-b9c2-4d85-a78e-9f1d2e3c4b5a
+```
+
+Get observations for an asset in June 2025:
+```
+GET /api/observations/history?assetId=b2f91234-a1b2-3c4d-5e6f-7a8b9c0d1e2f&from=2025-06-01T00:00:00Z&to=2025-06-30T23:59:59Z
+```
+
+Export observations to CSV with custom page size:
+```
+GET /api/observations/history?deviceId=c3a12345-b9c2-4d85-a78e-9f1d2e3c4b5a&pageSize=100&format=csv
+```
+
+### CSV Export Behavior
+
+CSV export is available on the following endpoints:
+- `GET /api/observations/history`
+- `GET /api/speed-alerts`
+- `GET /api/geofences/breaches`
+
+#### Requirements
+
+- **Filter required**: At least one filter parameter must be provided (e.g., `deviceId`, `assetId`, `from`, `to`). Requests without any filters return HTTP 422 Unprocessable Entity.
+- **Response header**: `Content-Type: text/csv`
+
+#### Export Limits
+
+| Endpoint | Max rows |
+|---|---|
+| `/api/observations/history` | 5000 |
+| `/api/speed-alerts` | No limit |
+| `/api/geofences/breaches` | No limit |
+
+Requests exceeding the observation limit are automatically capped at 5000 rows.
+
+#### Error Handling
+
+If no filter parameters are provided when requesting CSV format:
+
+```
+HTTP 422 Unprocessable Entity
+
+{
+  "message": "At least one filter parameter must be provided for CSV export."
+}
+```
+
 ## Alert Management
 
 The alert system provides comprehensive management of speed alerts and geofence breaches:

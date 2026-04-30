@@ -10,6 +10,8 @@ public class GeofenceBreachRepository(AssTrackDbContext dbContext)
         int limit = 100,
         bool? unacknowledgedOnly = null,
         DateTime? since = null,
+        Guid? deviceId = null,
+        Guid? assetId = null,
         CancellationToken cancellationToken = default)
     {
         var query = dbContext.GeofenceBreaches
@@ -21,6 +23,10 @@ public class GeofenceBreachRepository(AssTrackDbContext dbContext)
             query = query.Where(x => x.AcknowledgedAtUtc == null);
         if (since.HasValue)
             query = query.Where(x => x.DetectedAt >= since.Value);
+        if (deviceId.HasValue)
+            query = query.Where(x => x.DeviceId == deviceId.Value);
+        if (assetId.HasValue)
+            query = query.Where(x => x.Device.AssetId == assetId.Value);
         return await query
             .OrderByDescending(x => x.DetectedAt)
             .Take(limit)
@@ -78,9 +84,10 @@ public class GeofenceBreachRepository(AssTrackDbContext dbContext)
         {
             dbContext.DeviceGeofenceStates.Add(state);
         }
-        else
+        else if (state.LastObservationAt >= existing.LastObservationAt)
         {
             existing.IsInside = state.IsInside;
+            existing.LastObservationAt = state.LastObservationAt;
             existing.UpdatedAt = state.UpdatedAt;
         }
         await dbContext.SaveChangesAsync(ct);

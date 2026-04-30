@@ -183,6 +183,70 @@ public static class ObservationEndpoints
         observations.MapPost(string.Empty, HandleIngest).RequireRateLimiting("ingest");
         observations.MapPost("/ingest", HandleIngest).RequireRateLimiting("ingest");
 
+        observations.MapGet("/history", async (
+            ObservationRepository observationRepository,
+            Guid? deviceId,
+            Guid? assetId,
+            DateTimeOffset? from,
+            DateTimeOffset? to,
+            int? page,
+            int? pageSize,
+            string? format,
+            CancellationToken cancellationToken) =>
+        {
+            var p = page ?? 1;
+            var ps = pageSize ?? 50;
+            
+            // For CSV export
+            if (format?.ToLowerInvariant() == "csv")
+            {
+                // CSV requires at least one filter
+                if (!deviceId.HasValue && !assetId.HasValue && !from.HasValue && !to.HasValue)
+                {
+                    var errors = new Dictionary<string, string[]>
+                    {
+                        ["filters"] = ["CSV export requires at least one filter parameter (deviceId, assetId, from, or to)."]
+                    };
+                    return Results.ValidationProblem(errors, statusCode: StatusCodes.Status422UnprocessableEntity);
+                }
+                
+                // Cap at 5000 rows and reset page to 1
+                ps = Math.Min(ps, 5000);
+                p = 1;
+                
+                var (items, _) = await observationRepository.GetHistoryAsync(
+                    deviceId, 
+                    assetId, 
+                    from?.UtcDateTime, 
+                    to?.UtcDateTime, 
+                    p, 
+                    ps, 
+                    cancellationToken);
+                
+                var csv = BuildObservationCsv(items);
+                return Results.Content(csv, "text/csv", System.Text.Encoding.UTF8);
+            }
+            
+            // JSON response
+            var (observations, totalCount) = await observationRepository.GetHistoryAsync(
+                deviceId, 
+                assetId, 
+                from?.UtcDateTime, 
+                to?.UtcDateTime, 
+                p, 
+                ps, 
+                cancellationToken);
+            
+            var result = new PagedResult<ObservationDto>(
+                observations.Select(Map).ToList(),
+                totalCount,
+                p,
+                ps
+            );
+            
+            return Results.Ok(result);
+        });
+
         return group;
     }
 
@@ -201,5 +265,29 @@ public static class ObservationEndpoints
         observation.SpeedKmh,
         observation.HeadingDegrees,
         observation.Metadata);
+
+    private static string BuildObservationCsv(IReadOnlyList<Observation> observations)
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("ObservationId,DeviceId,AssetId,ObservedAt,Latitude,Longitude,Altitude,SpeedKmh,Heading");
+        
+        foreach (var obs in observations)
+        {
+            sb.AppendLine($"{obs.Id},{obs.DeviceId},{obs.Device.AssetId},{obs.ObservedAt:O},{obs.Latitude},{obs.Longitude},{obs.Altitude},{obs.SpeedKmh},{obs.HeadingDegrees}");
+        }
+        
+        return sb.ToString();
+    }
+
+    private static string CsvEscape(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return string.Empty;
+        
+        if (value.Contains(',') || value.Contains('"') || value.Contains('\n'))
+            return $"\"{value.Replace("\"", "\"\"")}\"";
+        
+        return value;
+    }
 }
 
