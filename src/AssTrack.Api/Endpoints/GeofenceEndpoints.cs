@@ -17,7 +17,7 @@ public static class GeofenceEndpoints
             return Results.Ok(items.Select(Map));
         });
 
-        geofences.MapPost(string.Empty, async ([FromBody] CreateGeofenceBody request, GeofenceRepository repository, CancellationToken cancellationToken) =>
+        geofences.MapPost(string.Empty, async ([FromBody] CreateGeofenceRequest request, GeofenceRepository repository, CancellationToken cancellationToken) =>
         {
             if (string.IsNullOrWhiteSpace(request.Name))
             {
@@ -52,16 +52,6 @@ public static class GeofenceEndpoints
         });
 
         return group;
-    }
-
-    public sealed class CreateGeofenceBody
-    {
-        public string Name { get; init; } = string.Empty;
-        public string? Description { get; init; }
-        public double CenterLatitude { get; init; }
-        public double CenterLongitude { get; init; }
-        public double RadiusMeters { get; init; }
-        public bool? IsActive { get; init; }
     }
 
     internal static GeofenceDto Map(Geofence geofence) => new(

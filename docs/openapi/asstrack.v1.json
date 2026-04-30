@@ -329,6 +329,10 @@
             "type": "string",
             "format": "uuid"
           },
+          "deviceIdentifier": {
+            "type": "string",
+            "nullable": true
+          },
           "observedAt": {
             "type": "string",
             "format": "date-time"

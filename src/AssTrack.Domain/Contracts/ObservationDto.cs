@@ -25,4 +25,5 @@ public sealed record CreateObservationRequest(
     double? AccuracyMeters,
     double? SpeedKmh,
     double? HeadingDegrees,
-    string? Metadata);
+    string? Metadata,
+    string? DeviceIdentifier = null);

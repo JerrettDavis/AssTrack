@@ -31,7 +31,7 @@ public static class ObservationEndpoints
         });
 
         static async Task<IResult> HandleIngest(
-            [FromBody] CreateObservationBody request,
+            [FromBody] CreateObservationRequest request,
             DeviceRepository deviceRepository,
             ObservationRepository observationRepository,
             CancellationToken cancellationToken)
@@ -47,6 +47,13 @@ public static class ObservationEndpoints
                 validationErrors["observedAt"] = ["ObservedAt cannot be more than 5 minutes in the future."];
             if (validationErrors.Count > 0)
                 return Results.ValidationProblem(validationErrors, statusCode: StatusCodes.Status422UnprocessableEntity);
+
+            if (request.DeviceId == Guid.Empty && string.IsNullOrWhiteSpace(request.DeviceIdentifier))
+            {
+                return Results.ValidationProblem(
+                    new Dictionary<string, string[]> { ["deviceId"] = ["Either DeviceId or DeviceIdentifier must be provided."] },
+                    statusCode: StatusCodes.Status422UnprocessableEntity);
+            }
 
             var device = request.DeviceId != Guid.Empty
                 ? await deviceRepository.GetByIdAsync(request.DeviceId, cancellationToken)
@@ -93,20 +100,6 @@ public static class ObservationEndpoints
         observations.MapPost("/ingest", HandleIngest);
 
         return group;
-    }
-
-    public sealed class CreateObservationBody
-    {
-        public Guid DeviceId { get; init; }
-        public string? DeviceIdentifier { get; init; }
-        public DateTime ObservedAt { get; init; }
-        public double Latitude { get; init; }
-        public double Longitude { get; init; }
-        public double? Altitude { get; init; }
-        public double? AccuracyMeters { get; init; }
-        public double? SpeedKmh { get; init; }
-        public double? HeadingDegrees { get; init; }
-        public string? Metadata { get; init; }
     }
 
     internal static ObservationDto Map(Observation observation) => new(
