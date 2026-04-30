@@ -26,6 +26,16 @@ public sealed class SeedService(
 
             if (seededDeviceIds.Count > 0)
             {
+                // SpeedAlert.DeviceId and GeofenceBreach.DeviceId use DeleteBehavior.Restrict,
+                // so they must be explicitly removed before the seeded devices can be deleted.
+                await db.SpeedAlerts
+                    .Where(s => seededDeviceIds.Contains(s.DeviceId))
+                    .ExecuteDeleteAsync(cancellationToken);
+
+                await db.GeofenceBreaches
+                    .Where(b => seededDeviceIds.Contains(b.DeviceId))
+                    .ExecuteDeleteAsync(cancellationToken);
+
                 await db.DeviceGeofenceStates
                     .Where(s => seededDeviceIds.Contains(s.DeviceId))
                     .ExecuteDeleteAsync(cancellationToken);
