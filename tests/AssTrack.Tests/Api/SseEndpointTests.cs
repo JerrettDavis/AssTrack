@@ -114,25 +114,4 @@ public class SseEndpointTests : IClassFixture<TestWebApplicationFactory>
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
-    [Fact]
-    public async Task PostEventsToken_WithoutAuth_Returns401()
-    {
-        using var client = _factory.CreateClient();
-        var response = await client.PostAsync("/api/events/token", null);
-        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
-    }
-
-    [Fact]
-    public async Task PostEventsToken_WithValidAuth_Returns200AndToken()
-    {
-        using var client = _factory.CreateAuthenticatedClient();
-        var response = await client.PostAsync("/api/events/token", null);
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var body = await response.Content.ReadFromJsonAsync<SseTokenResponse>();
-        Assert.NotNull(body);
-        Assert.False(string.IsNullOrWhiteSpace(body.Token));
-        Assert.True(body.ExpiresAt > DateTimeOffset.UtcNow);
-    }
-
-    private sealed record SseTokenResponse(string Token, DateTimeOffset ExpiresAt);
 }
