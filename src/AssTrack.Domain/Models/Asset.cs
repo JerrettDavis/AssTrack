@@ -8,5 +8,6 @@ public class Asset
     public string? Category { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    public double? SpeedThresholdKmh { get; set; }
     public ICollection<Device> Devices { get; set; } = new List<Device>();
 }

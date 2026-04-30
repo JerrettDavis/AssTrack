@@ -86,6 +86,12 @@ public static class GeofenceEndpoints
             return Results.Ok(items.Select(MapBreach));
         });
 
+        geofences.MapPost("/breaches/{id:guid}/acknowledge", async (Guid id, AcknowledgeBreachRequest request, GeofenceBreachRepository breachRepository, CancellationToken cancellationToken) =>
+        {
+            var updated = await breachRepository.AcknowledgeAsync(id, DateTime.UtcNow, request.AcknowledgedBy, cancellationToken);
+            return updated is null ? Results.NotFound() : Results.Ok(MapBreach(updated));
+        });
+
         return group;
     }
 
@@ -105,7 +111,12 @@ public static class GeofenceEndpoints
         breach.GeofenceId,
         breach.Geofence.Name,
         breach.DeviceId,
+        breach.Device?.Identifier,
+        breach.Asset?.Name,
         breach.AssetId,
-        breach.DetectedAt);
+        breach.EventType.ToString(),
+        breach.DetectedAt,
+        breach.AcknowledgedAtUtc,
+        breach.AcknowledgedBy);
 }
 

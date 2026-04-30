@@ -36,9 +36,11 @@ The API is built with ASP.NET Core minimal APIs on .NET 10. The route prefix for
 | POST | `/api/observations` | Ingest an observation (triggers speed alert if `speedKmh > 120`) |
 | POST | `/api/observations/ingest` | Alias for the POST above |
 | GET | `/api/speed-alerts` | Recent speed alerts |
+| POST | `/api/speed-alerts/{id}/acknowledge` | Acknowledge a speed alert |
 | GET | `/api/geofences` | List geofences |
 | POST | `/api/geofences` | Create a geofence |
 | GET | `/api/geofences/breaches` | Recent geofence breaches (last 100) |
+| POST | `/api/geofences/breaches/{id}/acknowledge` | Acknowledge a geofence breach |
 | PUT | `/api/assets/{id}` | Update an asset (returns 404 if not found) |
 | DELETE | `/api/assets/{id}` | Delete an asset (returns 204 or 404) |
 | GET | `/api/assets/{id}` | Get a single asset by ID |
@@ -48,8 +50,17 @@ The API is built with ASP.NET Core minimal APIs on .NET 10. The route prefix for
 | PUT | `/api/geofences/{id}` | Update a geofence (returns 404 if not found) |
 | DELETE | `/api/geofences/{id}` | Delete a geofence (returns 204 or 404) |
 
-Speed alerts are created automatically when an observation is ingested with `SpeedKmh > 120`.
+Speed alerts are created automatically when an observation is ingested with `SpeedKmh` exceeding the asset's `SpeedThresholdKmh` (if set) or the default of 120 km/h.
 Geofence breaches are recorded automatically when an ingested observation falls within any active geofence.
+
+## Alert Acknowledgement
+
+Both speed alerts and geofence breaches support acknowledgement. Use the acknowledge endpoints to mark an alert as reviewed:
+
+- `POST /api/speed-alerts/{id}/acknowledge` — body: `{ "acknowledgedBy": "operator-name" }`
+- `POST /api/geofences/breaches/{id}/acknowledge` — body: `{ "acknowledgedBy": "operator-name" }`
+
+The `acknowledgedAtUtc` and `acknowledgedBy` fields are returned in list responses so the UI can show acknowledgement status.
 
 ## API Authentication
 
@@ -234,8 +245,9 @@ The E2E job runs on `ubuntu-latest` after `backend` and `frontend` succeed. Play
 
 - Full CRUD (create, read, update, delete) for assets, devices, and geofences
 - Ingest telemetry observations (lat/lon, altitude, speed, heading, metadata)
-- Automatic speed alerts triggered above 120 km/h
+- Automatic speed alerts triggered above the per-asset `SpeedThresholdKmh` (nullable; defaults to 120 km/h if not set)
 - Automatic geofence breach records when an observation lands inside an active circular geofence
+- Alert acknowledgement for both speed alerts and geofence breaches (`POST .../acknowledge`)
 - Latest-position feed per device for live-map consumption
 - API key authentication (`X-Api-Key` header); empty key = open access for dev environments
 - Browse all contracts via Swagger/OpenAPI at `/swagger`

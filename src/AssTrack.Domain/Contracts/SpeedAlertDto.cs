@@ -9,4 +9,8 @@ public sealed record SpeedAlertDto(
     double ThresholdKmh,
     DateTime TriggeredAt,
     string? DeviceIdentifier,
-    string? AssetName);
+    string? AssetName,
+    DateTime? AcknowledgedAtUtc,
+    string? AcknowledgedBy);
+
+public record AcknowledgeSpeedAlertRequest(string? AcknowledgedBy);

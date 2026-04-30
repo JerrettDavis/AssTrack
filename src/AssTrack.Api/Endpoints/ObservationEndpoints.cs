@@ -36,6 +36,7 @@ public static class ObservationEndpoints
             ObservationRepository observationRepository,
             GeofenceRepository geofenceRepository,
             GeofenceBreachRepository geofenceBreachRepository,
+            SpeedAlertRepository speedAlertRepository,
             CancellationToken cancellationToken)
         {
             var validationErrors = new Dictionary<string, string[]>();
@@ -88,16 +89,24 @@ public static class ObservationEndpoints
             };
 
             var created = await observationRepository.AddAsync(observation, cancellationToken);
-            var alert = SpeedAlertEvaluator.Evaluate(created, device.AssetId);
+            var alert = SpeedAlertEvaluator.Evaluate(created, device.AssetId, device.Asset?.SpeedThresholdKmh ?? SpeedAlertEvaluator.DefaultThresholdKmh);
             if (alert is not null)
             {
-                await observationRepository.AddSpeedAlertAsync(alert, cancellationToken);
+                var hasCooldown = await speedAlertRepository.HasRecentAlertAsync(device.Id, SpeedAlertEvaluator.AlertCooldown, cancellationToken);
+                if (!hasCooldown)
+                {
+                    await observationRepository.AddSpeedAlertAsync(alert, cancellationToken);
+                }
             }
 
             var activeGeofences = await geofenceRepository.GetActiveAsync(cancellationToken);
             foreach (var geofence in activeGeofences)
             {
-                if (GeofenceEvaluator.IsInside(geofence, created))
+                var isInside = GeofenceEvaluator.IsInside(geofence, created);
+                var state = await geofenceBreachRepository.GetStateAsync(device.Id, geofence.Id, cancellationToken);
+                var wasInside = state?.IsInside ?? false;
+
+                if (isInside && !wasInside)
                 {
                     var breach = new GeofenceBreach
                     {
@@ -105,10 +114,32 @@ public static class ObservationEndpoints
                         GeofenceId = geofence.Id,
                         DeviceId = device.Id,
                         AssetId = device.AssetId,
-                        DetectedAt = DateTime.UtcNow
+                        DetectedAt = DateTime.UtcNow,
+                        EventType = GeofenceBreachEventType.Enter
                     };
                     await geofenceBreachRepository.AddAsync(breach, cancellationToken);
                 }
+                else if (!isInside && wasInside)
+                {
+                    var breach = new GeofenceBreach
+                    {
+                        ObservationId = created.Id,
+                        GeofenceId = geofence.Id,
+                        DeviceId = device.Id,
+                        AssetId = device.AssetId,
+                        DetectedAt = DateTime.UtcNow,
+                        EventType = GeofenceBreachEventType.Exit
+                    };
+                    await geofenceBreachRepository.AddAsync(breach, cancellationToken);
+                }
+
+                await geofenceBreachRepository.UpsertStateAsync(new DeviceGeofenceState
+                {
+                    DeviceId = device.Id,
+                    GeofenceId = geofence.Id,
+                    IsInside = isInside,
+                    UpdatedAt = DateTime.UtcNow
+                }, cancellationToken);
             }
 
             created = await observationRepository.GetByIdAsync(created.Id, cancellationToken) ?? created;

@@ -14,6 +14,7 @@ export function AssetsPage() {
   const [showAddForm, setShowAddForm] = useState(false)
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
+  const [speedThresholdKmh, setSpeedThresholdKmh] = useState<string>('')
   const [submitting, setSubmitting] = useState(false)
 
   async function load() {
@@ -37,12 +38,20 @@ export function AssetsPage() {
     event.preventDefault()
     setSubmitting(true)
     try {
+      const speedValue = speedThresholdKmh ? parseFloat(speedThresholdKmh) : null
+      if (speedValue !== null && !isFinite(speedValue)) {
+        setError('Speed threshold must be a valid number.')
+        setSubmitting(false)
+        return
+      }
       await createAsset({
         name: name.trim(),
         description: description.trim() || undefined,
+        speedThresholdKmh: speedValue,
       })
       setName('')
       setDescription('')
+      setSpeedThresholdKmh('')
       setShowAddForm(false)
       await load()
     } catch (err) {
@@ -117,6 +126,16 @@ export function AssetsPage() {
                   <span>Description</span>
                   <input onChange={(event) => setDescription(event.target.value)} value={description} />
                 </label>
+                <label className="field">
+                  <span>Speed Threshold (km/h)</span>
+                  <input
+                    min={0.001}
+                    onChange={(event) => setSpeedThresholdKmh(event.target.value)}
+                    placeholder="Default 120 km/h"
+                    type="number"
+                    value={speedThresholdKmh}
+                  />
+                </label>
               </div>
               <div className="button-row">
                 <button className="button" disabled={submitting} type="submit">
@@ -134,6 +153,7 @@ export function AssetsPage() {
                 </header>
                 <p className="muted">{asset.description ?? 'No description provided.'}</p>
                 <p>Devices: {asset.devices.length}</p>
+                <p>Speed threshold: {asset.speedThresholdKmh != null ? `${asset.speedThresholdKmh} km/h` : 'Default'}</p>
                 <p>Updated: {formatTimestamp(asset.updatedAt)}</p>
                 <div className="button-row">
                   <button

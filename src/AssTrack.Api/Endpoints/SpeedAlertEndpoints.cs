@@ -15,6 +15,12 @@ public static class SpeedAlertEndpoints
             return Results.Ok(items.Select(Map));
         });
 
+        alerts.MapPost("/{id:guid}/acknowledge", async (Guid id, AcknowledgeSpeedAlertRequest request, SpeedAlertRepository repository, CancellationToken cancellationToken) =>
+        {
+            var updated = await repository.AcknowledgeAsync(id, DateTime.UtcNow, request.AcknowledgedBy, cancellationToken);
+            return updated is null ? Results.NotFound() : Results.Ok(Map(updated));
+        });
+
         return group;
     }
 
@@ -27,6 +33,8 @@ public static class SpeedAlertEndpoints
         alert.ThresholdKmh,
         alert.TriggeredAt,
         alert.Device?.Identifier,
-        alert.Asset?.Name);
+        alert.Asset?.Name,
+        alert.AcknowledgedAtUtc,
+        alert.AcknowledgedBy);
 }
 

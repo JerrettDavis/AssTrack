@@ -29,11 +29,17 @@ public static class AssetEndpoints
                 return Results.ValidationProblem(new Dictionary<string, string[]> { ["name"] = ["Name is required."] });
             }
 
+            if (request.SpeedThresholdKmh.HasValue && (double.IsNaN(request.SpeedThresholdKmh.Value) || double.IsInfinity(request.SpeedThresholdKmh.Value) || request.SpeedThresholdKmh.Value <= 0))
+            {
+                return Results.ValidationProblem(new Dictionary<string, string[]> { ["speedThresholdKmh"] = ["Speed threshold must be a valid positive number."] });
+            }
+
             var asset = new Asset
             {
                 Name = request.Name.Trim(),
                 Description = request.Description,
                 Category = request.Category,
+                SpeedThresholdKmh = request.SpeedThresholdKmh,
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow
             };
@@ -49,7 +55,12 @@ public static class AssetEndpoints
                 return Results.ValidationProblem(new Dictionary<string, string[]> { ["name"] = ["Name is required."] });
             }
 
-            var updated = await repository.UpdateAsync(id, request.Name.Trim(), request.Description, request.Category, cancellationToken);
+            if (request.SpeedThresholdKmh.HasValue && (double.IsNaN(request.SpeedThresholdKmh.Value) || double.IsInfinity(request.SpeedThresholdKmh.Value) || request.SpeedThresholdKmh.Value <= 0))
+            {
+                return Results.ValidationProblem(new Dictionary<string, string[]> { ["speedThresholdKmh"] = ["Speed threshold must be a valid positive number."] });
+            }
+
+            var updated = await repository.UpdateAsync(id, request.Name.Trim(), request.Description, request.Category, request.SpeedThresholdKmh, cancellationToken);
             return updated is null ? Results.NotFound() : Results.Ok(Map(updated));
         });
 
@@ -69,6 +80,7 @@ public static class AssetEndpoints
         asset.Category,
         asset.CreatedAt,
         asset.UpdatedAt,
-        asset.Devices.Select(DeviceEndpoints.Map).ToArray());
+        asset.Devices.Select(DeviceEndpoints.Map).ToArray(),
+        asset.SpeedThresholdKmh);
 }
 

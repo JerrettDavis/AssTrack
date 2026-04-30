@@ -6,5 +6,12 @@ public sealed record GeofenceBreachDto(
     Guid GeofenceId,
     string GeofenceName,
     Guid DeviceId,
+    string? DeviceIdentifier,
+    string? AssetName,
     Guid? AssetId,
-    DateTime DetectedAt);
+    string EventType,
+    DateTime DetectedAt,
+    DateTime? AcknowledgedAtUtc,
+    string? AcknowledgedBy);
+
+public record AcknowledgeBreachRequest(string? AcknowledgedBy);

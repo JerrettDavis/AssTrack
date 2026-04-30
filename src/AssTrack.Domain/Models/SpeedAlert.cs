@@ -12,4 +12,6 @@ public class SpeedAlert
     public double ObservedSpeedKmh { get; set; }
     public double ThresholdKmh { get; set; }
     public DateTime TriggeredAt { get; set; } = DateTime.UtcNow;
+    public DateTime? AcknowledgedAtUtc { get; set; }
+    public string? AcknowledgedBy { get; set; }
 }

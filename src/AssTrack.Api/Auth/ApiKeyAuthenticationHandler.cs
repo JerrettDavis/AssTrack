@@ -15,7 +15,8 @@ public class ApiKeyAuthenticationHandler(
     IOptionsMonitor<ApiKeyAuthenticationOptions> options,
     ILoggerFactory logger,
     UrlEncoder encoder,
-    IConfiguration configuration)
+    IConfiguration configuration,
+    IWebHostEnvironment environment)
     : AuthenticationHandler<ApiKeyAuthenticationOptions>(options, logger, encoder)
 {
     protected override Task<AuthenticateResult> HandleAuthenticateAsync()
@@ -23,7 +24,16 @@ public class ApiKeyAuthenticationHandler(
         var configuredKey = configuration["Auth:ApiKey"];
         if (string.IsNullOrWhiteSpace(configuredKey))
         {
-            // No key configured – allow all (useful in Testing/Development)
+            var isDevOrTesting = environment.IsDevelopment() ||
+                string.Equals(environment.EnvironmentName, "Testing", StringComparison.OrdinalIgnoreCase);
+
+            if (!isDevOrTesting)
+            {
+                Logger.LogCritical("Auth:ApiKey is not configured. All authenticated API requests will be rejected.");
+                return Task.FromResult(AuthenticateResult.Fail("API key is not configured"));
+            }
+
+            // No key configured in Development/Testing – allow all
             var anonPrincipal = new ClaimsPrincipal(new ClaimsIdentity(
                 [new Claim(ClaimTypes.Name, "anonymous")],
                 Scheme.Name));

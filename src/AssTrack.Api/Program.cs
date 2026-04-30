@@ -60,6 +60,16 @@ builder.Services.AddProblemDetails();
 
 var app = builder.Build();
 
+{
+    var apiKey = builder.Configuration["Auth:ApiKey"];
+    if (string.IsNullOrWhiteSpace(apiKey) && !builder.Environment.IsDevelopment() &&
+        !string.Equals(builder.Environment.EnvironmentName, "Testing", StringComparison.OrdinalIgnoreCase))
+    {
+        var startupLogger = app.Services.GetRequiredService<ILogger<Program>>();
+        startupLogger.LogCritical("Auth:ApiKey is not configured. All authenticated API requests will be rejected.");
+    }
+}
+
 using (var scope = app.Services.CreateScope())
 {
     var dbContext = scope.ServiceProvider.GetRequiredService<AssTrackDbContext>();

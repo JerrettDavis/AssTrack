@@ -3,6 +3,7 @@ using System;
 using AssTrack.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace AssTrack.Infrastructure.Migrations
 {
     [DbContext(typeof(AssTrackDbContext))]
-    partial class AssTrackDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260430072203_AddSpeedThresholdAndAcknowledgement")]
+    partial class AddSpeedThresholdAndAcknowledgement
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.7");
@@ -86,27 +89,6 @@ namespace AssTrack.Infrastructure.Migrations
                     b.ToTable("Devices");
                 });
 
-            modelBuilder.Entity("AssTrack.Domain.Models.DeviceGeofenceState", b =>
-                {
-                    b.Property<Guid>("DeviceId")
-                        .HasColumnType("TEXT");
-
-                    b.Property<Guid>("GeofenceId")
-                        .HasColumnType("TEXT");
-
-                    b.Property<bool>("IsInside")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("DeviceId", "GeofenceId");
-
-                    b.HasIndex("GeofenceId");
-
-                    b.ToTable("DeviceGeofenceStates");
-                });
-
             modelBuilder.Entity("AssTrack.Domain.Models.Geofence", b =>
                 {
                     b.Property<Guid>("Id")
@@ -162,10 +144,6 @@ namespace AssTrack.Infrastructure.Migrations
 
                     b.Property<Guid>("DeviceId")
                         .HasColumnType("TEXT");
-
-                    b.Property<int>("EventType")
-                        .HasDefaultValue(0)
-                        .HasColumnType("INTEGER");
 
                     b.Property<Guid>("GeofenceId")
                         .HasColumnType("TEXT");
@@ -278,25 +256,6 @@ namespace AssTrack.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.SetNull);
 
                     b.Navigation("Asset");
-                });
-
-            modelBuilder.Entity("AssTrack.Domain.Models.DeviceGeofenceState", b =>
-                {
-                    b.HasOne("AssTrack.Domain.Models.Device", "Device")
-                        .WithMany()
-                        .HasForeignKey("DeviceId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("AssTrack.Domain.Models.Geofence", "Geofence")
-                        .WithMany()
-                        .HasForeignKey("GeofenceId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Device");
-
-                    b.Navigation("Geofence");
                 });
 
             modelBuilder.Entity("AssTrack.Domain.Models.GeofenceBreach", b =>

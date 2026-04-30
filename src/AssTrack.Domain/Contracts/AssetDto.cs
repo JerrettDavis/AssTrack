@@ -7,8 +7,9 @@ public sealed record AssetDto(
     string? Category,
     DateTime CreatedAt,
     DateTime UpdatedAt,
-    IReadOnlyCollection<DeviceDto> Devices);
+    IReadOnlyCollection<DeviceDto> Devices,
+    double? SpeedThresholdKmh);
 
-public sealed record CreateAssetRequest(string Name, string? Description, string? Category);
+public sealed record CreateAssetRequest(string Name, string? Description, string? Category, double? SpeedThresholdKmh = null);
 
-public sealed record UpdateAssetRequest(string Name, string? Description, string? Category);
+public sealed record UpdateAssetRequest(string Name, string? Description, string? Category, double? SpeedThresholdKmh = null);

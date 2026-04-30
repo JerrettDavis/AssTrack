@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Net;
 using System.Net.Http.Json;
 using AssTrack.Domain.Contracts;
@@ -55,6 +56,84 @@ public class GeofenceBreachTests : IClassFixture<TestWebApplicationFactory>
         var breaches = await verifyDb.GeofenceBreaches.ToListAsync();
         breaches.Should().ContainSingle();
         breaches[0].DeviceId.Should().Be(deviceId);
+    }
+
+    [Fact]
+    public async Task PostObservationInsideGeofence_Twice_CreatesSingleBreach()
+    {
+        await _factory.ResetDatabaseAsync();
+
+        Guid deviceId;
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AssTrackDbContext>();
+            var device = new Device { Identifier = "geo-dev-004" };
+            var geofence = new Geofence
+            {
+                Name = "Dedup Zone",
+                CenterLatitude = 51.5074,
+                CenterLongitude = -0.1278,
+                RadiusMeters = 5000,
+                IsActive = true
+            };
+            db.Devices.Add(device);
+            db.Geofences.Add(geofence);
+            await db.SaveChangesAsync();
+            deviceId = device.Id;
+        }
+
+        using var client = _factory.CreateAuthenticatedClient();
+        var request1 = new CreateObservationRequest(deviceId, DateTime.UtcNow, 51.5074, -0.1278, null, null, 50, null, null);
+        await client.PostAsJsonAsync("/api/observations", request1);
+
+        var request2 = new CreateObservationRequest(deviceId, DateTime.UtcNow, 51.5074, -0.1278, null, null, 50, null, null);
+        await client.PostAsJsonAsync("/api/observations", request2);
+
+        using var verifyScope = _factory.Services.CreateScope();
+        var verifyDb = verifyScope.ServiceProvider.GetRequiredService<AssTrackDbContext>();
+        var breaches = await verifyDb.GeofenceBreaches.ToListAsync();
+        breaches.Should().ContainSingle("second observation inside same geofence should not create duplicate breach");
+    }
+
+    [Fact]
+    public async Task PostObservationExitsGeofence_Creates_ExitBreach()
+    {
+        await _factory.ResetDatabaseAsync();
+
+        Guid deviceId;
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AssTrackDbContext>();
+            var device = new Device { Identifier = "geo-dev-005" };
+            var geofence = new Geofence
+            {
+                Name = "Exit Zone",
+                CenterLatitude = 51.5074,
+                CenterLongitude = -0.1278,
+                RadiusMeters = 5000,
+                IsActive = true
+            };
+            db.Devices.Add(device);
+            db.Geofences.Add(geofence);
+            await db.SaveChangesAsync();
+            deviceId = device.Id;
+        }
+
+        using var client = _factory.CreateAuthenticatedClient();
+        // Enter the geofence
+        var enterRequest = new CreateObservationRequest(deviceId, DateTime.UtcNow, 51.5074, -0.1278, null, null, 50, null, null);
+        await client.PostAsJsonAsync("/api/observations", enterRequest);
+
+        // Exit the geofence (far away from center)
+        var exitRequest = new CreateObservationRequest(deviceId, DateTime.UtcNow, 40.7128, -74.0060, null, null, 50, null, null);
+        await client.PostAsJsonAsync("/api/observations", exitRequest);
+
+        using var verifyScope = _factory.Services.CreateScope();
+        var verifyDb = verifyScope.ServiceProvider.GetRequiredService<AssTrackDbContext>();
+        var breaches = await verifyDb.GeofenceBreaches.OrderBy(b => b.DetectedAt).ToListAsync();
+        breaches.Should().HaveCount(2);
+        breaches[0].EventType.Should().Be(GeofenceBreachEventType.Enter);
+        breaches[1].EventType.Should().Be(GeofenceBreachEventType.Exit);
     }
 
     [Fact]

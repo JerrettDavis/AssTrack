@@ -24,7 +24,7 @@ public class AssetRepository(AssTrackDbContext dbContext)
         return asset;
     }
 
-    public async Task<Asset?> UpdateAsync(Guid id, string name, string? description, string? category, CancellationToken cancellationToken = default)
+    public async Task<Asset?> UpdateAsync(Guid id, string name, string? description, string? category, double? speedThresholdKmh, CancellationToken cancellationToken = default)
     {
         var asset = await dbContext.Assets.FindAsync([id], cancellationToken);
         if (asset is null) return null;
@@ -32,6 +32,7 @@ public class AssetRepository(AssTrackDbContext dbContext)
         asset.Name = name;
         asset.Description = description;
         asset.Category = category;
+        asset.SpeedThresholdKmh = speedThresholdKmh;
         asset.UpdatedAt = DateTime.UtcNow;
 
         await dbContext.SaveChangesAsync(cancellationToken);

@@ -18,9 +18,18 @@ L.Icon.Default.mergeOptions({
 
 function MapViewportUpdater({ center }: { center: [number, number] }) {
   const map = useMap()
+  const hasUserMoved = useRef(false)
 
   useEffect(() => {
-    map.setView(center)
+    const handler = () => { hasUserMoved.current = true }
+    map.on('dragstart', handler)
+    return () => { map.off('dragstart', handler) }
+  }, [map])
+
+  useEffect(() => {
+    if (!hasUserMoved.current) {
+      map.setView(center)
+    }
   }, [center, map])
 
   return null

@@ -184,4 +184,33 @@ public class ObservationApiTests : IClassFixture<TestWebApplicationFactory>
         var response = await _factory.CreateAuthenticatedClient().PostAsJsonAsync("/api/observations", request);
         Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
     }
+
+    [Fact]
+    public async Task PostObservation_Should_NotCreateDuplicateSpeedAlert_WithinCooldown()
+    {
+        await _factory.ResetDatabaseAsync();
+        Guid deviceId;
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<AssTrackDbContext>();
+            var device = new Device { Identifier = "dev-cooldown-01" };
+            dbContext.Devices.Add(device);
+            await dbContext.SaveChangesAsync();
+            deviceId = device.Id;
+        }
+
+        using var client = _factory.CreateAuthenticatedClient();
+        var request1 = new CreateObservationRequest(deviceId, DateTime.UtcNow, 51.5074, -0.1278, null, null, 130, null, null);
+        var response1 = await client.PostAsJsonAsync("/api/observations", request1);
+        response1.StatusCode.Should().Be(HttpStatusCode.Created);
+
+        var request2 = new CreateObservationRequest(deviceId, DateTime.UtcNow, 51.5074, -0.1278, null, null, 135, null, null);
+        var response2 = await client.PostAsJsonAsync("/api/observations", request2);
+        response2.StatusCode.Should().Be(HttpStatusCode.Created);
+
+        using var verificationScope = _factory.Services.CreateScope();
+        var verificationDbContext = verificationScope.ServiceProvider.GetRequiredService<AssTrackDbContext>();
+        var alerts = await verificationDbContext.SpeedAlerts.ToListAsync();
+        alerts.Should().ContainSingle("second speed alert within cooldown window should be suppressed");
+    }
 }

@@ -5,6 +5,7 @@ namespace AssTrack.Domain.Services;
 public static class SpeedAlertEvaluator
 {
     public const double DefaultThresholdKmh = 120.0;
+    public static readonly TimeSpan AlertCooldown = TimeSpan.FromMinutes(5);
 
     public static SpeedAlert? Evaluate(Observation observation, Guid? assetId = null, double thresholdKmh = DefaultThresholdKmh)
     {

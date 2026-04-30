@@ -49,4 +49,26 @@ public class SpeedAlertEvaluatorTests
 
         alert.Should().BeNull();
     }
+
+    [Fact]
+    public void ShouldAlert_WhenSpeedExceedsCustomThreshold()
+    {
+        var observation = new Observation { Id = Guid.NewGuid(), DeviceId = Guid.NewGuid(), SpeedKmh = 90.0 };
+
+        var alert = SpeedAlertEvaluator.Evaluate(observation, Guid.NewGuid(), 80.0);
+
+        alert.Should().NotBeNull();
+        alert!.ObservedSpeedKmh.Should().Be(90.0);
+        alert.ThresholdKmh.Should().Be(80.0);
+    }
+
+    [Fact]
+    public void ShouldNotAlert_WhenSpeedBelowCustomThreshold()
+    {
+        var observation = new Observation { Id = Guid.NewGuid(), DeviceId = Guid.NewGuid(), SpeedKmh = 75.0 };
+
+        var alert = SpeedAlertEvaluator.Evaluate(observation, Guid.NewGuid(), 80.0);
+
+        alert.Should().BeNull();
+    }
 }

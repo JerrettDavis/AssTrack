@@ -15,4 +15,7 @@ public class GeofenceBreach
     public Guid? AssetId { get; set; }
     public Asset? Asset { get; set; }
     public DateTime DetectedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? AcknowledgedAtUtc { get; set; }
+    public string? AcknowledgedBy { get; set; }
+    public GeofenceBreachEventType EventType { get; set; } = GeofenceBreachEventType.Enter;
 }
