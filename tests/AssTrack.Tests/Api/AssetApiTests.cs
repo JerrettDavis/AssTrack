@@ -47,4 +47,61 @@ public class AssetApiTests : IClassFixture<TestWebApplicationFactory>
 
         assets.Should().Contain(x => x.Name == "Excavator");
     }
+
+    [Fact]
+    public async Task PutAsset_Should_UpdateAsset()
+    {
+        await _factory.ResetDatabaseAsync();
+        using var client = _factory.CreateAuthenticatedClient();
+
+        var create = await client.PostAsJsonAsync("/api/assets", new CreateAssetRequest("Old Name", null, null));
+        create.StatusCode.Should().Be(HttpStatusCode.Created);
+        var created = await create.Content.ReadFromJsonAsync<AssetDto>();
+
+        var update = await client.PutAsJsonAsync($"/api/assets/{created!.Id}", new UpdateAssetRequest("New Name", "New Desc", "Equipment"));
+        update.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var updated = await update.Content.ReadFromJsonAsync<AssetDto>();
+        updated!.Name.Should().Be("New Name");
+        updated.Description.Should().Be("New Desc");
+    }
+
+    [Fact]
+    public async Task PutAsset_NotFound_Returns404()
+    {
+        await _factory.ResetDatabaseAsync();
+        using var client = _factory.CreateAuthenticatedClient();
+
+        var update = await client.PutAsJsonAsync($"/api/assets/{Guid.NewGuid()}", new UpdateAssetRequest("Name", null, null));
+        update.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task DeleteAsset_Should_Return204_AndBeGone()
+    {
+        await _factory.ResetDatabaseAsync();
+        using var client = _factory.CreateAuthenticatedClient();
+
+        var create = await client.PostAsJsonAsync("/api/assets", new CreateAssetRequest("ToDelete", null, null));
+        var created = await create.Content.ReadFromJsonAsync<AssetDto>();
+
+        var del = await client.DeleteAsync($"/api/assets/{created!.Id}");
+        del.StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        var get = await client.GetAsync($"/api/assets/{created.Id}");
+        get.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task GetAssetById_Should_ReturnAsset()
+    {
+        await _factory.ResetDatabaseAsync();
+        using var client = _factory.CreateAuthenticatedClient();
+
+        var create = await client.PostAsJsonAsync("/api/assets", new CreateAssetRequest("SingleAsset", "Desc", "Cat"));
+        var created = await create.Content.ReadFromJsonAsync<AssetDto>();
+
+        var get = await client.GetFromJsonAsync<AssetDto>($"/api/assets/{created!.Id}");
+        get!.Name.Should().Be("SingleAsset");
+    }
 }

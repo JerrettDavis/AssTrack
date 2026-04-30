@@ -17,3 +17,11 @@ public sealed record CreateGeofenceRequest(
     double CenterLongitude,
     double RadiusMeters,
     bool? IsActive);
+
+public sealed record UpdateGeofenceRequest(
+    string Name,
+    string? Description,
+    double CenterLatitude,
+    double CenterLongitude,
+    double RadiusMeters,
+    bool? IsActive);

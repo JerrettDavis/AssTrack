@@ -103,6 +103,122 @@ body {
   color: #bfdbfe;
 }
 
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.inline-form {
+  display: grid;
+  gap: 1rem;
+}
+
+.field-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1rem;
+}
+
+.field {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.field span {
+  color: #cbd5e1;
+  font-size: 0.9rem;
+}
+
+.field input,
+.field select {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.9);
+  color: #e5eef7;
+  padding: 0.75rem 0.9rem;
+}
+
+.field-wide {
+  grid-column: 1 / -1;
+}
+
+.button-row {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-top: 0.5rem;
+}
+
+.button {
+  border: none;
+  border-radius: 10px;
+  background: #2563eb;
+  color: #eff6ff;
+  padding: 0.7rem 1rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.button:hover {
+  background: #1d4ed8;
+}
+
+.button:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+
+.button-secondary {
+  background: rgba(51, 65, 85, 0.95);
+}
+
+.button-secondary:hover {
+  background: rgba(71, 85, 105, 0.95);
+}
+
+.button-danger {
+  background: rgba(185, 28, 28, 0.95);
+}
+
+.button-danger:hover {
+  background: rgba(153, 27, 27, 0.95);
+}
+
+.table-card {
+  overflow-x: auto;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.data-table th,
+.data-table td {
+  padding: 0.9rem 0.75rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.data-table th {
+  color: #bfdbfe;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.map-card {
+  min-height: 500px;
+  overflow: hidden;
+  padding: 0;
+}
+
 @media (max-width: 860px) {
   .layout {
     grid-template-columns: 1fr;

@@ -29,3 +29,25 @@ export async function apiPost<T>(path: string, body: unknown): Promise<T> {
   }
   return (await response.json()) as T
 }
+
+export async function apiPut<T>(path: string, body: unknown): Promise<T> {
+  const response = await fetch(`${apiBaseUrl}${path}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify(body),
+  })
+  if (!response.ok) {
+    throw new Error(`PUT ${path} failed with ${response.status}`)
+  }
+  return (await response.json()) as T
+}
+
+export async function apiDelete(path: string): Promise<void> {
+  const response = await fetch(`${apiBaseUrl}${path}`, {
+    method: 'DELETE',
+    headers: { ...authHeaders() },
+  })
+  if (!response.ok) {
+    throw new Error(`DELETE ${path} failed with ${response.status}`)
+  }
+}

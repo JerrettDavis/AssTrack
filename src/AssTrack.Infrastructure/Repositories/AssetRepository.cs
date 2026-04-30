@@ -23,4 +23,29 @@ public class AssetRepository(AssTrackDbContext dbContext)
         await dbContext.SaveChangesAsync(cancellationToken);
         return asset;
     }
+
+    public async Task<Asset?> UpdateAsync(Guid id, string name, string? description, string? category, CancellationToken cancellationToken = default)
+    {
+        var asset = await dbContext.Assets.FindAsync([id], cancellationToken);
+        if (asset is null) return null;
+
+        asset.Name = name;
+        asset.Description = description;
+        asset.Category = category;
+        asset.UpdatedAt = DateTime.UtcNow;
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return asset;
+    }
+
+    public async Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        var asset = await dbContext.Assets.FindAsync([id], cancellationToken);
+        if (asset is null) return false;
+
+        dbContext.Assets.Remove(asset);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return true;
+    }
 }
+

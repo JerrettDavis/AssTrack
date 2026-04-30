@@ -10,3 +10,5 @@ public sealed record AssetDto(
     IReadOnlyCollection<DeviceDto> Devices);
 
 public sealed record CreateAssetRequest(string Name, string? Description, string? Category);
+
+public sealed record UpdateAssetRequest(string Name, string? Description, string? Category);

@@ -28,4 +28,29 @@ public class DeviceRepository(AssTrackDbContext dbContext)
         await dbContext.SaveChangesAsync(cancellationToken);
         return await GetByIdAsync(device.Id, cancellationToken) ?? device;
     }
+
+    public async Task<Device?> UpdateAsync(Guid id, string identifier, string? label, string? protocol, Guid? assetId, CancellationToken cancellationToken = default)
+    {
+        var device = await dbContext.Devices.FindAsync([id], cancellationToken);
+        if (device is null) return null;
+
+        device.Identifier = identifier;
+        device.Label = label;
+        device.Protocol = string.IsNullOrWhiteSpace(protocol) ? "https" : protocol.Trim().ToLowerInvariant();
+        device.AssetId = assetId;
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return await GetByIdAsync(id, cancellationToken);
+    }
+
+    public async Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        var device = await dbContext.Devices.FindAsync([id], cancellationToken);
+        if (device is null) return false;
+
+        dbContext.Devices.Remove(device);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return true;
+    }
 }
+

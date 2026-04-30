@@ -39,6 +39,14 @@ The API is built with ASP.NET Core minimal APIs on .NET 10. The route prefix for
 | GET | `/api/geofences` | List geofences |
 | POST | `/api/geofences` | Create a geofence |
 | GET | `/api/geofences/breaches` | Recent geofence breaches (last 100) |
+| PUT | `/api/assets/{id}` | Update an asset (returns 404 if not found) |
+| DELETE | `/api/assets/{id}` | Delete an asset (returns 204 or 404) |
+| GET | `/api/assets/{id}` | Get a single asset by ID |
+| PUT | `/api/devices/{id}` | Update a device (returns 404 if not found) |
+| DELETE | `/api/devices/{id}` | Delete a device (returns 204 or 404) |
+| GET | `/api/devices/{id}` | Get a single device by ID |
+| PUT | `/api/geofences/{id}` | Update a geofence (returns 404 if not found) |
+| DELETE | `/api/geofences/{id}` | Delete a geofence (returns 204 or 404) |
 
 Speed alerts are created automatically when an observation is ingested with `SpeedKmh > 120`.
 Geofence breaches are recorded automatically when an ingested observation falls within any active geofence.
@@ -224,7 +232,7 @@ The E2E job runs on `ubuntu-latest` after `backend` and `frontend` succeed. Play
 
 ## Capabilities
 
-- Manage assets and devices
+- Full CRUD (create, read, update, delete) for assets, devices, and geofences
 - Ingest telemetry observations (lat/lon, altitude, speed, heading, metadata)
 - Automatic speed alerts triggered above 120 km/h
 - Automatic geofence breach records when an observation lands inside an active circular geofence

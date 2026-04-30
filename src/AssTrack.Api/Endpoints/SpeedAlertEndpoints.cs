@@ -25,5 +25,8 @@ public static class SpeedAlertEndpoints
         alert.AssetId,
         alert.ObservedSpeedKmh,
         alert.ThresholdKmh,
-        alert.TriggeredAt);
+        alert.TriggeredAt,
+        alert.Device?.Identifier,
+        alert.Asset?.Name);
 }
+

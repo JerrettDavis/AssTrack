@@ -73,4 +73,67 @@ public class GeofenceApiTests : IClassFixture<TestWebApplicationFactory>
         var response = await _client.PostAsJsonAsync("/api/geofences", request);
         Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
     }
+
+    [Fact]
+    public async Task PutGeofence_Should_UpdateGeofence()
+    {
+        var create = await _client.PostAsJsonAsync("/api/geofences", new
+        {
+            name = "Original Geofence",
+            centerLatitude = 10.0,
+            centerLongitude = 20.0,
+            radiusMeters = 100.0,
+            isActive = true
+        });
+        Assert.Equal(HttpStatusCode.Created, create.StatusCode);
+        var created = await create.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+        var id = created.GetProperty("id").GetString();
+
+        var update = await _client.PutAsJsonAsync($"/api/geofences/{id}", new
+        {
+            name = "Updated Geofence",
+            description = "New description",
+            centerLatitude = 11.0,
+            centerLongitude = 21.0,
+            radiusMeters = 200.0,
+            isActive = false
+        });
+        Assert.Equal(HttpStatusCode.OK, update.StatusCode);
+
+        var updated = await update.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+        Assert.Equal("Updated Geofence", updated.GetProperty("name").GetString());
+    }
+
+    [Fact]
+    public async Task PutGeofence_NotFound_Returns404()
+    {
+        var update = await _client.PutAsJsonAsync($"/api/geofences/{Guid.NewGuid()}", new
+        {
+            name = "Nonexistent",
+            centerLatitude = 0.0,
+            centerLongitude = 0.0,
+            radiusMeters = 100.0,
+            isActive = true
+        });
+        Assert.Equal(HttpStatusCode.NotFound, update.StatusCode);
+    }
+
+    [Fact]
+    public async Task DeleteGeofence_Should_Return204()
+    {
+        var create = await _client.PostAsJsonAsync("/api/geofences", new
+        {
+            name = "To Delete Geofence",
+            centerLatitude = 5.0,
+            centerLongitude = 5.0,
+            radiusMeters = 50.0,
+            isActive = true
+        });
+        Assert.Equal(HttpStatusCode.Created, create.StatusCode);
+        var created = await create.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+        var id = created.GetProperty("id").GetString();
+
+        var del = await _client.DeleteAsync($"/api/geofences/{id}");
+        Assert.Equal(HttpStatusCode.NoContent, del.StatusCode);
+    }
 }

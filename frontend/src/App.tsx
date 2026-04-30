@@ -3,6 +3,7 @@ import { AssetsPage } from './pages/AssetsPage'
 import DevicesPage from './pages/DevicesPage'
 import MapPage from './pages/MapPage'
 import AlertsPage from './pages/AlertsPage'
+import GeofencesPage from './pages/GeofencesPage'
 import './styles.css'
 
 export default function App() {
@@ -12,6 +13,7 @@ export default function App() {
         <NavLink to="/" end>Assets</NavLink>
         <NavLink to="/devices">Devices</NavLink>
         <NavLink to="/map">Map</NavLink>
+        <NavLink to="/geofences">Geofences</NavLink>
         <NavLink to="/alerts">Alerts</NavLink>
       </nav>
       <main className="app-main">
@@ -19,6 +21,7 @@ export default function App() {
           <Route path="/" element={<AssetsPage />} />
           <Route path="/devices" element={<DevicesPage />} />
           <Route path="/map" element={<MapPage />} />
+          <Route path="/geofences" element={<GeofencesPage />} />
           <Route path="/alerts" element={<AlertsPage />} />
         </Routes>
       </main>

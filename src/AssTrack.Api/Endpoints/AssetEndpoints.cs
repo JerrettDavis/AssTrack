@@ -42,6 +42,23 @@ public static class AssetEndpoints
             return Results.Created($"/api/assets/{asset.Id}", Map(asset));
         });
 
+        assets.MapPut("/{id:guid}", async (Guid id, UpdateAssetRequest request, AssetRepository repository, CancellationToken cancellationToken) =>
+        {
+            if (string.IsNullOrWhiteSpace(request.Name))
+            {
+                return Results.ValidationProblem(new Dictionary<string, string[]> { ["name"] = ["Name is required."] });
+            }
+
+            var updated = await repository.UpdateAsync(id, request.Name.Trim(), request.Description, request.Category, cancellationToken);
+            return updated is null ? Results.NotFound() : Results.Ok(Map(updated));
+        });
+
+        assets.MapDelete("/{id:guid}", async (Guid id, AssetRepository repository, CancellationToken cancellationToken) =>
+        {
+            var deleted = await repository.DeleteAsync(id, cancellationToken);
+            return deleted ? Results.NoContent() : Results.NotFound();
+        });
+
         return group;
     }
 
@@ -54,3 +71,4 @@ public static class AssetEndpoints
         asset.UpdatedAt,
         asset.Devices.Select(DeviceEndpoints.Map).ToArray());
 }
+

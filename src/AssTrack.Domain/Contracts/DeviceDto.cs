@@ -10,3 +10,5 @@ public sealed record DeviceDto(
     string? AssetName);
 
 public sealed record CreateDeviceRequest(string Identifier, string? Label, string? Protocol, Guid? AssetId);
+
+public sealed record UpdateDeviceRequest(string Identifier, string? Label, string? Protocol, Guid? AssetId);

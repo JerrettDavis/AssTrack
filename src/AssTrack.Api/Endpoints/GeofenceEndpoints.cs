@@ -51,6 +51,35 @@ public static class GeofenceEndpoints
             return Results.Created($"/api/geofences/{geofence.Id}", Map(geofence));
         });
 
+        geofences.MapPut("/{id:guid}", async (Guid id, [FromBody] UpdateGeofenceRequest request, GeofenceRepository repository, CancellationToken cancellationToken) =>
+        {
+            if (string.IsNullOrWhiteSpace(request.Name))
+            {
+                return Results.ValidationProblem(
+                    new Dictionary<string, string[]> { ["name"] = ["Name is required."] },
+                    statusCode: StatusCodes.Status422UnprocessableEntity);
+            }
+
+            var validationErrors = new Dictionary<string, string[]>();
+            if (request.RadiusMeters <= 0)
+                validationErrors["radiusMeters"] = ["Radius must be greater than 0."];
+            if (request.CenterLatitude < -90 || request.CenterLatitude > 90)
+                validationErrors["centerLatitude"] = ["CenterLatitude must be between -90 and 90."];
+            if (request.CenterLongitude < -180 || request.CenterLongitude > 180)
+                validationErrors["centerLongitude"] = ["CenterLongitude must be between -180 and 180."];
+            if (validationErrors.Count > 0)
+                return Results.ValidationProblem(validationErrors, statusCode: StatusCodes.Status422UnprocessableEntity);
+
+            var updated = await repository.UpdateAsync(id, request.Name.Trim(), request.Description, request.CenterLatitude, request.CenterLongitude, request.RadiusMeters, request.IsActive, cancellationToken);
+            return updated is null ? Results.NotFound() : Results.Ok(Map(updated));
+        });
+
+        geofences.MapDelete("/{id:guid}", async (Guid id, GeofenceRepository repository, CancellationToken cancellationToken) =>
+        {
+            var deleted = await repository.DeleteAsync(id, cancellationToken);
+            return deleted ? Results.NoContent() : Results.NotFound();
+        });
+
         geofences.MapGet("/breaches", async (GeofenceBreachRepository breachRepository, CancellationToken cancellationToken) =>
         {
             var items = await breachRepository.GetRecentAsync(cancellationToken: cancellationToken);

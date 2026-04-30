@@ -4,7 +4,9 @@ export type SpeedAlert = {
   id: string
   observationId: string
   deviceId: string
+  deviceIdentifier?: string | null
   assetId?: string | null
+  assetName?: string | null
   observedSpeedKmh: number
   thresholdKmh: number
   triggeredAt: string

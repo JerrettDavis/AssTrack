@@ -7,4 +7,6 @@ public sealed record SpeedAlertDto(
     Guid? AssetId,
     double ObservedSpeedKmh,
     double ThresholdKmh,
-    DateTime TriggeredAt);
+    DateTime TriggeredAt,
+    string? DeviceIdentifier,
+    string? AssetName);

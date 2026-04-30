@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Asset, getAssets } from '../api/assets'
+import { FormEvent, useEffect, useMemo, useState } from 'react'
+import { Asset, createAsset, deleteAsset, getAssets } from '../api/assets'
 import { getObservations, Observation } from '../api/observations'
 
 function formatTimestamp(value: string) {
@@ -11,22 +11,58 @@ export function AssetsPage() {
   const [observations, setObservations] = useState<Observation[]>([])
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [showAddForm, setShowAddForm] = useState(false)
+  const [name, setName] = useState('')
+  const [description, setDescription] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+
+  async function load() {
+    try {
+      setError(null)
+      const [assetItems, observationItems] = await Promise.all([getAssets(), getObservations()])
+      setAssets(assetItems)
+      setObservations(observationItems)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to load API data.')
+    } finally {
+      setLoading(false)
+    }
+  }
 
   useEffect(() => {
-    async function load() {
-      try {
-        const [assetItems, observationItems] = await Promise.all([getAssets(), getObservations()])
-        setAssets(assetItems)
-        setObservations(observationItems)
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Unable to load API data.')
-      } finally {
-        setLoading(false)
-      }
-    }
-
     void load()
   }, [])
+
+  async function handleCreateAsset(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setSubmitting(true)
+    try {
+      await createAsset({
+        name: name.trim(),
+        description: description.trim() || undefined,
+      })
+      setName('')
+      setDescription('')
+      setShowAddForm(false)
+      await load()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to create asset.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  async function handleDeleteAsset(assetId: string) {
+    setSubmitting(true)
+    try {
+      await deleteAsset(assetId)
+      await load()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to delete asset.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
 
   const metrics = useMemo(() => {
     const deviceCount = assets.reduce((total, asset) => total + asset.devices.length, 0)
@@ -64,7 +100,31 @@ export function AssetsPage() {
         </div>
 
         <div className="section">
-          <h2>Assets</h2>
+          <div className="page-header">
+            <h2>Assets</h2>
+            <button className="button button-secondary" onClick={() => setShowAddForm((value) => !value)} type="button">
+              {showAddForm ? 'Cancel' : 'Add Asset'}
+            </button>
+          </div>
+          {showAddForm && (
+            <form className="card inline-form" onSubmit={handleCreateAsset}>
+              <div className="field-grid">
+                <label className="field">
+                  <span>Name</span>
+                  <input onChange={(event) => setName(event.target.value)} required value={name} />
+                </label>
+                <label className="field field-wide">
+                  <span>Description</span>
+                  <input onChange={(event) => setDescription(event.target.value)} value={description} />
+                </label>
+              </div>
+              <div className="button-row">
+                <button className="button" disabled={submitting} type="submit">
+                  {submitting ? 'Saving…' : 'Create asset'}
+                </button>
+              </div>
+            </form>
+          )}
           <div className="asset-grid">
             {assets.map((asset) => (
               <article className="list-card" key={asset.id}>
@@ -75,6 +135,16 @@ export function AssetsPage() {
                 <p className="muted">{asset.description ?? 'No description provided.'}</p>
                 <p>Devices: {asset.devices.length}</p>
                 <p>Updated: {formatTimestamp(asset.updatedAt)}</p>
+                <div className="button-row">
+                  <button
+                    className="button button-danger"
+                    disabled={submitting}
+                    onClick={() => void handleDeleteAsset(asset.id)}
+                    type="button"
+                  >
+                    Delete
+                  </button>
+                </div>
               </article>
             ))}
           </div>
