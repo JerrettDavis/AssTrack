@@ -23,6 +23,7 @@ public class AssTrackDbContext(DbContextOptions<AssTrackDbContext> options) : Db
             entity.Property(x => x.Description).HasMaxLength(2000);
             entity.Property(x => x.Category).HasMaxLength(100);
             entity.Property(x => x.SpeedThresholdKmh);
+            entity.Property(x => x.IsSeeded).HasDefaultValue(false);
         });
 
         modelBuilder.Entity<Device>(entity =>
@@ -31,6 +32,7 @@ public class AssTrackDbContext(DbContextOptions<AssTrackDbContext> options) : Db
             entity.Property(x => x.Identifier).IsRequired().HasMaxLength(200);
             entity.Property(x => x.Label).HasMaxLength(200);
             entity.Property(x => x.Protocol).IsRequired().HasMaxLength(20);
+            entity.Property(x => x.IsSeeded).HasDefaultValue(false);
             entity.HasIndex(x => x.Identifier).IsUnique();
             entity.HasOne(x => x.Asset)
                 .WithMany(x => x.Devices)
@@ -55,6 +57,7 @@ public class AssTrackDbContext(DbContextOptions<AssTrackDbContext> options) : Db
             entity.HasKey(x => x.Id);
             entity.Property(x => x.Name).IsRequired().HasMaxLength(200);
             entity.Property(x => x.Description).HasMaxLength(2000);
+            entity.Property(x => x.IsSeeded).HasDefaultValue(false);
         });
 
         modelBuilder.Entity<SpeedAlert>(entity =>

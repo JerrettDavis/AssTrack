@@ -141,7 +141,8 @@ public static class GeofenceEndpoints
         geofence.CenterLongitude,
         geofence.RadiusMeters,
         geofence.IsActive,
-        geofence.CreatedAt);
+        geofence.CreatedAt,
+        geofence.IsSeeded);
 
     internal static GeofenceBreachDto MapBreach(GeofenceBreach breach) => new(
         breach.Id,

@@ -42,8 +42,8 @@ public sealed class SimulationService(
         else
         {
             var identifier = $"sim-{request.Preset}-{startTime:yyyyMMddHHmmss}-{Guid.NewGuid():N}";
-            asset = await assetRepository.AddAsync(new Asset { Name = $"Sim Asset - {request.Preset}" }, cancellationToken);
-            device = await deviceRepository.AddAsync(new Device { Identifier = identifier, AssetId = asset.Id }, cancellationToken);
+            asset = await assetRepository.AddAsync(new Asset { Name = $"Sim Asset - {request.Preset}", IsSeeded = true }, cancellationToken);
+            device = await deviceRepository.AddAsync(new Device { Identifier = identifier, AssetId = asset.Id, IsSeeded = true }, cancellationToken);
             // Reload with asset navigation property
             device = (await deviceRepository.GetByIdAsync(device.Id, cancellationToken))!;
             eventLog.Add($"Created temporary device '{device.Identifier}' (id={device.Id}) with asset '{asset.Name}'.");
@@ -69,7 +69,8 @@ public sealed class SimulationService(
                 CenterLatitude = 51.5100,
                 CenterLongitude = -0.1000,
                 RadiusMeters = 1000,
-                IsActive = true
+                IsActive = true,
+                IsSeeded = true
             }, cancellationToken);
             eventLog.Add($"Created temporary geofence '{tempGeofence.Name}' (id={tempGeofence.Id}) at 51.5100, -0.1000 radius 1000m.");
         }

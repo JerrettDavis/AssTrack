@@ -104,6 +104,7 @@ public static class DeviceEndpoints
         device.Protocol,
         device.CreatedAt,
         device.AssetId,
-        device.Asset?.Name);
+        device.Asset?.Name,
+        device.IsSeeded);
 }
 

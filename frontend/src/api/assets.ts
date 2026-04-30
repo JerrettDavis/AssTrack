@@ -5,6 +5,7 @@ export type Device = {
   identifier: string
   label?: string | null
   protocol: string
+  isSeeded: boolean
   createdAt: string
   assetId?: string | null
   assetName?: string | null
@@ -19,6 +20,7 @@ export type Asset = {
   updatedAt: string
   devices: Device[]
   speedThresholdKmh?: number | null
+  isSeeded: boolean
 }
 
 export function getAssets() {

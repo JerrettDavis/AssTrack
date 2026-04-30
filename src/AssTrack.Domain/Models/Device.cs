@@ -6,6 +6,7 @@ public class Device
     public string Identifier { get; set; } = string.Empty;
     public string? Label { get; set; }
     public string Protocol { get; set; } = "https";
+    public bool IsSeeded { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public Guid? AssetId { get; set; }
     public Asset? Asset { get; set; }

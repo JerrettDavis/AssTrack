@@ -950,3 +950,13 @@ The SSE endpoint requires the same API key as all other endpoints. Two methods a
 - Browser `EventSource` cannot send custom headers; query-param auth is used as a pragmatic workaround
 - HTTPS is strongly recommended in production to protect the API key in the URL
 - Each connected client holds one open HTTP connection; ensure your load balancer / reverse proxy is configured for long-lived connections (the nginx config in `frontend/nginx.conf` handles this)
+
+## Demo Data
+
+Use `POST /api/system/seed` to load realistic demo assets, devices, geofences, and observations for exploring the app.
+
+- `reset=false` is idempotent and returns an already-seeded result instead of duplicating demo records.
+- `reset=true` wipes and recreates seeded records only.
+- `IsSeeded=true` marks demo-owned records so non-seeded manual data stays safe during reset operations.
+- In the UI, operators can use **Settings → Demo Data** when `Simulation:Enabled=true`.
+- Seeded records display a **Demo** badge on the Assets, Devices, and Geofences pages.

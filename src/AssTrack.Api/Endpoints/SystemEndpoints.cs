@@ -1,6 +1,8 @@
 using AssTrack.Api.Services;
 using AssTrack.Domain.Contracts;
+using AssTrack.Infrastructure.Data;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
 namespace AssTrack.Api.Endpoints;
@@ -9,11 +11,13 @@ public static class SystemEndpoints
 {
     public static RouteGroupBuilder MapSystemEndpoints(this RouteGroupBuilder group)
     {
-        group.MapGet("/system/status", (
+        group.MapGet("/system/status", async (
             IWebHostEnvironment env,
             IConfiguration configuration,
             IOptions<SimulationOptions> simulationOptions,
-            IOptions<WebhookOptions> webhookOptions) =>
+            IOptions<WebhookOptions> webhookOptions,
+            AssTrackDbContext db,
+            CancellationToken ct) =>
         {
             var connStr = configuration.GetConnectionString("DefaultConnection")
                 ?? configuration.GetConnectionString("AssTrack")
@@ -29,13 +33,33 @@ public static class SystemEndpoints
                 SwaggerEnabled: configuration.GetValue<bool>("Swagger:Enabled"),
                 RateLimitPermitLimit: configuration.GetValue<int>("RateLimiting:IngestPermitLimit", 60),
                 RateLimitWindowSeconds: configuration.GetValue<int>("RateLimiting:IngestWindowSeconds", 60),
-                DatabaseProvider: dbProvider
+                DatabaseProvider: dbProvider,
+                HasData: await db.Assets.AnyAsync(ct)
             );
 
             return Results.Ok(dto);
         })
         .WithName("GetSystemStatus")
         .WithSummary("Get sanitized system configuration status.")
+        .RequireAuthorization("Operator");
+
+        group.MapPost("/system/seed", async (
+            SeedRequest request,
+            ISeedService seedService,
+            CancellationToken ct) =>
+        {
+            try
+            {
+                var result = await seedService.SeedAsync(request.Reset, ct);
+                return Results.Ok(result);
+            }
+            catch (SeedingDisabledException)
+            {
+                return Results.Forbid();
+            }
+        })
+        .WithName("SeedDemoData")
+        .WithSummary("Seed demo data. Use reset=true to wipe and re-seed seeded records only.")
         .RequireAuthorization("Operator");
 
         return group;

@@ -153,7 +153,7 @@ export default function DevicesPage() {
             {devices.map((device) => (
               <Fragment key={device.id}>
                 <tr>
-                  <td>{device.identifier}</td>
+                  <td>{device.identifier}{device.isSeeded && <span className="badge" style={{ marginLeft: '0.5rem', backgroundColor: 'rgba(59, 130, 246, 0.25)', color: '#93c5fd', borderColor: 'rgba(96, 165, 250, 0.35)' }}>Demo</span>}</td>
                   <td>{device.label ?? '—'}</td>
                   <td>{device.protocol}</td>
                   <td>{device.assetName ?? '—'}</td>

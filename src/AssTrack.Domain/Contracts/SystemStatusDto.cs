@@ -9,5 +9,6 @@ public record SystemStatusDto(
     bool SwaggerEnabled,
     int RateLimitPermitLimit,
     int RateLimitWindowSeconds,
-    string DatabaseProvider
+    string DatabaseProvider,
+    bool HasData
 );

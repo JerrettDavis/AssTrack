@@ -162,7 +162,7 @@ export default function GeofencesPage() {
               {geofences.map((geofence) => (
                 <Fragment key={geofence.id}>
                   <tr>
-                    <td>{geofence.name}</td>
+                    <td>{geofence.name}{geofence.isSeeded && <span className="badge" style={{ marginLeft: '0.5rem', backgroundColor: 'rgba(59, 130, 246, 0.25)', color: '#93c5fd', borderColor: 'rgba(96, 165, 250, 0.35)' }}>Demo</span>}</td>
                     <td className="coords">
                       {geofence.centerLatitude.toFixed(4)}, {geofence.centerLongitude.toFixed(4)}
                     </td>

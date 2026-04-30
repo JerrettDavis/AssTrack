@@ -8,6 +8,7 @@ export interface Geofence {
   centerLongitude: number
   radiusMeters: number
   isActive: boolean
+  isSeeded: boolean
   createdAt: string
 }
 

@@ -12,5 +12,6 @@ public class Geofence
     public double CenterLongitude { get; set; }
     public double RadiusMeters { get; set; }
     public bool IsActive { get; set; } = true;
+    public bool IsSeeded { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }

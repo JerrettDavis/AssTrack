@@ -8,7 +8,8 @@ public sealed record GeofenceDto(
     double CenterLongitude,
     double RadiusMeters,
     bool IsActive,
-    DateTime CreatedAt);
+    DateTime CreatedAt,
+    bool IsSeeded);
 
 public sealed record CreateGeofenceRequest(
     string Name,

@@ -170,6 +170,12 @@ export function AssetsPage() {
               </div>
             </form>
           )}
+          {assets.length === 0 && (
+            <div className="card" style={{ borderColor: 'rgba(96, 165, 250, 0.35)', backgroundColor: 'rgba(30, 58, 138, 0.25)' }}>
+              <strong style={{ display: 'block', marginBottom: '0.35rem', color: '#93c5fd' }}>No assets yet</strong>
+              <span className="muted">Head to Settings → Demo Data to seed example fleet data and explore the UI.</span>
+            </div>
+          )}
           <div className="asset-grid">
             {assets.map((asset) => (
               <article className="list-card" key={asset.id}>
@@ -212,6 +218,7 @@ export function AssetsPage() {
                   <>
                     <header>
                       <h3>{asset.name}</h3>
+                      {asset.isSeeded && <span className="badge" style={{ backgroundColor: 'rgba(59, 130, 246, 0.25)', color: '#93c5fd', borderColor: 'rgba(96, 165, 250, 0.35)' }}>Demo</span>}
                       <span className="badge">{asset.category ?? 'Uncategorized'}</span>
                     </header>
                     <p className="muted">{asset.description ?? 'No description provided.'}</p>

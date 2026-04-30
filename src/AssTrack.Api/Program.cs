@@ -81,6 +81,7 @@ builder.Services.AddHttpClient<IWebhookNotificationService, WebhookNotificationS
 builder.Services.AddScoped<IObservationIngestService, ObservationIngestService>();
 builder.Services.Configure<SimulationOptions>(builder.Configuration.GetSection(SimulationOptions.SectionName));
 builder.Services.AddScoped<ISimulationService, SimulationService>();
+builder.Services.AddScoped<ISeedService, SeedService>();
 builder.Services.AddSingleton<ILiveEventBroadcaster, LiveEventBroadcaster>();
 builder.Services.AddSingleton<ISseTokenService, SseTokenService>();
 

@@ -7,7 +7,8 @@ public sealed record DeviceDto(
     string Protocol,
     DateTime CreatedAt,
     Guid? AssetId,
-    string? AssetName);
+    string? AssetName,
+    bool IsSeeded);
 
 public sealed record CreateDeviceRequest(string Identifier, string? Label, string? Protocol, Guid? AssetId);
 

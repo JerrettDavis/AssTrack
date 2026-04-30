@@ -1,6 +1,6 @@
 import { useEffect, useState, type CSSProperties } from 'react'
 import { apiPost } from '../api/client'
-import { getSystemStatus, type SystemStatus } from '../api/system'
+import { getSystemStatus, seedDemoData, type SeedResult, type SystemStatus } from '../api/system'
 import { useIdentityContext } from '../context/IdentityContext'
 
 interface SimulateResult {
@@ -39,16 +39,6 @@ const tileStyle: CSSProperties = {
 
 export default function SettingsPage() {
   const { isOperator, loading: identityLoading } = useIdentityContext()
-
-  if (!isOperator && !identityLoading) {
-    return (
-      <div className="card">
-        <h1>Settings</h1>
-        <p className="muted">Settings are only accessible to operator keys.</p>
-      </div>
-    )
-  }
-
   const [status, setStatus] = useState<SystemStatus | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -58,6 +48,18 @@ export default function SettingsPage() {
   const [runError, setRunError] = useState<string | null>(null)
   const [runLoading, setRunLoading] = useState(false)
   const [result, setResult] = useState<SimulateResult | null>(null)
+  const [seedResult, setSeedResult] = useState<SeedResult | null>(null)
+  const [seedError, setSeedError] = useState<string | null>(null)
+  const [seedLoading, setSeedLoading] = useState(false)
+
+  if (!isOperator && !identityLoading) {
+    return (
+      <div className="card">
+        <h1>Settings</h1>
+        <p className="muted">Settings are only accessible to operator keys.</p>
+      </div>
+    )
+  }
 
   async function loadStatus() {
     try {
@@ -90,6 +92,20 @@ export default function SettingsPage() {
       setRunError(e instanceof Error ? e.message : String(e))
     } finally {
       setRunLoading(false)
+    }
+  }
+
+  async function handleSeed(reset: boolean) {
+    try {
+      setSeedLoading(true)
+      setSeedError(null)
+      const r = await seedDemoData(reset)
+      setSeedResult(r)
+      await loadStatus()
+    } catch (e: unknown) {
+      setSeedError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setSeedLoading(false)
     }
   }
 
@@ -186,125 +202,165 @@ export default function SettingsPage() {
       </div>
 
       {status.simulationEnabled && (
-        <div className="card">
-          <div className="page-header" style={{ marginBottom: '1rem' }}>
-            <div>
-              <h2>Simulation Runner</h2>
-              <p className="muted" style={{ margin: '0.35rem 0 0' }}>
-                Generate realistic observations and alerts without external devices.
-              </p>
+        <>
+          <div className="card">
+            <div className="page-header" style={{ marginBottom: '1rem' }}>
+              <div>
+                <h2>Simulation Runner</h2>
+                <p className="muted" style={{ margin: '0.35rem 0 0' }}>
+                  Generate realistic observations and alerts without external devices.
+                </p>
+              </div>
+            </div>
+
+            <div className="inline-form">
+              <div className="field-grid">
+                <label className="field">
+                  <span>Preset</span>
+                  <select value={preset} onChange={(e) => setPreset(e.target.value as SimulationPreset)}>
+                    <option value="NormalRoute">NormalRoute</option>
+                    <option value="SpeedViolation">SpeedViolation</option>
+                    <option value="GeofenceEntryExit">GeofenceEntryExit</option>
+                  </select>
+                </label>
+
+                <label className="field">
+                  <span>Device identifier (optional)</span>
+                  <input
+                    value={deviceIdentifier}
+                    onChange={(e) => setDeviceIdentifier(e.target.value)}
+                    placeholder="Leave blank to auto-generate"
+                  />
+                </label>
+              </div>
+
+              <div className="button-row">
+                <button className="button" type="button" onClick={() => void handleRunSimulation()} disabled={runLoading}>
+                  {runLoading ? 'Running…' : 'Run Simulation'}
+                </button>
+              </div>
+
+              {runError && (
+                <div
+                  style={{
+                    padding: '0.9rem 1rem',
+                    borderRadius: '10px',
+                    backgroundColor: 'rgba(127, 29, 29, 0.35)',
+                    border: '1px solid rgba(248, 113, 113, 0.35)',
+                    color: '#fecaca',
+                  }}
+                >
+                  {runError}
+                </div>
+              )}
+
+              {result && (
+                <div
+                  style={{
+                    display: 'grid',
+                    gap: '1rem',
+                    marginTop: '0.5rem',
+                    padding: '1rem',
+                    borderRadius: '12px',
+                    backgroundColor: 'rgba(15, 118, 110, 0.2)',
+                    border: '1px solid rgba(45, 212, 191, 0.25)',
+                  }}
+                >
+                  <div className="page-header">
+                    <div>
+                      <h3 style={{ margin: 0 }}>Simulation completed</h3>
+                      <p className="muted" style={{ margin: '0.35rem 0 0' }}>
+                        Device {result.deviceIdentifier} • Device ID {result.deviceId}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.75rem' }}>
+                    <div style={tileStyle}>
+                      <span className="muted">Observations</span>
+                      <strong>{result.observationsCreated}</strong>
+                    </div>
+                    <div style={tileStyle}>
+                      <span className="muted">Speed alerts</span>
+                      <strong>{result.speedAlertsTriggered}</strong>
+                    </div>
+                    <div style={tileStyle}>
+                      <span className="muted">Geofence breaches</span>
+                      <strong>{result.geofenceBreaches}</strong>
+                    </div>
+                    <div style={tileStyle}>
+                      <span className="muted">Asset ID</span>
+                      <strong style={{ fontSize: '0.95rem' }}>{result.assetId ?? 'Unassigned'}</strong>
+                    </div>
+                  </div>
+
+                  <details>
+                    <summary style={{ cursor: 'pointer', fontWeight: 600 }}>Event log ({result.eventLog.length})</summary>
+                    <div
+                      style={{
+                        marginTop: '0.75rem',
+                        padding: '0.9rem',
+                        borderRadius: '10px',
+                        backgroundColor: 'rgba(15, 23, 42, 0.55)',
+                        border: '1px solid rgba(148, 163, 184, 0.15)',
+                        maxHeight: '260px',
+                        overflowY: 'auto',
+                      }}
+                    >
+                      {result.eventLog.length > 0 ? (
+                        <ul style={{ margin: 0, paddingLeft: '1.25rem', display: 'grid', gap: '0.5rem' }}>
+                          {result.eventLog.map((entry, index) => (
+                            <li key={`${entry}-${index}`}>{entry}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <span className="muted">No event log entries returned.</span>
+                      )}
+                    </div>
+                  </details>
+                </div>
+              )}
             </div>
           </div>
 
-          <div className="inline-form">
-            <div className="field-grid">
-              <label className="field">
-                <span>Preset</span>
-                <select value={preset} onChange={(e) => setPreset(e.target.value as SimulationPreset)}>
-                  <option value="NormalRoute">NormalRoute</option>
-                  <option value="SpeedViolation">SpeedViolation</option>
-                  <option value="GeofenceEntryExit">GeofenceEntryExit</option>
-                </select>
-              </label>
-
-              <label className="field">
-                <span>Device identifier (optional)</span>
-                <input
-                  value={deviceIdentifier}
-                  onChange={(e) => setDeviceIdentifier(e.target.value)}
-                  placeholder="Leave blank to auto-generate"
-                />
-              </label>
+          <div className="card">
+            <div className="page-header" style={{ marginBottom: '1rem' }}>
+              <div>
+                <h2>Demo Data</h2>
+                <p className="muted" style={{ margin: '0.35rem 0 0' }}>
+                  Seed realistic demo assets, devices, and geofences to explore the UI.
+                </p>
+              </div>
             </div>
-
             <div className="button-row">
-              <button className="button" type="button" onClick={() => void handleRunSimulation()} disabled={runLoading}>
-                {runLoading ? 'Running…' : 'Run Simulation'}
+              <button className="button" type="button" onClick={() => void handleSeed(false)} disabled={seedLoading}>
+                {seedLoading ? 'Seeding…' : 'Seed Demo Data'}
+              </button>
+              <button className="button button-secondary" type="button" onClick={() => void handleSeed(true)} disabled={seedLoading}>
+                {seedLoading ? 'Resetting…' : 'Reset & Re-seed'}
               </button>
             </div>
-
-            {runError && (
-              <div
-                style={{
-                  padding: '0.9rem 1rem',
-                  borderRadius: '10px',
-                  backgroundColor: 'rgba(127, 29, 29, 0.35)',
-                  border: '1px solid rgba(248, 113, 113, 0.35)',
-                  color: '#fecaca',
-                }}
-              >
-                {runError}
+            {seedError && (
+              <div style={{ padding: '0.9rem 1rem', borderRadius: '10px', backgroundColor: 'rgba(127, 29, 29, 0.35)', border: '1px solid rgba(248, 113, 113, 0.35)', color: '#fecaca', marginTop: '0.75rem' }}>
+                {seedError}
               </div>
             )}
-
-            {result && (
-              <div
-                style={{
-                  display: 'grid',
-                  gap: '1rem',
-                  marginTop: '0.5rem',
-                  padding: '1rem',
-                  borderRadius: '12px',
-                  backgroundColor: 'rgba(15, 118, 110, 0.2)',
-                  border: '1px solid rgba(45, 212, 191, 0.25)',
-                }}
-              >
-                <div className="page-header">
-                  <div>
-                    <h3 style={{ margin: 0 }}>Simulation completed</h3>
-                    <p className="muted" style={{ margin: '0.35rem 0 0' }}>
-                      Device {result.deviceIdentifier} • Device ID {result.deviceId}
-                    </p>
+            {seedResult && (
+              <div style={{ display: 'grid', gap: '1rem', marginTop: '0.5rem', padding: '1rem', borderRadius: '12px', backgroundColor: 'rgba(15, 118, 110, 0.2)', border: '1px solid rgba(45, 212, 191, 0.25)' }}>
+                {seedResult.alreadySeeded ? (
+                  <p className="muted">Demo data already present. Use Reset &amp; Re-seed to refresh.</p>
+                ) : (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.75rem' }}>
+                    <div style={tileStyle}><span className="muted">Assets</span><strong>{seedResult.assetsCreated}</strong></div>
+                    <div style={tileStyle}><span className="muted">Devices</span><strong>{seedResult.devicesCreated}</strong></div>
+                    <div style={tileStyle}><span className="muted">Geofences</span><strong>{seedResult.geofencesCreated}</strong></div>
+                    <div style={tileStyle}><span className="muted">Reset</span><strong>{seedResult.resetPerformed ? 'Yes' : 'No'}</strong></div>
                   </div>
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.75rem' }}>
-                  <div style={tileStyle}>
-                    <span className="muted">Observations</span>
-                    <strong>{result.observationsCreated}</strong>
-                  </div>
-                  <div style={tileStyle}>
-                    <span className="muted">Speed alerts</span>
-                    <strong>{result.speedAlertsTriggered}</strong>
-                  </div>
-                  <div style={tileStyle}>
-                    <span className="muted">Geofence breaches</span>
-                    <strong>{result.geofenceBreaches}</strong>
-                  </div>
-                  <div style={tileStyle}>
-                    <span className="muted">Asset ID</span>
-                    <strong style={{ fontSize: '0.95rem' }}>{result.assetId ?? 'Unassigned'}</strong>
-                  </div>
-                </div>
-
-                <details>
-                  <summary style={{ cursor: 'pointer', fontWeight: 600 }}>Event log ({result.eventLog.length})</summary>
-                  <div
-                    style={{
-                      marginTop: '0.75rem',
-                      padding: '0.9rem',
-                      borderRadius: '10px',
-                      backgroundColor: 'rgba(15, 23, 42, 0.55)',
-                      border: '1px solid rgba(148, 163, 184, 0.15)',
-                      maxHeight: '260px',
-                      overflowY: 'auto',
-                    }}
-                  >
-                    {result.eventLog.length > 0 ? (
-                      <ul style={{ margin: 0, paddingLeft: '1.25rem', display: 'grid', gap: '0.5rem' }}>
-                        {result.eventLog.map((entry, index) => (
-                          <li key={`${entry}-${index}`}>{entry}</li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <span className="muted">No event log entries returned.</span>
-                    )}
-                  </div>
-                </details>
+                )}
               </div>
             )}
           </div>
-        </div>
+        </>
       )}
     </div>
   )

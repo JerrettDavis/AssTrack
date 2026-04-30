@@ -81,6 +81,7 @@ public static class AssetEndpoints
         asset.CreatedAt,
         asset.UpdatedAt,
         asset.Devices.Select(DeviceEndpoints.Map).ToArray(),
-        asset.SpeedThresholdKmh);
+        asset.SpeedThresholdKmh,
+        asset.IsSeeded);
 }
 

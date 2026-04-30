@@ -8,7 +8,8 @@ public sealed record AssetDto(
     DateTime CreatedAt,
     DateTime UpdatedAt,
     IReadOnlyCollection<DeviceDto> Devices,
-    double? SpeedThresholdKmh);
+    double? SpeedThresholdKmh,
+    bool IsSeeded);
 
 public sealed record CreateAssetRequest(string Name, string? Description, string? Category, double? SpeedThresholdKmh = null);
 
