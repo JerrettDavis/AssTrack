@@ -427,19 +427,50 @@ The `acknowledgedAtUtc` and `acknowledgedBy` fields are returned in list respons
 
 AssTrack streams real-time telemetry events to browser clients using Server-Sent Events (SSE). The frontend connects once and receives push notifications for new observations, speed alerts, and geofence breaches — no polling required for these events.
 
+### Authentication — token exchange flow
+
+Because `EventSource` cannot send custom headers, a **short-lived SSE token** is used instead of exposing the master API key in the URL.
+
+#### Step 1 — issue a token
+
+```http
+POST /api/events/token
+X-Api-Key: <master-api-key>
+```
+
+Response:
+
+```json
+{
+  "token": "abc123...",
+  "expiresAt": "2025-06-15T14:40:00Z"
+}
+```
+
+Tokens are cryptographically random, URL-safe strings. They expire after **10 minutes** by default (configurable via `SseToken:TtlMinutes`). Tokens are stored in memory only — they are not persisted to the database.
+
+#### Step 2 — connect with the token
+
+```
+GET /api/events?token=<short-lived-token>
+```
+
+This endpoint is unauthenticated at the transport layer; access is gated solely by the short-lived token. Requests without a valid `?token=` parameter receive `401 Unauthorized`.
+
+The master API key is **never** exposed in SSE connection URLs.
+
+#### Frontend behaviour
+
+The built-in SSE client (`sseClient.ts`) handles the token exchange transparently:
+1. On first subscription, calls `POST /api/events/token` with `X-Api-Key` in the request header.
+2. Connects `EventSource` with `?token=` in the URL.
+3. On disconnection or reconnect, fetches a fresh token.
+
+When no API key is configured (development), the token endpoint still requires auth but the permissive dev-mode allows the exchange to succeed.
+
 ### GET /api/events
 
 Long-lived `text/event-stream` connection. On connect, the server sends a `: connected` keepalive comment, then streams events as they occur.
-
-#### Authentication
-
-`EventSource` cannot send custom headers. Pass the API key as a query parameter:
-
-```
-GET /api/events?apiKey=<your-api-key>
-```
-
-When no API key is configured (development), the parameter is not required.
 
 #### Event types
 
