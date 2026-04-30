@@ -60,7 +60,8 @@ export default function GeofencesPage() {
     }
   }
 
-  async function handleDeleteGeofence(id: string) {
+  async function handleDeleteGeofence(id: string, geofenceName: string) {
+    if (!window.confirm(`Delete geofence "${geofenceName}"? This cannot be undone.`)) return
     setSubmitting(true)
     try {
       await deleteGeofence(id)
@@ -140,7 +141,7 @@ export default function GeofencesPage() {
                     <button
                       className="button button-danger"
                       disabled={submitting}
-                      onClick={() => void handleDeleteGeofence(geofence.id)}
+                      onClick={() => void handleDeleteGeofence(geofence.id, geofence.name)}
                       type="button"
                     >
                       Delete

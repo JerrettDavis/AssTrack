@@ -54,7 +54,8 @@ export default function DevicesPage() {
     }
   }
 
-  async function handleDeleteDevice(deviceId: string) {
+  async function handleDeleteDevice(deviceId: string, deviceIdentifier: string) {
+    if (!window.confirm(`Delete device "${deviceIdentifier}"? This cannot be undone.`)) return
     setSubmitting(true)
     try {
       await deleteDevice(deviceId)
@@ -137,7 +138,7 @@ export default function DevicesPage() {
                   <button
                     className="button button-danger"
                     disabled={submitting}
-                    onClick={() => void handleDeleteDevice(device.id)}
+                    onClick={() => void handleDeleteDevice(device.id, device.identifier)}
                     type="button"
                   >
                     Delete

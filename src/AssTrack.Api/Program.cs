@@ -71,19 +71,36 @@ var app = builder.Build();
     }
 }
 
+if (app.Environment.IsProduction())
+{
+    var liveCorsOrigins = app.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
+    if (liveCorsOrigins.Length == 0)
+    {
+        throw new InvalidOperationException(
+            "Cors:AllowedOrigins must be configured in Production. " +
+            "Set at least one origin via appsettings or Cors__AllowedOrigins__0 environment variable.");
+    }
+}
+
 using (var scope = app.Services.CreateScope())
 {
     var dbContext = scope.ServiceProvider.GetRequiredService<AssTrackDbContext>();
     dbContext.Database.Migrate();
 }
 
+var swaggerEnabled = builder.Environment.IsDevelopment() || builder.Configuration.GetValue<bool>("Swagger:Enabled");
+
 app.UseExceptionHandler();
 app.UseStatusCodePages();
 app.UseCors("Frontend");
 app.UseAuthentication();
 app.UseAuthorization();
-app.UseSwagger();
-app.UseSwaggerUI();
+
+if (swaggerEnabled)
+{
+    app.UseSwagger();
+    app.UseSwaggerUI();
+}
 
 app.MapHealthChecks("/healthz", new HealthCheckOptions
 {
@@ -123,7 +140,8 @@ api.MapGet("/health", async (AssTrackDbContext db) =>
     }
 }).AllowAnonymous();
 
-app.MapGet("/", () => Results.Redirect("/swagger"));
+if (swaggerEnabled)
+    app.MapGet("/", () => Results.Redirect("/swagger"));
 
 app.Run();
 

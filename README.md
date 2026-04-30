@@ -308,4 +308,29 @@ Auth__ApiKey=your-production-api-key
 Cors__AllowedOrigins__0=https://your-frontend.example.com
 ```
 
+### CORS (required in production)
+
+**CORS is required in production.** If `Cors:AllowedOrigins` is empty or unset when the environment is `Production`, startup will fail with:
+
+> `InvalidOperationException: Cors:AllowedOrigins must be configured in Production.`
+
+Set at least one allowed origin via:
+- `appsettings.Production.json` → `"Cors": { "AllowedOrigins": ["https://your-frontend.example.com"] }`
+- Environment variable: `Cors__AllowedOrigins__0=https://your-frontend.example.com`
+
+### Swagger
+
+Swagger/OpenAPI is **disabled by default in production**. To enable it (e.g. for internal tooling environments):
+
+```
+Swagger__Enabled=true
+```
+
+Or in `appsettings.Production.json`:
+```json
+{ "Swagger": { "Enabled": true } }
+```
+
+In Development, Swagger is always enabled regardless of the config flag.
+
 Run migrations on startup automatically (already configured via `Migrate()`).

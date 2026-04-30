@@ -1,0 +1,95 @@
+using System.Net;
+using AssTrack.Infrastructure.Data;
+using FluentAssertions;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+
+namespace AssTrack.Tests.Api;
+
+/// <summary>
+/// A factory that runs the application in Production environment.
+/// Supply corsOrigins to override the CORS configuration.
+/// </summary>
+internal sealed class ProductionWebApplicationFactory : WebApplicationFactory<Program>
+{
+    private readonly string[] _corsOrigins;
+    private SqliteConnection? _connection;
+    private readonly string _databaseName = $"AssTrackProdTests-{Guid.NewGuid():N}";
+
+    public ProductionWebApplicationFactory(string[] corsOrigins)
+    {
+        _corsOrigins = corsOrigins;
+    }
+
+    protected override void ConfigureWebHost(IWebHostBuilder builder)
+    {
+        builder.UseEnvironment("Production");
+
+        var configValues = new Dictionary<string, string?>
+        {
+            ["Auth:ApiKey"] = "prod-test-api-key",
+        };
+
+        // Add CORS origins indexed style
+        for (var i = 0; i < _corsOrigins.Length; i++)
+        {
+            configValues[$"Cors:AllowedOrigins:{i}"] = _corsOrigins[i];
+        }
+
+        builder.ConfigureAppConfiguration((_, config) =>
+        {
+            config.Sources.Clear();
+            config.AddInMemoryCollection(configValues);
+        });
+
+        builder.ConfigureServices(services =>
+        {
+            services.RemoveAll<DbContextOptions<AssTrackDbContext>>();
+            services.RemoveAll<AssTrackDbContext>();
+
+            _connection?.Dispose();
+            _connection = new SqliteConnection($"Data Source={_databaseName};Mode=Memory;Cache=Shared");
+            _connection.Open();
+
+            services.AddDbContext<AssTrackDbContext>(options =>
+            {
+                options.UseSqlite(_connection);
+            });
+        });
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        base.Dispose(disposing);
+        if (disposing)
+        {
+            _connection?.Dispose();
+        }
+    }
+}
+
+public class ProductionSafetyTests
+{
+    [Fact]
+    public async Task Swagger_IsNotAccessible_InProduction()
+    {
+        await using var factory = new ProductionWebApplicationFactory(corsOrigins: ["https://example.com"]);
+        var client = factory.CreateClient();
+        var response = await client.GetAsync("/swagger/index.html");
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public void Startup_ThrowsInvalidOperationException_WhenCorsOriginsEmpty_InProduction()
+    {
+        using var factory = new ProductionWebApplicationFactory(corsOrigins: []);
+        var act = () => factory.CreateClient();
+        act.Should().Throw<Exception>()
+            .Which.ToString().Should().Contain("Cors:AllowedOrigins must be configured in Production");
+    }
+}

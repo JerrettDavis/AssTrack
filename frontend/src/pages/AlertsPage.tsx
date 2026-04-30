@@ -47,8 +47,9 @@ export default function AlertsPage() {
   }, [speedFilter, breachFilter])
 
   async function handleAcknowledgeAlert(id: string) {
+    const acknowledgedBy = window.prompt('Your name (optional):') ?? undefined
     try {
-      await acknowledgeSpeedAlert(id)
+      await acknowledgeSpeedAlert(id, acknowledgedBy || undefined)
       await load()
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e))
@@ -56,8 +57,9 @@ export default function AlertsPage() {
   }
 
   async function handleAcknowledgeBreach(id: string) {
+    const acknowledgedBy = window.prompt('Your name (optional):') ?? undefined
     try {
-      await acknowledgeBreach(id)
+      await acknowledgeBreach(id, acknowledgedBy || undefined)
       await load()
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e))
@@ -66,8 +68,9 @@ export default function AlertsPage() {
 
   async function handleBulkAcknowledgeSpeedAlerts() {
     if (selectedSpeedAlerts.size === 0) return
+    const acknowledgedBy = window.prompt('Your name (optional):') ?? undefined
     try {
-      await bulkAcknowledgeSpeedAlerts(Array.from(selectedSpeedAlerts))
+      await bulkAcknowledgeSpeedAlerts(Array.from(selectedSpeedAlerts), acknowledgedBy || undefined)
       setSelectedSpeedAlerts(new Set())
       await load()
     } catch (e: unknown) {
@@ -77,8 +80,9 @@ export default function AlertsPage() {
 
   async function handleBulkAcknowledgeBreaches() {
     if (selectedBreaches.size === 0) return
+    const acknowledgedBy = window.prompt('Your name (optional):') ?? undefined
     try {
-      await bulkAcknowledgeBreaches(Array.from(selectedBreaches))
+      await bulkAcknowledgeBreaches(Array.from(selectedBreaches), acknowledgedBy || undefined)
       setSelectedBreaches(new Set())
       await load()
     } catch (e: unknown) {

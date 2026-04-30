@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react'
 import { Asset, createAsset, deleteAsset, getAssets } from '../api/assets'
-import { getObservations, Observation } from '../api/observations'
+import { getLatestPositions, getObservations, Observation } from '../api/observations'
 
 function formatTimestamp(value: string) {
   return new Date(value).toLocaleString()
@@ -9,6 +9,7 @@ function formatTimestamp(value: string) {
 export function AssetsPage() {
   const [assets, setAssets] = useState<Asset[]>([])
   const [observations, setObservations] = useState<Observation[]>([])
+  const [latestPositions, setLatestPositions] = useState<Observation[]>([])
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [showAddForm, setShowAddForm] = useState(false)
@@ -20,9 +21,10 @@ export function AssetsPage() {
   async function load() {
     try {
       setError(null)
-      const [assetItems, observationItems] = await Promise.all([getAssets(), getObservations()])
+      const [assetItems, observationItems, latestPositionItems] = await Promise.all([getAssets(), getObservations(), getLatestPositions()])
       setAssets(assetItems)
       setObservations(observationItems)
+      setLatestPositions(latestPositionItems)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to load API data.')
     } finally {
@@ -61,7 +63,8 @@ export function AssetsPage() {
     }
   }
 
-  async function handleDeleteAsset(assetId: string) {
+  async function handleDeleteAsset(assetId: string, assetName: string) {
+    if (!window.confirm(`Delete asset "${assetName}"? This cannot be undone.`)) return
     setSubmitting(true)
     try {
       await deleteAsset(assetId)
@@ -75,7 +78,7 @@ export function AssetsPage() {
 
   const metrics = useMemo(() => {
     const deviceCount = assets.reduce((total, asset) => total + asset.devices.length, 0)
-    const movingCount = observations.filter((observation) => (observation.speedKmh ?? 0) > 0).length
+    const movingCount = latestPositions.filter((p) => (p.speedKmh ?? 0) > 0).length
 
     return [
       { label: 'Assets', value: assets.length },
@@ -83,7 +86,7 @@ export function AssetsPage() {
       { label: 'Observations', value: observations.length },
       { label: 'Moving now', value: movingCount },
     ]
-  }, [assets, observations])
+  }, [assets, observations, latestPositions])
 
   if (loading) {
     return <div className="card">Loading AssTrack data…</div>
@@ -159,7 +162,7 @@ export function AssetsPage() {
                   <button
                     className="button button-danger"
                     disabled={submitting}
-                    onClick={() => void handleDeleteAsset(asset.id)}
+                    onClick={() => void handleDeleteAsset(asset.id, asset.name)}
                     type="button"
                   >
                     Delete
