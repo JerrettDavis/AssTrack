@@ -2,6 +2,11 @@
 
 AssTrack is an asset tracking platform with a .NET minimal API backend, EF Core persistence, xUnit integration tests, and a React + TypeScript frontend with routing, a live map, and speed-alert views.
 
+## Prerequisites
+
+- [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
+- [Node.js 18+](https://nodejs.org/) and npm
+
 ## Solution structure
 
 | Project | Description |
@@ -52,9 +57,11 @@ The frontend is a single-page app built with Vite + React 19 + TypeScript. Depen
 | `/map` | `MapPage` | Live Leaflet map showing the latest position of every device |
 | `/alerts` | `AlertsPage` | Table of speed alerts |
 
-The Vite dev server proxies `/api` requests to `http://localhost:5000`.
+The Vite dev server proxies `/api` requests to `http://localhost:5019`.
 
-## Run the API
+## Local startup
+
+### Backend
 
 ```powershell
 dotnet restore
@@ -62,9 +69,9 @@ cd src\AssTrack.Api
 dotnet run
 ```
 
-Swagger UI is available at `http://localhost:5000/swagger`.
+Swagger UI is available at `http://localhost:5019/swagger`.
 
-## Run the frontend
+### Frontend
 
 ```powershell
 cd frontend
@@ -72,21 +79,40 @@ npm install
 npm run dev
 ```
 
-The dev server starts on `http://localhost:5173` and proxies `/api` to the backend.
+The dev server starts on `http://localhost:5173` and proxies `/api` to the backend at `http://localhost:5019`.
 
-## Run tests
+## Sample observation ingest flow
 
 ```powershell
-dotnet test C:\git\AssTrack
+# 1. Create an asset
+$asset = Invoke-RestMethod -Method Post http://localhost:5019/api/assets `
+  -ContentType application/json `
+  -Body '{"name":"Fleet Van 1","description":"Primary vehicle","category":"Vehicle"}'
+
+# 2. Create a device linked to the asset
+$device = Invoke-RestMethod -Method Post http://localhost:5019/api/devices `
+  -ContentType application/json `
+  -Body "{`"identifier`":`"VAN-001`",`"label`":`"Van 1 GPS`",`"protocol`":`"https`",`"assetId`":`"$($asset.id)`"}"
+
+# 3. Post a telemetry observation
+Invoke-RestMethod -Method Post http://localhost:5019/api/observations `
+  -ContentType application/json `
+  -Body "{`"deviceId`":`"$($device.id)`",`"observedAt`":`"$(Get-Date -Format o)`",`"latitude`":51.5074,`"longitude`":-0.1278,`"speedKmh`":85}"
+
+# 4. Fetch the latest position for all devices
+Invoke-RestMethod http://localhost:5019/api/observations/latest-positions
 ```
 
-## Build
+## Validation commands
 
 ```powershell
-# Backend
+# Backend build
 dotnet build C:\git\AssTrack
 
-# Frontend
+# Backend tests (all should pass)
+dotnet test C:\git\AssTrack
+
+# Frontend build
 cd frontend
 npm run build
 ```
