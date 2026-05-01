@@ -149,4 +149,19 @@ public class ProductionSafetyTests
         response.Headers.Should().ContainKey("X-Correlation-Id");
         response.Headers.GetValues("X-Correlation-Id").First().Should().Be(testCorrelationId);
     }
+
+    [Fact]
+    public async Task Response_IncludesSecurityHeaders_InProduction()
+    {
+        await using var factory = new ProductionWebApplicationFactory(corsOrigins: ["https://example.com"]);
+        var client = factory.CreateAuthenticatedClient();
+
+        var response = await client.GetAsync("/api/health");
+
+        response.Headers.GetValues("X-Content-Type-Options").First().Should().Be("nosniff");
+        response.Headers.GetValues("X-Frame-Options").First().Should().Be("DENY");
+        response.Headers.GetValues("Referrer-Policy").First().Should().Be("no-referrer");
+        response.Headers.GetValues("Permissions-Policy").First().Should().Contain("geolocation=()");
+        response.Headers.GetValues("Content-Security-Policy").First().Should().Contain("frame-ancestors 'none'");
+    }
 }

@@ -10,8 +10,18 @@ public class DevicesPageObject
     public DevicesPageObject(IPage page) => _page = page;
 
     public async Task NavigateAsync() =>
-        await _page.GotoAsync($"{E2ESettings.FrontendUrl}/devices");
+        await _page.GotoAsync($"{E2ESettings.FrontendUrl}/devices", new() { WaitUntil = WaitUntilState.DOMContentLoaded });
 
-    public async Task<bool> ContainsTextAsync(string text) =>
-        await _page.GetByText(text).CountAsync() > 0;
+    public async Task<bool> ContainsTextAsync(string text)
+    {
+        try
+        {
+            await _page.GetByText(text).First.WaitForAsync();
+            return true;
+        }
+        catch (TimeoutException)
+        {
+            return false;
+        }
+    }
 }

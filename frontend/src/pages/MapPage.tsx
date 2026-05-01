@@ -225,7 +225,7 @@ export default function MapPage() {
       </div>
       <div className="map-layout">
         <div className="card map-card">
-          <MapContainer center={mapCenter} zoom={positions.length > 0 ? 10 : 2} style={{ height: '500px', width: '100%' }}>
+          <MapContainer center={mapCenter} zoom={positions.length > 0 ? 10 : 2} style={{ height: '100%', width: '100%' }}>
             <MapViewportUpdater center={mapCenter} selectedCenter={selectedCenter} />
             <TileLayer
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'

@@ -10,8 +10,18 @@ public class AssetsPageObject
     public AssetsPageObject(IPage page) => _page = page;
 
     public async Task NavigateAsync() =>
-        await _page.GotoAsync($"{E2ESettings.FrontendUrl}/");
+        await _page.GotoAsync($"{E2ESettings.FrontendUrl}/", new() { WaitUntil = WaitUntilState.DOMContentLoaded });
 
-    public async Task<bool> ContainsTextAsync(string text) =>
-        await _page.GetByText(text).CountAsync() > 0;
+    public async Task<bool> ContainsTextAsync(string text)
+    {
+        try
+        {
+            await _page.GetByText(text).First.WaitForAsync();
+            return true;
+        }
+        catch (TimeoutException)
+        {
+            return false;
+        }
+    }
 }

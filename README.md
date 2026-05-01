@@ -268,7 +268,11 @@ Set `Webhooks:Url` to your target endpoint. Leave it empty (the default) to disa
 {
   "Webhooks": {
     "Url": "https://hooks.yourcompany.example/asstrack",
-    "TimeoutSeconds": 10
+    "TimeoutSeconds": 10,
+    "MaxRetries": 3,
+    "RetryBaseDelayMs": 1000,
+    "RetryMaxDelayMs": 30000,
+    "SigningSecret": "optional-hmac-secret"
   }
 }
 ```
@@ -277,6 +281,10 @@ Or via environment variables:
 ```
 Webhooks__Url=https://hooks.yourcompany.example/asstrack
 Webhooks__TimeoutSeconds=10
+Webhooks__MaxRetries=3
+Webhooks__RetryBaseDelayMs=1000
+Webhooks__RetryMaxDelayMs=30000
+Webhooks__SigningSecret=optional-hmac-secret
 ```
 
 ### Events delivered
@@ -354,8 +362,9 @@ Operators can optionally provide a device identifier, inspect the result summary
 ### Delivery semantics
 
 - All payloads are sent as `HTTP POST` with `Content-Type: application/json`.
-- Failures (non-2xx responses, timeouts, network errors) are **logged and silently dropped** — they never fail the ingest request.
-- No retries or queuing. If reliable delivery is required, point the URL at a durable intermediary (e.g. a message queue webhook adapter).
+- Failures (non-2xx responses, timeouts, network errors) are logged and never fail the ingest request.
+- Retryable failures (`429`, `500`, `502`, `503`, `504`, and network timeouts) are queued in memory and retried with exponential backoff when `Webhooks:MaxRetries` is greater than `0`.
+- Retry queues are best-effort and in-memory. They are suitable for demos and single-instance deployments, but production environments that require guaranteed delivery should point `Webhooks:Url` at a durable intermediary.
 - Every delivery attempt (success or failure) is persisted as a `WebhookDeliveryLog` row for observability.
 
 ## Webhook Delivery Logs
@@ -396,7 +405,9 @@ GET /api/webhooks/deliveries?success=false&eventType=speed_alert&page=1&pageSize
       "httpStatusCode": 503,
       "durationMs": 4820,
       "errorMessage": "HTTP 503",
-      "requestPayloadSummary": "{\"eventType\":\"speed_alert\", ...}"
+      "requestPayloadSummary": "{\"eventType\":\"speed_alert\", ...}",
+      "attemptNumber": 2,
+      "correlationId": "e66125f7-62dd-491d-bd79-4f90820c3953"
     }
   ],
   "totalCount": 1,
@@ -417,7 +428,9 @@ Returns webhook configuration state and 24-hour delivery statistics.
   "last24hDeliveries": 42,
   "last24hFailures": 3,
   "lastDeliveredAt": "2025-06-15T14:30:00Z",
-  "avgDurationMs": 312.5
+  "avgDurationMs": 312.5,
+  "retryQueueDepth": 0,
+  "signingEnabled": true
 }
 ```
 
@@ -428,6 +441,8 @@ Returns webhook configuration state and 24-hour delivery statistics.
 | `last24hFailures` | Failed attempts (non-2xx or exception) in the last 24 hours |
 | `lastDeliveredAt` | Timestamp of the most recent attempt (any outcome) |
 | `avgDurationMs` | Average response time (ms) over the last 24 hours |
+| `retryQueueDepth` | Number of in-memory retry jobs waiting to run |
+| `signingEnabled` | `true` when `Webhooks:SigningSecret` is set |
 
 ### POST /api/webhooks/test
 
@@ -927,12 +942,12 @@ GET /api/events
 
 ### Authentication
 
-The SSE endpoint requires the same API key as all other endpoints. Two methods are supported:
+The browser-facing SSE endpoint uses the short-lived token exchange documented above. Long-lived API keys are not accepted in the event-stream URL.
 
-- **Header** (preferred): `X-Api-Key: <key>` — standard for programmatic clients
-- **Query parameter**: `?apiKey=<key>` — required for browser `EventSource` which cannot send custom headers
+1. `POST /api/events/token` with `X-Api-Key: <operator-key>`.
+2. Connect to `GET /api/events?token=<short-lived-token>`.
 
-> ⚠️ HTTPS is strongly recommended when using query-param auth to prevent key exposure in logs.
+Tokens are opaque, expire after `SseToken:TtlMinutes`, and are stored in memory only.
 
 ### Frontend Behaviour
 
@@ -947,8 +962,8 @@ The SSE endpoint requires the same API key as all other endpoints. Two methods a
 
 ### Limitations
 
-- Browser `EventSource` cannot send custom headers; query-param auth is used as a pragmatic workaround
-- HTTPS is strongly recommended in production to protect the API key in the URL
+- SSE tokens are in-memory and are lost on API restart; clients automatically request a fresh token.
+- Multi-instance deployments need sticky sessions or a shared token store for SSE token validation.
 - Each connected client holds one open HTTP connection; ensure your load balancer / reverse proxy is configured for long-lived connections (the nginx config in `frontend/nginx.conf` handles this)
 
 ## Demo Data

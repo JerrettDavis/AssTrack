@@ -49,17 +49,28 @@ function AppContent() {
   return (
     <>
       <nav className="app-nav">
-        <NavLink to="/" end>Assets</NavLink>
-        <NavLink to="/devices">Devices</NavLink>
-        <NavLink to="/map">Map</NavLink>
-        <NavLink to="/geofences">Geofences</NavLink>
-        <NavLink to="/alerts">
-          Alerts
-          {unacknowledgedCount > 0 && <span className="nav-badge">{unacknowledgedCount}</span>}
-        </NavLink>
-        <NavLink to="/history">History</NavLink>
-        {isOperator && <NavLink to="/webhooks">Webhooks</NavLink>}
-        {isOperator && <NavLink to="/settings">⚙ Settings</NavLink>}
+        <div className="nav-inner">
+          <NavLink className="brand-link" to="/" end>
+            <span className="brand-mark">AT</span>
+            <span>
+              <strong>AssTrack</strong>
+              <small>Asset operations</small>
+            </span>
+          </NavLink>
+          <div className="nav-links">
+            <NavLink to="/" end>Assets</NavLink>
+            <NavLink to="/devices">Devices</NavLink>
+            <NavLink to="/map">Map</NavLink>
+            <NavLink to="/geofences">Geofences</NavLink>
+            <NavLink to="/alerts">
+              Alerts
+              {unacknowledgedCount > 0 && <span className="nav-badge">{unacknowledgedCount}</span>}
+            </NavLink>
+            <NavLink to="/history">History</NavLink>
+            {isOperator && <NavLink to="/webhooks">Webhooks</NavLink>}
+            {isOperator && <NavLink to="/settings">Settings</NavLink>}
+          </div>
+        </div>
       </nav>
       <main className="app-main">
         <Routes>

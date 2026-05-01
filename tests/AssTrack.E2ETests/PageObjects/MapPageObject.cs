@@ -11,12 +11,19 @@ public class MapPageObject
 
     public async Task NavigateAsync()
     {
-        await _page.GotoAsync($"{E2ESettings.FrontendUrl}/map");
-        await Task.Delay(1000);
-        await _page.ReloadAsync();
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        await _page.GotoAsync($"{E2ESettings.FrontendUrl}/map", new() { WaitUntil = WaitUntilState.DOMContentLoaded });
     }
 
-    public async Task<bool> ContainsTextAsync(string text) =>
-        await _page.GetByText(text).CountAsync() > 0;
+    public async Task<bool> ContainsTextAsync(string text)
+    {
+        try
+        {
+            await _page.GetByText(text).First.WaitForAsync();
+            return true;
+        }
+        catch (TimeoutException)
+        {
+            return false;
+        }
+    }
 }

@@ -19,7 +19,6 @@ public class AppSteps
     {
         var page = new AssetsPageObject(_context.Page);
         await page.NavigateAsync();
-        await _context.Page.WaitForLoadStateAsync(Microsoft.Playwright.LoadState.NetworkIdle);
     }
 
     [When(@"I navigate to the devices page")]
@@ -27,7 +26,6 @@ public class AppSteps
     {
         var page = new DevicesPageObject(_context.Page);
         await page.NavigateAsync();
-        await _context.Page.WaitForLoadStateAsync(Microsoft.Playwright.LoadState.NetworkIdle);
     }
 
     [When(@"I navigate to the map page")]
@@ -42,13 +40,18 @@ public class AppSteps
     {
         var page = new AlertsPageObject(_context.Page);
         await page.NavigateAsync();
-        await _context.Page.WaitForLoadStateAsync(Microsoft.Playwright.LoadState.NetworkIdle);
     }
 
     [Then(@"the page contains ""([^""]*)""")]
     public async Task ThenThePageContains(string text)
     {
-        var hasText = await _context.Page.GetByText(text).CountAsync() > 0;
-        hasText.Should().BeTrue($"Expected page to contain text '{text}'");
+        try
+        {
+            await _context.Page.GetByText(text).First.WaitForAsync();
+        }
+        catch (TimeoutException)
+        {
+            false.Should().BeTrue($"Expected page to contain text '{text}'");
+        }
     }
 }
