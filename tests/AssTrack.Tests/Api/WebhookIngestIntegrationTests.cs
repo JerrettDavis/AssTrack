@@ -30,6 +30,9 @@ public sealed class RecordingWebhookService : IWebhookNotificationService
         Breaches.Add(breach);
         return Task.CompletedTask;
     }
+
+    public Task ExecuteRetryAsync(WebhookRetryJob job, CancellationToken cancellationToken = default)
+        => Task.CompletedTask;
 }
 
 public sealed class WebhookCapturingFactory : TestWebApplicationFactory

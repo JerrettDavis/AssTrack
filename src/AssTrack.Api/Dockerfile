@@ -8,8 +8,8 @@ COPY src/AssTrack.Api/AssTrack.Api.csproj src/AssTrack.Api/
 COPY src/AssTrack.Domain/AssTrack.Domain.csproj src/AssTrack.Domain/
 COPY src/AssTrack.Infrastructure/AssTrack.Infrastructure.csproj src/AssTrack.Infrastructure/
 
-# Restore dependencies
-RUN dotnet restore AssTrack.sln
+# Restore dependencies (restore only the API project to avoid needing test project files)
+RUN dotnet restore src/AssTrack.Api/AssTrack.Api.csproj
 
 # Copy all source files
 COPY src/ src/
@@ -20,6 +20,11 @@ RUN dotnet publish src/AssTrack.Api/AssTrack.Api.csproj -c Release --no-restore 
 # Runtime stage
 FROM mcr.microsoft.com/dotnet/aspnet:10.0
 WORKDIR /app
+
+# Install curl for the Docker healthcheck in docker-compose.yml.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
 
 # Create data directory for SQLite
 RUN mkdir -p /data

@@ -87,18 +87,36 @@ public static class GeofenceEndpoints
             DateTimeOffset? since,
             Guid? deviceId,
             Guid? assetId,
+            int? page,
+            int? pageSize,
             string? format,
             CancellationToken cancellationToken) =>
         {
             var sinceUtc = since?.UtcDateTime;
-            var items = await breachRepository.GetRecentAsync(
-                limit ?? 100, 
-                unacknowledged, 
-                sinceUtc, 
-                deviceId, 
-                assetId, 
-                cancellationToken);
             
+            // For pagination
+            if (page.HasValue || pageSize.HasValue)
+            {
+                var pageNum = Math.Max(1, page ?? 1);
+                var size = Math.Max(1, Math.Min(200, pageSize ?? 50));
+                
+                var (items, totalCount) = await breachRepository.GetRecentPagedAsync(
+                    pageNum,
+                    size,
+                    unacknowledged,
+                    sinceUtc,
+                    deviceId,
+                    assetId,
+                    cancellationToken);
+                
+                return Results.Ok(new AssTrack.Domain.Contracts.PagedResult<GeofenceBreachDto>(
+                    items.Select(MapBreach).ToList(),
+                    totalCount,
+                    pageNum,
+                    size));
+            }
+            
+            // CSV export (unpaginated)
             if (format?.ToLowerInvariant() == "csv")
             {
                 // CSV requires at least one filter
@@ -111,11 +129,28 @@ public static class GeofenceEndpoints
                     return Results.ValidationProblem(errors, statusCode: StatusCodes.Status422UnprocessableEntity);
                 }
                 
+                var items = await breachRepository.GetRecentAsync(
+                    limit ?? 100, 
+                    unacknowledged, 
+                    sinceUtc, 
+                    deviceId, 
+                    assetId, 
+                    cancellationToken);
+                
                 var csv = BuildGeofenceBreachCsv(items);
                 return Results.Content(csv, "text/csv", System.Text.Encoding.UTF8);
             }
             
-            return Results.Ok(items.Select(MapBreach));
+            // Default unpaginated response
+            var defaultItems = await breachRepository.GetRecentAsync(
+                limit ?? 100, 
+                unacknowledged, 
+                sinceUtc, 
+                deviceId, 
+                assetId, 
+                cancellationToken);
+            
+            return Results.Ok(defaultItems.Select(MapBreach));
         }).RequireAuthorization("Operator");
 
         geofences.MapPost("/breaches/bulk-acknowledge", async (BulkAcknowledgeBreachesRequest request, GeofenceBreachRepository breachRepository, CancellationToken cancellationToken) =>

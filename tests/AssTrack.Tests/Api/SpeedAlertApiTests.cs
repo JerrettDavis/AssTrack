@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using AssTrack.Infrastructure.Data;
@@ -275,5 +276,117 @@ public class SpeedAlertApiTests(TestWebApplicationFactory factory) : IClassFixtu
         var limitedAlerts = await client.GetFromJsonAsync<List<JsonElement>>("/api/speed-alerts?limit=1");
         limitedAlerts.Should().NotBeNull();
         limitedAlerts!.Count.Should().BeLessThanOrEqualTo(1);
+    }
+
+    [Fact]
+    public async Task GetSpeedAlerts_WithPagination_ReturnsPagedResult()
+    {
+        await factory.ResetDatabaseAsync();
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AssTrackDbContext>();
+
+        var asset = new AssTrack.Domain.Models.Asset { Id = Guid.NewGuid(), Name = "PaginationAsset", CreatedAt = DateTime.UtcNow };
+        var device = new AssTrack.Domain.Models.Device { Id = Guid.NewGuid(), Identifier = $"PAG-{Guid.NewGuid():N}", Protocol = "MQTT", CreatedAt = DateTime.UtcNow, AssetId = asset.Id };
+        db.Assets.Add(asset);
+        db.Devices.Add(device);
+
+        // Insert 5 observations and their speed alerts directly to bypass the per-device cooldown
+        for (int i = 0; i < 5; i++)
+        {
+            var observation = new AssTrack.Domain.Models.Observation
+            {
+                Id = Guid.NewGuid(),
+                DeviceId = device.Id,
+                ObservedAt = DateTime.UtcNow.AddMinutes(-i - 10),
+                ReceivedAt = DateTime.UtcNow.AddMinutes(-i - 10),
+                Latitude = 51.5,
+                Longitude = -0.1,
+                SpeedKmh = 130.0 + i
+            };
+            db.Observations.Add(observation);
+            db.SpeedAlerts.Add(new AssTrack.Domain.Models.SpeedAlert
+            {
+                Id = Guid.NewGuid(),
+                ObservationId = observation.Id,
+                DeviceId = device.Id,
+                AssetId = asset.Id,
+                ObservedSpeedKmh = 130.0 + i,
+                ThresholdKmh = 120.0,
+                TriggeredAt = DateTime.UtcNow.AddMinutes(-i)
+            });
+        }
+        await db.SaveChangesAsync();
+
+        var client = factory.CreateAuthenticatedClient();
+
+        var page1 = await client.GetFromJsonAsync<JsonElement>("/api/speed-alerts?page=1&pageSize=2");
+        page1.ValueKind.Should().NotBe(JsonValueKind.Undefined);
+        page1.GetProperty("items").GetArrayLength().Should().Be(2);
+        page1.GetProperty("totalCount").GetInt32().Should().BeGreaterThanOrEqualTo(5);
+        page1.GetProperty("page").GetInt32().Should().Be(1);
+        page1.GetProperty("pageSize").GetInt32().Should().Be(2);
+
+        var page2 = await client.GetFromJsonAsync<JsonElement>("/api/speed-alerts?page=2&pageSize=2");
+        page2.ValueKind.Should().NotBe(JsonValueKind.Undefined);
+        page2.GetProperty("items").GetArrayLength().Should().Be(2);
+        page2.GetProperty("page").GetInt32().Should().Be(2);
+        page2.GetProperty("pageSize").GetInt32().Should().Be(2);
+    }
+
+    [Fact]
+    public async Task GetSpeedAlertsCsv_WithFilter_ReturnsCsv()
+    {
+        await factory.ResetDatabaseAsync();
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AssTrackDbContext>();
+
+        var asset = new AssTrack.Domain.Models.Asset { Id = Guid.NewGuid(), Name = "Csv Asset, North", CreatedAt = DateTime.UtcNow };
+        var device = new AssTrack.Domain.Models.Device { Id = Guid.NewGuid(), Identifier = "CSV-DEVICE-1", Protocol = "MQTT", CreatedAt = DateTime.UtcNow, AssetId = asset.Id };
+        var observation = new AssTrack.Domain.Models.Observation
+        {
+            Id = Guid.NewGuid(),
+            DeviceId = device.Id,
+            ObservedAt = DateTime.UtcNow.AddMinutes(-5),
+            ReceivedAt = DateTime.UtcNow.AddMinutes(-5),
+            Latitude = 51.5,
+            Longitude = -0.1,
+            SpeedKmh = 142
+        };
+        var alert = new AssTrack.Domain.Models.SpeedAlert
+        {
+            Id = Guid.NewGuid(),
+            ObservationId = observation.Id,
+            DeviceId = device.Id,
+            AssetId = asset.Id,
+            ObservedSpeedKmh = 142,
+            ThresholdKmh = 120,
+            TriggeredAt = DateTime.UtcNow.AddMinutes(-4)
+        };
+        db.Assets.Add(asset);
+        db.Devices.Add(device);
+        db.Observations.Add(observation);
+        db.SpeedAlerts.Add(alert);
+        await db.SaveChangesAsync();
+
+        var client = factory.CreateAuthenticatedClient();
+        var response = await client.GetAsync($"/api/speed-alerts?deviceId={device.Id}&format=csv");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        response.Content.Headers.ContentType?.MediaType.Should().Be("text/csv");
+        var csv = await response.Content.ReadAsStringAsync();
+        csv.Should().StartWith("Id,ObservationId,DeviceId,DeviceIdentifier");
+        csv.Should().Contain("CSV-DEVICE-1");
+        csv.Should().Contain("\"Csv Asset, North\"");
+    }
+
+    [Fact]
+    public async Task GetSpeedAlertsCsv_WithoutFilter_ReturnsValidationProblem()
+    {
+        await factory.ResetDatabaseAsync();
+        var client = factory.CreateAuthenticatedClient();
+
+        var response = await client.GetAsync("/api/speed-alerts?format=csv");
+
+        response.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
     }
 }

@@ -68,6 +68,14 @@ internal sealed class ProductionWebApplicationFactory : WebApplicationFactory<Pr
         });
     }
 
+    public HttpClient CreateAuthenticatedClient()
+    {
+        var client = CreateClient();
+        if (!string.IsNullOrEmpty(_apiKey))
+            client.DefaultRequestHeaders.Add("X-Api-Key", _apiKey);
+        return client;
+    }
+
     protected override void Dispose(bool disposing)
     {
         base.Dispose(disposing);
@@ -115,5 +123,30 @@ public class ProductionSafetyTests
         act.Should().Throw<InvalidOperationException>()
             .Which.Message.Should().Contain("Auth:ApiKey is not configured");
     }
-}
 
+    [Fact]
+    public async Task Response_IncludesXCorrelationId_Header()
+    {
+        await using var factory = new ProductionWebApplicationFactory(corsOrigins: ["https://example.com"]);
+        var client = factory.CreateAuthenticatedClient();
+        
+        var response = await client.GetAsync("/api/health");
+        response.Headers.Should().ContainKey("X-Correlation-Id");
+        response.Headers.GetValues("X-Correlation-Id").First().Should().NotBeNullOrWhiteSpace();
+    }
+
+    [Fact]
+    public async Task Response_EchoesIncomingXCorrelationId_Header()
+    {
+        await using var factory = new ProductionWebApplicationFactory(corsOrigins: ["https://example.com"]);
+        var client = factory.CreateAuthenticatedClient();
+        
+        var testCorrelationId = "test-correlation-12345";
+        var request = new HttpRequestMessage(HttpMethod.Get, "/api/health");
+        request.Headers.Add("X-Correlation-Id", testCorrelationId);
+        
+        var response = await client.SendAsync(request);
+        response.Headers.Should().ContainKey("X-Correlation-Id");
+        response.Headers.GetValues("X-Correlation-Id").First().Should().Be(testCorrelationId);
+    }
+}

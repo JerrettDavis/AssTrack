@@ -16,4 +16,8 @@ public class WebhookDeliveryLog
     public string? ErrorMessage { get; set; }
     /// <summary>First 500 characters of the serialised request payload.</summary>
     public string? RequestPayloadSummary { get; set; }
+    /// <summary>1-based attempt counter; 1 = first try, 2+ = retries.</summary>
+    public int AttemptNumber { get; set; } = 1;
+    /// <summary>Groups all retry attempts for the same trigger event.</summary>
+    public string CorrelationId { get; set; } = string.Empty;
 }

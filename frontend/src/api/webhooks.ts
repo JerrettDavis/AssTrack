@@ -1,4 +1,5 @@
 import { apiGet, apiPost } from './client'
+import { PagedResult } from './types'
 
 export interface WebhookStatus {
   configured: boolean
@@ -18,13 +19,6 @@ export interface WebhookDeliveryLog {
   durationMs: number
   errorMessage: string | null
   requestPayloadSummary: string | null
-}
-
-export interface PagedResult<T> {
-  items: T[]
-  total: number
-  page: number
-  pageSize: number
 }
 
 export interface WebhookTestResult {

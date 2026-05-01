@@ -2,6 +2,7 @@ using AssTrack.Api.Auth;
 using AssTrack.Api.Endpoints;
 using AssTrack.Api.Services;
 using AssTrack.Domain.Contracts;
+using AssTrack.Domain.Models;
 using AssTrack.Infrastructure.Data;
 using AssTrack.Infrastructure.Repositories;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
@@ -11,6 +12,7 @@ using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.OpenApi;
 using System.Threading.RateLimiting;
 using System.Text.Json;
+using System.Threading.Channels;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -77,7 +79,13 @@ builder.Services.AddHealthChecks().AddDbContextCheck<AssTrackDbContext>("databas
 builder.Services.AddProblemDetails();
 
 builder.Services.Configure<WebhookOptions>(builder.Configuration.GetSection(WebhookOptions.SectionName));
+var webhookRetryChannel = Channel.CreateBounded<WebhookRetryJob>(
+    new BoundedChannelOptions(1000) { FullMode = BoundedChannelFullMode.DropOldest });
+builder.Services.AddSingleton(webhookRetryChannel);
+builder.Services.AddSingleton(webhookRetryChannel.Reader);
+builder.Services.AddSingleton(webhookRetryChannel.Writer);
 builder.Services.AddHttpClient<IWebhookNotificationService, WebhookNotificationService>();
+builder.Services.AddHostedService<WebhookRetryWorker>();
 builder.Services.AddScoped<IObservationIngestService, ObservationIngestService>();
 builder.Services.Configure<SimulationOptions>(builder.Configuration.GetSection(SimulationOptions.SectionName));
 builder.Services.AddScoped<ISimulationService, SimulationService>();
@@ -121,6 +129,17 @@ using (var scope = app.Services.CreateScope())
 }
 
 var swaggerEnabled = builder.Environment.IsDevelopment() || builder.Configuration.GetValue<bool>("Swagger:Enabled");
+
+app.Use(async (context, next) =>
+{
+    var correlationId = context.Request.Headers["X-Correlation-Id"].ToString();
+    if (string.IsNullOrWhiteSpace(correlationId))
+    {
+        correlationId = Guid.NewGuid().ToString();
+    }
+    context.Response.Headers["X-Correlation-Id"] = correlationId;
+    await next();
+});
 
 app.UseExceptionHandler();
 app.UseStatusCodePages();

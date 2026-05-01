@@ -1,4 +1,5 @@
 import { apiGet, apiPost } from './client'
+import { PagedResult } from './types'
 
 export type GeofenceBreach = {
   id: string
@@ -19,15 +20,19 @@ export type BreachesQueryParams = {
   unacknowledged?: boolean
   limit?: number
   since?: string
+  page?: number
+  pageSize?: number
 }
 
-export function getGeofenceBreaches(params?: BreachesQueryParams): Promise<GeofenceBreach[]> {
+export function getGeofenceBreaches(params?: BreachesQueryParams): Promise<PagedResult<GeofenceBreach>> {
   const qs = new URLSearchParams()
   if (params?.unacknowledged != null) qs.set('unacknowledged', String(params.unacknowledged))
   if (params?.limit != null) qs.set('limit', String(params.limit))
   if (params?.since != null) qs.set('since', params.since)
+  if (params?.page != null) qs.set('page', String(params.page))
+  if (params?.pageSize != null) qs.set('pageSize', String(params.pageSize))
   const query = qs.toString()
-  return apiGet<GeofenceBreach[]>(`/api/geofences/breaches${query ? `?${query}` : ''}`)
+  return apiGet<PagedResult<GeofenceBreach>>(`/api/geofences/breaches${query ? `?${query}` : ''}`)
 }
 
 export async function acknowledgeBreach(id: string, acknowledgedBy?: string): Promise<GeofenceBreach> {

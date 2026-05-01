@@ -19,6 +19,7 @@ file sealed class NullWebhookService : IWebhookNotificationService
 {
     public Task NotifySpeedAlertAsync(SpeedAlert alert, CancellationToken cancellationToken = default) => Task.CompletedTask;
     public Task NotifyGeofenceBreachAsync(GeofenceBreach breach, CancellationToken cancellationToken = default) => Task.CompletedTask;
+    public Task ExecuteRetryAsync(WebhookRetryJob job, CancellationToken cancellationToken = default) => Task.CompletedTask;
 }
 
 public class TestWebApplicationFactory : WebApplicationFactory<Program>

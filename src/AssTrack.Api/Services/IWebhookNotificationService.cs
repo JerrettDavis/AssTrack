@@ -6,5 +6,6 @@ public interface IWebhookNotificationService
 {
     Task NotifySpeedAlertAsync(SpeedAlert alert, CancellationToken cancellationToken = default);
     Task NotifyGeofenceBreachAsync(GeofenceBreach breach, CancellationToken cancellationToken = default);
+    Task ExecuteRetryAsync(WebhookRetryJob job, CancellationToken cancellationToken = default);
 }
 

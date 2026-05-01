@@ -2,12 +2,17 @@ import { useEffect, useRef, useState } from 'react'
 import { acknowledgeSpeedAlert, bulkAcknowledgeSpeedAlerts, getSpeedAlerts, type SpeedAlert } from '../api/alerts'
 import { acknowledgeBreach, bulkAcknowledgeBreaches, getGeofenceBreaches, type GeofenceBreach } from '../api/geofenceBreaches'
 import { useLiveEvents } from '../hooks/useLiveEvents'
+import AcknowledgeModal from '../components/AcknowledgeModal'
 
 type FilterTab = 'all' | 'unacknowledged'
 
 export default function AlertsPage() {
   const [alerts, setAlerts] = useState<SpeedAlert[]>([])
   const [breaches, setBreaches] = useState<GeofenceBreach[]>([])
+  const [alertsTotal, setAlertsTotal] = useState(0)
+  const [breachesTotal, setBreachesTotal] = useState(0)
+  const [alertsPage, setAlertsPage] = useState(1)
+  const [breachesPage, setBreachesPage] = useState(1)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [lastUpdated, setLastUpdated] = useState<string | null>(null)
@@ -15,17 +20,20 @@ export default function AlertsPage() {
   const [breachFilter, setBreachFilter] = useState<FilterTab>('all')
   const [selectedSpeedAlerts, setSelectedSpeedAlerts] = useState<Set<string>>(new Set())
   const [selectedBreaches, setSelectedBreaches] = useState<Set<string>>(new Set())
+  const [acknowledgeModal, setAcknowledgeModal] = useState<{ open: boolean; title: string; onConfirm: (name: string | undefined) => void } | null>(null)
   const pollRef = useRef<number | null>(null)
 
   async function load() {
     try {
       setError(null)
       const [speedAlerts, geofenceBreaches] = await Promise.all([
-        getSpeedAlerts({ unacknowledged: speedFilter === 'unacknowledged' || undefined }),
-        getGeofenceBreaches({ unacknowledged: breachFilter === 'unacknowledged' || undefined }),
+        getSpeedAlerts({ unacknowledged: speedFilter === 'unacknowledged' || undefined, page: alertsPage, pageSize: 50 }),
+        getGeofenceBreaches({ unacknowledged: breachFilter === 'unacknowledged' || undefined, page: breachesPage, pageSize: 50 }),
       ])
-      setAlerts(speedAlerts)
-      setBreaches(geofenceBreaches)
+      setAlerts(speedAlerts.items)
+      setAlertsTotal(speedAlerts.totalCount)
+      setBreaches(geofenceBreaches.items)
+      setBreachesTotal(geofenceBreaches.totalCount)
       setLastUpdated(new Date().toLocaleTimeString())
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e))
@@ -45,7 +53,7 @@ export default function AlertsPage() {
         window.clearInterval(pollRef.current)
       }
     }
-  }, [speedFilter, breachFilter])
+  }, [speedFilter, breachFilter, alertsPage, breachesPage])
 
   useLiveEvents((type, _data) => {
     if (type === 'speed_alert' || type === 'geofence_breach') {
@@ -54,47 +62,71 @@ export default function AlertsPage() {
   })
 
   async function handleAcknowledgeAlert(id: string) {
-    const acknowledgedBy = window.prompt('Your name (optional):') ?? undefined
-    try {
-      await acknowledgeSpeedAlert(id, acknowledgedBy || undefined)
-      await load()
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : String(e))
-    }
+    setAcknowledgeModal({
+      open: true,
+      title: 'Acknowledge Speed Alert',
+      onConfirm: async (acknowledgedBy) => {
+        setAcknowledgeModal(null)
+        try {
+          await acknowledgeSpeedAlert(id, acknowledgedBy)
+          await load()
+        } catch (e: unknown) {
+          setError(e instanceof Error ? e.message : String(e))
+        }
+      },
+    })
   }
 
   async function handleAcknowledgeBreach(id: string) {
-    const acknowledgedBy = window.prompt('Your name (optional):') ?? undefined
-    try {
-      await acknowledgeBreach(id, acknowledgedBy || undefined)
-      await load()
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : String(e))
-    }
+    setAcknowledgeModal({
+      open: true,
+      title: 'Acknowledge Geofence Breach',
+      onConfirm: async (acknowledgedBy) => {
+        setAcknowledgeModal(null)
+        try {
+          await acknowledgeBreach(id, acknowledgedBy)
+          await load()
+        } catch (e: unknown) {
+          setError(e instanceof Error ? e.message : String(e))
+        }
+      },
+    })
   }
 
   async function handleBulkAcknowledgeSpeedAlerts() {
     if (selectedSpeedAlerts.size === 0) return
-    const acknowledgedBy = window.prompt('Your name (optional):') ?? undefined
-    try {
-      await bulkAcknowledgeSpeedAlerts(Array.from(selectedSpeedAlerts), acknowledgedBy || undefined)
-      setSelectedSpeedAlerts(new Set())
-      await load()
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : String(e))
-    }
+    setAcknowledgeModal({
+      open: true,
+      title: `Acknowledge ${selectedSpeedAlerts.size} Speed Alerts`,
+      onConfirm: async (acknowledgedBy) => {
+        setAcknowledgeModal(null)
+        try {
+          await bulkAcknowledgeSpeedAlerts(Array.from(selectedSpeedAlerts), acknowledgedBy)
+          setSelectedSpeedAlerts(new Set())
+          await load()
+        } catch (e: unknown) {
+          setError(e instanceof Error ? e.message : String(e))
+        }
+      },
+    })
   }
 
   async function handleBulkAcknowledgeBreaches() {
     if (selectedBreaches.size === 0) return
-    const acknowledgedBy = window.prompt('Your name (optional):') ?? undefined
-    try {
-      await bulkAcknowledgeBreaches(Array.from(selectedBreaches), acknowledgedBy || undefined)
-      setSelectedBreaches(new Set())
-      await load()
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : String(e))
-    }
+    setAcknowledgeModal({
+      open: true,
+      title: `Acknowledge ${selectedBreaches.size} Geofence Breaches`,
+      onConfirm: async (acknowledgedBy) => {
+        setAcknowledgeModal(null)
+        try {
+          await bulkAcknowledgeBreaches(Array.from(selectedBreaches), acknowledgedBy)
+          setSelectedBreaches(new Set())
+          await load()
+        } catch (e: unknown) {
+          setError(e instanceof Error ? e.message : String(e))
+        }
+      },
+    })
   }
 
   function toggleSpeedAlert(id: string) {
@@ -114,15 +146,19 @@ export default function AlertsPage() {
   if (loading) return <div className="card">Loading alerts…</div>
   if (error) return <div className="card">Error: {error}</div>
 
-  const unacknowledgedAlerts = alerts.filter(a => !a.acknowledgedAtUtc)
-  const unacknowledgedBreaches = breaches.filter(b => !b.acknowledgedAtUtc)
-
   return (
     <div className="section">
       <div className="page-header">
         <h1>Alerts</h1>
         <span className="muted">Last updated: {lastUpdated ?? '—'}</span>
       </div>
+
+      <AcknowledgeModal
+        open={acknowledgeModal?.open ?? false}
+        title={acknowledgeModal?.title ?? ''}
+        onConfirm={(name) => acknowledgeModal?.onConfirm(name)}
+        onCancel={() => setAcknowledgeModal(null)}
+      />
 
       <div className="card table-card">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
@@ -136,30 +172,36 @@ export default function AlertsPage() {
         <div className="alert-tabs">
           <button
             className={speedFilter === 'all' ? 'active' : ''}
-            onClick={() => setSpeedFilter('all')}
+            onClick={() => {
+              setSpeedFilter('all')
+              setAlertsPage(1)
+            }}
             type="button"
           >
-            All ({alerts.length})
+            All ({alertsTotal})
           </button>
           <button
             className={speedFilter === 'unacknowledged' ? 'active' : ''}
-            onClick={() => setSpeedFilter('unacknowledged')}
+            onClick={() => {
+              setSpeedFilter('unacknowledged')
+              setAlertsPage(1)
+            }}
             type="button"
           >
-            Unacknowledged ({unacknowledgedAlerts.length})
+            Unacknowledged ({alerts.filter(a => !a.acknowledgedAtUtc).length})
           </button>
         </div>
         <table className="data-table">
           <thead>
             <tr>
               <th style={{ width: '40px' }}>
-                {speedFilter === 'unacknowledged' && unacknowledgedAlerts.length > 0 && (
+                {speedFilter === 'unacknowledged' && alerts.filter(a => !a.acknowledgedAtUtc).length > 0 && (
                   <input
                     type="checkbox"
-                    checked={unacknowledgedAlerts.every(a => selectedSpeedAlerts.has(a.id))}
+                    checked={alerts.filter(a => !a.acknowledgedAtUtc).every(a => selectedSpeedAlerts.has(a.id))}
                     onChange={(e) => {
                       if (e.target.checked) {
-                        setSelectedSpeedAlerts(new Set(unacknowledgedAlerts.map(a => a.id)))
+                        setSelectedSpeedAlerts(new Set(alerts.filter(a => !a.acknowledgedAtUtc).map(a => a.id)))
                       } else {
                         setSelectedSpeedAlerts(new Set())
                       }
@@ -213,6 +255,29 @@ export default function AlertsPage() {
             )}
           </tbody>
         </table>
+        <div style={{ marginTop: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span className="muted">
+            Page {alertsPage} of {Math.ceil(alertsTotal / 50) || 1} (Total: {alertsTotal})
+          </span>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button
+              className="button button-secondary"
+              onClick={() => setAlertsPage(Math.max(1, alertsPage - 1))}
+              disabled={alertsPage === 1}
+              type="button"
+            >
+              Previous
+            </button>
+            <button
+              className="button button-secondary"
+              onClick={() => setAlertsPage(alertsPage + 1)}
+              disabled={alerts.length < 50}
+              type="button"
+            >
+              Next
+            </button>
+          </div>
+        </div>
       </div>
 
       <div className="card table-card">
@@ -227,30 +292,36 @@ export default function AlertsPage() {
         <div className="alert-tabs">
           <button
             className={breachFilter === 'all' ? 'active' : ''}
-            onClick={() => setBreachFilter('all')}
+            onClick={() => {
+              setBreachFilter('all')
+              setBreachesPage(1)
+            }}
             type="button"
           >
-            All ({breaches.length})
+            All ({breachesTotal})
           </button>
           <button
             className={breachFilter === 'unacknowledged' ? 'active' : ''}
-            onClick={() => setBreachFilter('unacknowledged')}
+            onClick={() => {
+              setBreachFilter('unacknowledged')
+              setBreachesPage(1)
+            }}
             type="button"
           >
-            Unacknowledged ({unacknowledgedBreaches.length})
+            Unacknowledged ({breaches.filter(b => !b.acknowledgedAtUtc).length})
           </button>
         </div>
         <table className="data-table">
           <thead>
             <tr>
               <th style={{ width: '40px' }}>
-                {breachFilter === 'unacknowledged' && unacknowledgedBreaches.length > 0 && (
+                {breachFilter === 'unacknowledged' && breaches.filter(b => !b.acknowledgedAtUtc).length > 0 && (
                   <input
                     type="checkbox"
-                    checked={unacknowledgedBreaches.every(b => selectedBreaches.has(b.id))}
+                    checked={breaches.filter(b => !b.acknowledgedAtUtc).every(b => selectedBreaches.has(b.id))}
                     onChange={(e) => {
                       if (e.target.checked) {
-                        setSelectedBreaches(new Set(unacknowledgedBreaches.map(b => b.id)))
+                        setSelectedBreaches(new Set(breaches.filter(b => !b.acknowledgedAtUtc).map(b => b.id)))
                       } else {
                         setSelectedBreaches(new Set())
                       }
@@ -304,6 +375,29 @@ export default function AlertsPage() {
             )}
           </tbody>
         </table>
+        <div style={{ marginTop: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span className="muted">
+            Page {breachesPage} of {Math.ceil(breachesTotal / 50) || 1} (Total: {breachesTotal})
+          </span>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button
+              className="button button-secondary"
+              onClick={() => setBreachesPage(Math.max(1, breachesPage - 1))}
+              disabled={breachesPage === 1}
+              type="button"
+            >
+              Previous
+            </button>
+            <button
+              className="button button-secondary"
+              onClick={() => setBreachesPage(breachesPage + 1)}
+              disabled={breaches.length < 50}
+              type="button"
+            >
+              Next
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   )

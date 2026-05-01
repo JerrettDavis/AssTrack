@@ -211,7 +211,6 @@ export default function MapPage() {
 
   if (loading) return <div className="card">Loading map…</div>
   if (error) return <div className="card">Error: {error}</div>
-  if (positions.length === 0 && geofences.length === 0) return <div className="card">No map data available yet.</div>
 
   return (
     <div className="section">
@@ -226,7 +225,7 @@ export default function MapPage() {
       </div>
       <div className="map-layout">
         <div className="card map-card">
-          <MapContainer center={mapCenter} zoom={positions.length > 0 ? 10 : 2} style={{ height: '100%', width: '100%' }}>
+          <MapContainer center={mapCenter} zoom={positions.length > 0 ? 10 : 2} style={{ height: '500px', width: '100%' }}>
             <MapViewportUpdater center={mapCenter} selectedCenter={selectedCenter} />
             <TileLayer
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'

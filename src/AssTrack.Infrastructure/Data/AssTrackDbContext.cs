@@ -117,8 +117,11 @@ public class AssTrackDbContext(DbContextOptions<AssTrackDbContext> options) : Db
             entity.Property(x => x.TargetUrl).IsRequired().HasMaxLength(2000);
             entity.Property(x => x.ErrorMessage).HasMaxLength(2000);
             entity.Property(x => x.RequestPayloadSummary).HasMaxLength(500);
+            entity.Property(x => x.AttemptNumber).HasDefaultValue(1);
+            entity.Property(x => x.CorrelationId).IsRequired().HasMaxLength(50).HasDefaultValue(string.Empty);
             entity.HasIndex(x => x.AttemptedAt);
             entity.HasIndex(x => x.EventType);
+            entity.HasIndex(x => x.CorrelationId);
         });
     }
 }

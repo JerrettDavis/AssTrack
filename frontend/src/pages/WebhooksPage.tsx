@@ -16,6 +16,8 @@ export default function WebhooksPage() {
 
   const [status, setStatus] = useState<WebhookStatus | null>(null)
   const [deliveries, setDeliveries] = useState<WebhookDeliveryLog[]>([])
+  const [deliveriesTotal, setDeliveriesTotal] = useState(0)
+  const [deliveriesPage, setDeliveriesPage] = useState(1)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [testLoading, setTestLoading] = useState(false)
@@ -29,10 +31,11 @@ export default function WebhooksPage() {
       setError(null)
       const [webhookStatus, deliveryLogs] = await Promise.all([
         getWebhookStatus(),
-        getWebhookDeliveries(1, 20),
+        getWebhookDeliveries(deliveriesPage, 20),
       ])
       setStatus(webhookStatus)
       setDeliveries(deliveryLogs.items)
+      setDeliveriesTotal(deliveryLogs.totalCount)
       setLastUpdated(new Date().toLocaleTimeString())
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e))
@@ -52,7 +55,7 @@ export default function WebhooksPage() {
         window.clearInterval(pollRef.current)
       }
     }
-  }, [])
+  }, [deliveriesPage])
 
   async function handleFireTest() {
     setTestLoading(true)
@@ -193,6 +196,29 @@ export default function WebhooksPage() {
               )}
             </tbody>
           </table>
+          <div style={{ marginTop: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span className="muted">
+              Page {deliveriesPage} of {Math.ceil(deliveriesTotal / 20) || 1} (Total: {deliveriesTotal})
+            </span>
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button
+                className="button button-secondary"
+                onClick={() => setDeliveriesPage(Math.max(1, deliveriesPage - 1))}
+                disabled={deliveriesPage === 1}
+                type="button"
+              >
+                Previous
+              </button>
+              <button
+                className="button button-secondary"
+                onClick={() => setDeliveriesPage(deliveriesPage + 1)}
+                disabled={deliveries.length < 20}
+                type="button"
+              >
+                Next
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

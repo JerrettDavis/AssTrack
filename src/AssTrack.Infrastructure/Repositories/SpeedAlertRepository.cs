@@ -6,6 +6,39 @@ namespace AssTrack.Infrastructure.Repositories;
 
 public class SpeedAlertRepository(AssTrackDbContext dbContext)
 {
+    public async Task<(IReadOnlyList<SpeedAlert> items, int totalCount)> GetRecentPagedAsync(
+        int page,
+        int pageSize,
+        bool? unacknowledgedOnly = null,
+        DateTime? since = null,
+        Guid? deviceId = null,
+        Guid? assetId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var query = dbContext.SpeedAlerts
+            .Include(x => x.Device)
+            .Include(x => x.Asset)
+            .AsQueryable();
+        if (unacknowledgedOnly == true)
+            query = query.Where(x => x.AcknowledgedAtUtc == null);
+        if (since.HasValue)
+            query = query.Where(x => x.TriggeredAt >= since.Value);
+        if (deviceId.HasValue)
+            query = query.Where(x => x.DeviceId == deviceId.Value);
+        if (assetId.HasValue)
+            query = query.Where(x => x.Device.AssetId == assetId.Value);
+        
+        var totalCount = await query.CountAsync(cancellationToken);
+        
+        var items = await query
+            .OrderByDescending(x => x.TriggeredAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(cancellationToken);
+        
+        return (items, totalCount);
+    }
+
     public async Task<IReadOnlyList<SpeedAlert>> GetRecentAsync(
         int limit = 100,
         bool? unacknowledgedOnly = null,

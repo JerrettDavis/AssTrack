@@ -16,18 +16,36 @@ public static class SpeedAlertEndpoints
             DateTimeOffset? since,
             Guid? deviceId,
             Guid? assetId,
+            int? page,
+            int? pageSize,
             string? format,
             CancellationToken cancellationToken) =>
         {
             var sinceUtc = since?.UtcDateTime;
-            var items = await speedAlertRepository.GetRecentAsync(
-                limit ?? 100, 
-                unacknowledged, 
-                sinceUtc, 
-                deviceId, 
-                assetId, 
-                cancellationToken);
             
+            // For pagination
+            if (page.HasValue || pageSize.HasValue)
+            {
+                var pageNum = Math.Max(1, page ?? 1);
+                var size = Math.Max(1, Math.Min(200, pageSize ?? 50));
+                
+                var (items, totalCount) = await speedAlertRepository.GetRecentPagedAsync(
+                    pageNum,
+                    size,
+                    unacknowledged,
+                    sinceUtc,
+                    deviceId,
+                    assetId,
+                    cancellationToken);
+                
+                return Results.Ok(new AssTrack.Domain.Contracts.PagedResult<SpeedAlertDto>(
+                    items.Select(Map).ToList(),
+                    totalCount,
+                    pageNum,
+                    size));
+            }
+            
+            // CSV export (unpaginated)
             if (format?.ToLowerInvariant() == "csv")
             {
                 // CSV requires at least one filter
@@ -40,11 +58,28 @@ public static class SpeedAlertEndpoints
                     return Results.ValidationProblem(errors, statusCode: StatusCodes.Status422UnprocessableEntity);
                 }
                 
+                var items = await speedAlertRepository.GetRecentAsync(
+                    limit ?? 100, 
+                    unacknowledged, 
+                    sinceUtc, 
+                    deviceId, 
+                    assetId, 
+                    cancellationToken);
+                
                 var csv = BuildSpeedAlertCsv(items);
                 return Results.Content(csv, "text/csv", System.Text.Encoding.UTF8);
             }
             
-            return Results.Ok(items.Select(Map));
+            // Default unpaginated response
+            var defaultItems = await speedAlertRepository.GetRecentAsync(
+                limit ?? 100, 
+                unacknowledged, 
+                sinceUtc, 
+                deviceId, 
+                assetId, 
+                cancellationToken);
+            
+            return Results.Ok(defaultItems.Select(Map));
         }).RequireAuthorization("Operator");
 
         alerts.MapPost("/{id:guid}/acknowledge", async (Guid id, AcknowledgeSpeedAlertRequest request, SpeedAlertRepository repository, CancellationToken cancellationToken) =>
