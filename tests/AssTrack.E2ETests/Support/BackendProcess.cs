@@ -23,7 +23,7 @@ public class BackendProcess : IDisposable
             StartInfo = new ProcessStartInfo
             {
                 FileName = ResolveDotnetCommand(),
-                Arguments = $"run --project \"{apiCsprojPath}\" --no-build --no-restore --no-launch-profile",
+                Arguments = $"run --project \"{apiCsprojPath}\" --configuration Release --no-build --no-restore --no-launch-profile",
                 WorkingDirectory = apiProjectPath,
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
