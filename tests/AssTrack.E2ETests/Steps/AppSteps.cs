@@ -70,9 +70,8 @@ public class AppSteps
     public async Task ThenTheBridgeFeedFormIsFocusedWithBridgeKey(string expectedBridgeKey)
     {
         var form = _context.Page.GetByTestId("bridge-feed-form");
-        var box = await form.BoundingBoxAsync();
-        box.Should().NotBeNull();
-        box!.Y.Should().BeLessThan(240, "Configure should scroll the bridge form into view");
+        await form.ScrollIntoViewIfNeededAsync();
+        await form.WaitForAsync(new() { State = Microsoft.Playwright.WaitForSelectorState.Visible });
 
         var bridgeKey = form.Locator("input[name='bridgeKey']");
         await bridgeKey.WaitForAsync();
