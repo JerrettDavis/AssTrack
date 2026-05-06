@@ -39,4 +39,21 @@ public class AssetDeviceSteps
         var deviceId = await _context.ApiClient.CreateDeviceAsync(data);
         _context.DeviceId = deviceId;
     }
+
+    [Given(@"an unassigned bridge device named ""([^""]*)"" exists via the API")]
+    public async Task GivenAnUnassignedBridgeDeviceNamedExistsViaTheAPI(string name)
+    {
+        var actualIdentifier = $"meshtastic:{Guid.NewGuid():N}";
+        var data = new Dictionary<string, object>
+        {
+            ["identifier"] = actualIdentifier,
+            ["label"] = name,
+            ["protocol"] = "meshtastic",
+            ["provider"] = "meshtastic",
+            ["externalId"] = actualIdentifier.Replace("meshtastic:", "!"),
+            ["tags"] = "meshtastic, e2e"
+        };
+        var deviceId = await _context.ApiClient.CreateDeviceAsync(data);
+        _context.UnassignedDeviceId = deviceId;
+    }
 }

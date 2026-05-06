@@ -50,11 +50,10 @@ export default function HistoryPage() {
       setError(null)
       setLoading(true)
       
-      // Convert datetime-local values to ISO 8601 UTC format
+      // datetime-local values represent the operator's local time.
       const convertToUTC = (dateTimeLocal: string | undefined): string | undefined => {
         if (!dateTimeLocal) return undefined
-        // datetime-local format is YYYY-MM-DDTHH:mm, treat as UTC
-        return `${dateTimeLocal}:00Z`
+        return new Date(dateTimeLocal).toISOString()
       }
 
       const data = await getObservationHistory({
@@ -81,10 +80,9 @@ export default function HistoryPage() {
       setError(null)
       setExporting(true)
       
-      // Convert datetime-local values to ISO 8601 UTC format
       const convertToUTC = (dateTimeLocal: string | undefined): string | undefined => {
         if (!dateTimeLocal) return undefined
-        return `${dateTimeLocal}:00Z`
+        return new Date(dateTimeLocal).toISOString()
       }
       
       const blob = await exportObservationsCsv({
@@ -215,12 +213,12 @@ export default function HistoryPage() {
           </button>
         </div>
 
-        {error && <div style={{ color: '#fca5a5', marginTop: '1rem' }}>{error}</div>}
+        {error && <div className="notice notice-danger">{error}</div>}
       </div>
 
       {result && (
         <div className="card table-card">
-          <div style={{ marginBottom: '1rem' }}>
+          <div>
             <p className="muted">
               Showing {result.items.length} of {result.totalCount} observations
             </p>
@@ -261,7 +259,7 @@ export default function HistoryPage() {
           </table>
 
           {result && result.pageSize > 0 && Math.ceil(result.totalCount / result.pageSize) > 1 && (
-            <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem', marginTop: '1rem', alignItems: 'center' }}>
+            <div className="table-actions">
               <button
                 className="button button-secondary"
                 onClick={() => handlePageChange(result.page - 1)}

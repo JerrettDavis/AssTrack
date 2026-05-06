@@ -1,0 +1,40 @@
+name: Stale Issues and PRs
+
+on:
+  schedule:
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  pull-requests: write
+
+jobs:
+  stale:
+    name: Mark stale work
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Stale issues and PRs
+        uses: actions/stale@v10
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          stale-issue-message: |
+            This issue has been marked as stale because it has not had recent activity.
+            Comment with current context if it is still relevant.
+          close-issue-message: |
+            Closing due to inactivity. Reopen or file a new issue with updated details if this still applies.
+          days-before-stale: 60
+          days-before-close: 14
+          stale-issue-label: stale
+          exempt-issue-labels: pinned,security,bug,enhancement
+          stale-pr-message: |
+            This pull request has been marked as stale because it has not had recent activity.
+            Rebase and update it if the work should continue.
+          close-pr-message: |
+            Closing due to inactivity. Reopen when it is ready to continue.
+          days-before-pr-stale: 30
+          days-before-pr-close: 14
+          stale-pr-label: stale
+          exempt-pr-labels: pinned,security,work-in-progress
+          operations-per-run: 30

@@ -39,4 +39,44 @@ public class GeofenceEvaluatorTests
 
         GeofenceEvaluator.IsInside(geofence, observation).Should().BeFalse();
     }
+
+    [Fact]
+    public void IsInside_Should_ReturnTrue_WhenObservationIsInsidePolygon()
+    {
+        var geofence = new Geofence
+        {
+            ShapeType = "polygon",
+            PolygonJson = """
+                [
+                  { "latitude": 36.0, "longitude": -96.0 },
+                  { "latitude": 36.2, "longitude": -96.0 },
+                  { "latitude": 36.2, "longitude": -95.7 },
+                  { "latitude": 36.0, "longitude": -95.7 }
+                ]
+                """
+        };
+        var observation = new Observation { Latitude = 36.05, Longitude = -95.9 };
+
+        GeofenceEvaluator.IsInside(geofence, observation).Should().BeTrue();
+    }
+
+    [Fact]
+    public void IsInside_Should_ReturnFalse_WhenObservationIsOutsidePolygon()
+    {
+        var geofence = new Geofence
+        {
+            ShapeType = "polygon",
+            PolygonJson = """
+                [
+                  { "latitude": 36.0, "longitude": -96.0 },
+                  { "latitude": 36.2, "longitude": -96.0 },
+                  { "latitude": 36.2, "longitude": -95.7 },
+                  { "latitude": 36.0, "longitude": -95.7 }
+                ]
+                """
+        };
+        var observation = new Observation { Latitude = 36.4, Longitude = -95.9 };
+
+        GeofenceEvaluator.IsInside(geofence, observation).Should().BeFalse();
+    }
 }

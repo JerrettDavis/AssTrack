@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useId } from 'react'
 
 export interface AcknowledgeModalProps {
   open: boolean
@@ -9,12 +9,21 @@ export interface AcknowledgeModalProps {
 
 export default function AcknowledgeModal({ open, title, onConfirm, onCancel }: AcknowledgeModalProps) {
   const [name, setName] = useState('')
+  const titleId = useId()
+  const inputId = useId()
 
   useEffect(() => {
     if (open) {
       setName('')
+      const handleEscape = (event: KeyboardEvent) => {
+        if (event.key === 'Escape') {
+          onCancel()
+        }
+      }
+      window.addEventListener('keydown', handleEscape)
+      return () => window.removeEventListener('keydown', handleEscape)
     }
-  }, [open])
+  }, [onCancel, open])
 
   const handleConfirm = () => {
     const trimmedName = name.trim()
@@ -42,14 +51,14 @@ export default function AcknowledgeModal({ open, title, onConfirm, onCancel }: A
       className="modal-backdrop"
       onClick={handleBackdropClick}
     >
-      <div className="modal-panel">
-        <h2>{title}</h2>
+      <div aria-labelledby={titleId} aria-modal="true" className="modal-panel" role="dialog">
+        <h2 id={titleId}>{title}</h2>
         <div className="modal-field">
-          <label htmlFor="ack-name">
+          <label htmlFor={inputId}>
             Your name (optional)
           </label>
           <input
-            id="ack-name"
+            id={inputId}
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}

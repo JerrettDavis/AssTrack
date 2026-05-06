@@ -1,7 +1,9 @@
 using AssTrack.Domain.Contracts;
 using AssTrack.Domain.Models;
+using AssTrack.Domain.Services;
 using AssTrack.Infrastructure.Repositories;
 using Microsoft.AspNetCore.Mvc;
+using System.Text.Json;
 
 namespace AssTrack.Api.Endpoints;
 
@@ -26,23 +28,21 @@ public static class GeofenceEndpoints
                     statusCode: StatusCodes.Status422UnprocessableEntity);
             }
 
-            var validationErrors = new Dictionary<string, string[]>();
-            if (request.RadiusMeters <= 0)
-                validationErrors["radiusMeters"] = ["Radius must be greater than 0."];
-            if (request.CenterLatitude < -90 || request.CenterLatitude > 90)
-                validationErrors["centerLatitude"] = ["CenterLatitude must be between -90 and 90."];
-            if (request.CenterLongitude < -180 || request.CenterLongitude > 180)
-                validationErrors["centerLongitude"] = ["CenterLongitude must be between -180 and 180."];
+            var validationErrors = ValidateShape(request.ShapeType, request.CenterLatitude, request.CenterLongitude, request.RadiusMeters, request.PolygonCoordinates);
             if (validationErrors.Count > 0)
                 return Results.ValidationProblem(validationErrors, statusCode: StatusCodes.Status422UnprocessableEntity);
+            var shapeType = NormalizeShapeType(request.ShapeType);
+            var center = ResolveCenter(shapeType, request.CenterLatitude, request.CenterLongitude, request.PolygonCoordinates);
 
             var geofence = new Geofence
             {
                 Name = request.Name.Trim(),
                 Description = request.Description,
-                CenterLatitude = request.CenterLatitude,
-                CenterLongitude = request.CenterLongitude,
-                RadiusMeters = request.RadiusMeters,
+                ShapeType = shapeType,
+                CenterLatitude = center.Latitude,
+                CenterLongitude = center.Longitude,
+                RadiusMeters = shapeType == "polygon" ? 0 : request.RadiusMeters,
+                PolygonJson = shapeType == "polygon" ? SerializePolygon(request.PolygonCoordinates) : null,
                 IsActive = request.IsActive ?? true,
                 CreatedAt = DateTime.UtcNow
             };
@@ -60,17 +60,23 @@ public static class GeofenceEndpoints
                     statusCode: StatusCodes.Status422UnprocessableEntity);
             }
 
-            var validationErrors = new Dictionary<string, string[]>();
-            if (request.RadiusMeters <= 0)
-                validationErrors["radiusMeters"] = ["Radius must be greater than 0."];
-            if (request.CenterLatitude < -90 || request.CenterLatitude > 90)
-                validationErrors["centerLatitude"] = ["CenterLatitude must be between -90 and 90."];
-            if (request.CenterLongitude < -180 || request.CenterLongitude > 180)
-                validationErrors["centerLongitude"] = ["CenterLongitude must be between -180 and 180."];
+            var validationErrors = ValidateShape(request.ShapeType, request.CenterLatitude, request.CenterLongitude, request.RadiusMeters, request.PolygonCoordinates);
             if (validationErrors.Count > 0)
                 return Results.ValidationProblem(validationErrors, statusCode: StatusCodes.Status422UnprocessableEntity);
+            var shapeType = NormalizeShapeType(request.ShapeType);
+            var center = ResolveCenter(shapeType, request.CenterLatitude, request.CenterLongitude, request.PolygonCoordinates);
 
-            var updated = await repository.UpdateAsync(id, request.Name.Trim(), request.Description, request.CenterLatitude, request.CenterLongitude, request.RadiusMeters, request.IsActive, cancellationToken);
+            var updated = await repository.UpdateAsync(
+                id,
+                request.Name.Trim(),
+                request.Description,
+                shapeType,
+                center.Latitude,
+                center.Longitude,
+                shapeType == "polygon" ? 0 : request.RadiusMeters,
+                shapeType == "polygon" ? SerializePolygon(request.PolygonCoordinates) : null,
+                request.IsActive,
+                cancellationToken);
             return updated is null ? Results.NotFound() : Results.Ok(Map(updated));
         }).RequireAuthorization("Operator");
 
@@ -87,6 +93,7 @@ public static class GeofenceEndpoints
             DateTimeOffset? since,
             Guid? deviceId,
             Guid? assetId,
+            Guid? geofenceId,
             int? page,
             int? pageSize,
             string? format,
@@ -107,6 +114,7 @@ public static class GeofenceEndpoints
                     sinceUtc,
                     deviceId,
                     assetId,
+                    geofenceId,
                     cancellationToken);
                 
                 return Results.Ok(new AssTrack.Domain.Contracts.PagedResult<GeofenceBreachDto>(
@@ -120,11 +128,11 @@ public static class GeofenceEndpoints
             if (format?.ToLowerInvariant() == "csv")
             {
                 // CSV requires at least one filter
-                if (!deviceId.HasValue && !assetId.HasValue && !since.HasValue && !unacknowledged.HasValue)
+                if (!deviceId.HasValue && !assetId.HasValue && !geofenceId.HasValue && !since.HasValue && !unacknowledged.HasValue)
                 {
                     var errors = new Dictionary<string, string[]>
                     {
-                        ["filters"] = ["CSV export requires at least one filter parameter (deviceId, assetId, since, or unacknowledged)."]
+                        ["filters"] = ["CSV export requires at least one filter parameter (deviceId, assetId, geofenceId, since, or unacknowledged)."]
                     };
                     return Results.ValidationProblem(errors, statusCode: StatusCodes.Status422UnprocessableEntity);
                 }
@@ -135,6 +143,7 @@ public static class GeofenceEndpoints
                     sinceUtc, 
                     deviceId, 
                     assetId, 
+                    geofenceId,
                     cancellationToken);
                 
                 var csv = BuildGeofenceBreachCsv(items);
@@ -148,6 +157,7 @@ public static class GeofenceEndpoints
                 sinceUtc, 
                 deviceId, 
                 assetId, 
+                geofenceId,
                 cancellationToken);
             
             return Results.Ok(defaultItems.Select(MapBreach));
@@ -172,12 +182,68 @@ public static class GeofenceEndpoints
         geofence.Id,
         geofence.Name,
         geofence.Description,
+        geofence.ShapeType,
         geofence.CenterLatitude,
         geofence.CenterLongitude,
         geofence.RadiusMeters,
+        GeofenceEvaluator.ParsePolygon(geofence.PolygonJson)
+            .Select(point => new GeofencePointDto(point.Latitude, point.Longitude))
+            .ToList(),
         geofence.IsActive,
         geofence.CreatedAt,
         geofence.IsSeeded);
+
+    private static string NormalizeShapeType(string? shapeType)
+        => string.Equals(shapeType, "polygon", StringComparison.OrdinalIgnoreCase) ? "polygon" : "circle";
+
+    private static Dictionary<string, string[]> ValidateShape(
+        string? rawShapeType,
+        double centerLatitude,
+        double centerLongitude,
+        double radiusMeters,
+        IReadOnlyList<GeofencePointDto>? polygonCoordinates)
+    {
+        var validationErrors = new Dictionary<string, string[]>();
+        var shapeType = NormalizeShapeType(rawShapeType);
+
+        if (shapeType == "circle")
+        {
+            if (radiusMeters <= 0)
+                validationErrors["radiusMeters"] = ["Radius must be greater than 0."];
+            if (centerLatitude < -90 || centerLatitude > 90)
+                validationErrors["centerLatitude"] = ["CenterLatitude must be between -90 and 90."];
+            if (centerLongitude < -180 || centerLongitude > 180)
+                validationErrors["centerLongitude"] = ["CenterLongitude must be between -180 and 180."];
+            return validationErrors;
+        }
+
+        var points = polygonCoordinates ?? [];
+        if (points.Count < 3)
+            validationErrors["polygonCoordinates"] = ["A freeform geofence requires at least three points."];
+
+        if (points.Any(point => point.Latitude < -90 || point.Latitude > 90))
+            validationErrors["polygonCoordinates.latitude"] = ["Polygon latitudes must be between -90 and 90."];
+
+        if (points.Any(point => point.Longitude < -180 || point.Longitude > 180))
+            validationErrors["polygonCoordinates.longitude"] = ["Polygon longitudes must be between -180 and 180."];
+
+        return validationErrors;
+    }
+
+    private static GeofencePointDto ResolveCenter(string shapeType, double centerLatitude, double centerLongitude, IReadOnlyList<GeofencePointDto>? polygonCoordinates)
+    {
+        if (shapeType == "circle" || polygonCoordinates is null || polygonCoordinates.Count == 0)
+            return new GeofencePointDto(centerLatitude, centerLongitude);
+
+        return new GeofencePointDto(
+            polygonCoordinates.Average(point => point.Latitude),
+            polygonCoordinates.Average(point => point.Longitude));
+    }
+
+    private static string? SerializePolygon(IReadOnlyList<GeofencePointDto>? polygonCoordinates)
+        => polygonCoordinates is null
+            ? null
+            : JsonSerializer.Serialize(polygonCoordinates.Select(point => new GeofenceVertex(point.Latitude, point.Longitude)), new JsonSerializerOptions(JsonSerializerDefaults.Web));
 
     internal static GeofenceBreachDto MapBreach(GeofenceBreach breach) => new(
         breach.Id,

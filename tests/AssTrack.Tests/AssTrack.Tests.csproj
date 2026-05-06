@@ -25,6 +25,7 @@
     <ProjectReference Include="..\..\src\AssTrack.Domain\AssTrack.Domain.csproj" />
     <ProjectReference Include="..\..\src\AssTrack.Infrastructure\AssTrack.Infrastructure.csproj" />
     <ProjectReference Include="..\..\src\AssTrack.Api\AssTrack.Api.csproj" />
+    <ProjectReference Include="..\..\src\AssTrack.BridgeGateway\AssTrack.BridgeGateway.csproj" />
   </ItemGroup>
 
 </Project>

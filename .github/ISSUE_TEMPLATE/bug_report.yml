@@ -1,0 +1,54 @@
+name: Bug Report
+description: Report broken behavior in the API, bridge gateway, frontend, maps, or workflows.
+labels: [bug, triage]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What happened?
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What should have happened?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction Steps
+      description: Include routes, API calls, bridge feed keys, or payloads when relevant.
+      placeholder: |
+        1. Start Aspire
+        2. Open /integrations
+        3. Configure ...
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Frontend UX
+        - Map and geofences
+        - API
+        - Bridge gateway
+        - Integrations
+        - Aspire/local startup
+        - Docker/deployment
+        - CI/CD
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or Commit
+      description: Commit SHA, branch, or release tag.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or Screenshots
+      description: Paste relevant logs, screenshots, network errors, or workflow links.

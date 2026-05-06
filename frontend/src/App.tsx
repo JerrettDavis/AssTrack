@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, NavLink } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, NavLink, useLocation } from 'react-router-dom'
 import { useEffect, useRef, useState } from 'react'
 import { AssetsPage } from './pages/AssetsPage'
 import DevicesPage from './pages/DevicesPage'
@@ -8,15 +8,19 @@ import GeofencesPage from './pages/GeofencesPage'
 import HistoryPage from './pages/HistoryPage'
 import WebhooksPage from './pages/WebhooksPage'
 import SettingsPage from './pages/SettingsPage'
+import IntegrationsPage from './pages/IntegrationsPage'
 import { getAlertSummary } from './api/alerts'
 import { useLiveEvents } from './hooks/useLiveEvents'
 import { IdentityProvider, useIdentityContext } from './context/IdentityContext'
+import { AppearanceProvider } from './context/AppearanceContext'
 import './styles.css'
 
 function AppContent() {
   const [unacknowledgedCount, setUnacknowledgedCount] = useState(0)
   const pollRef = useRef<number | null>(null)
   const { isOperator } = useIdentityContext()
+  const location = useLocation()
+  const isMapRoute = location.pathname.startsWith('/map')
 
   async function loadSummary() {
     try {
@@ -48,7 +52,8 @@ function AppContent() {
 
   return (
     <>
-      <nav className="app-nav">
+      <a className="sr-only" href="#main-content">Skip to main content</a>
+      <nav aria-label="Primary" className="app-nav">
         <div className="nav-inner">
           <NavLink className="brand-link" to="/" end>
             <span className="brand-mark">AT</span>
@@ -67,12 +72,13 @@ function AppContent() {
               {unacknowledgedCount > 0 && <span className="nav-badge">{unacknowledgedCount}</span>}
             </NavLink>
             <NavLink to="/history">History</NavLink>
+            {isOperator && <NavLink to="/integrations">Bridge</NavLink>}
             {isOperator && <NavLink to="/webhooks">Webhooks</NavLink>}
-            {isOperator && <NavLink to="/settings">Settings</NavLink>}
+            <NavLink to="/settings">Settings</NavLink>
           </div>
         </div>
       </nav>
-      <main className="app-main">
+      <main className={`app-main${isMapRoute ? ' app-main-map' : ''}`} id="main-content">
         <Routes>
           <Route path="/" element={<AssetsPage />} />
           <Route path="/devices" element={<DevicesPage />} />
@@ -80,6 +86,7 @@ function AppContent() {
           <Route path="/geofences" element={<GeofencesPage />} />
           <Route path="/alerts" element={<AlertsPage />} />
           <Route path="/history" element={<HistoryPage />} />
+          <Route path="/integrations" element={<IntegrationsPage />} />
           <Route path="/webhooks" element={<WebhooksPage />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Routes>
@@ -91,9 +98,11 @@ function AppContent() {
 export default function App() {
   return (
     <BrowserRouter>
-      <IdentityProvider>
-        <AppContent />
-      </IdentityProvider>
+      <AppearanceProvider>
+        <IdentityProvider>
+          <AppContent />
+        </IdentityProvider>
+      </AppearanceProvider>
     </BrowserRouter>
   )
 }

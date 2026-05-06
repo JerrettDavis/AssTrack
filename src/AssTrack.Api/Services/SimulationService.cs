@@ -133,10 +133,12 @@ public sealed class SimulationService(
                 tempGeofence.Id,
                 tempGeofence.Name,
                 tempGeofence.Description,
+                tempGeofence.ShapeType,
                 tempGeofence.CenterLatitude,
                 tempGeofence.CenterLongitude,
                 tempGeofence.RadiusMeters,
-                isActive: false,
+                tempGeofence.PolygonJson,
+                false,
                 cancellationToken);
             eventLog.Add($"Deactivated temporary geofence '{tempGeofence.Name}' for test isolation.");
         }

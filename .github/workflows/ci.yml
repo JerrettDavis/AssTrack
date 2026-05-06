@@ -4,41 +4,119 @@ on:
   push:
     branches: ['**']
   pull_request:
-    branches: [main]
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_VERSION: 10.0.x
+  NODE_VERSION: 22
 
 jobs:
   backend:
+    name: Backend
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v6
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: '10.0.x'
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+          cache: true
+          cache-dependency-path: |
+            **/packages.lock.json
+            **/*.csproj
 
       - name: Restore
-        run: dotnet restore
+        run: dotnet restore AssTrack.sln
 
       - name: Build
-        run: dotnet build --no-restore -c Release
+        run: dotnet build AssTrack.sln --configuration Release --no-restore /p:ContinuousIntegrationBuild=true
 
-      - name: Test (unit + integration)
-        run: dotnet test --no-build -c Release --filter "Category!=E2E" tests/AssTrack.Tests/AssTrack.Tests.csproj
-        # E2E tests (Reqnroll + Playwright) require a real browser and running processes.
-        # Run them locally with: .\tests\run-e2e.ps1
+      - name: Test with coverage
+        run: >
+          dotnet test tests/AssTrack.Tests/AssTrack.Tests.csproj
+          --configuration Release
+          --no-build
+          --collect:"XPlat Code Coverage"
+          --logger "trx;LogFileName=unit-tests.trx"
+          --
+          DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=cobertura
+
+      - name: Install ReportGenerator
+        run: dotnet tool update -g dotnet-reportgenerator-globaltool
+
+      - name: Generate coverage report
+        shell: bash
+        run: |
+          REPORTS=$(find tests -type f -path "*/TestResults/*/coverage.cobertura.xml" | tr '\n' ';')
+          reportgenerator \
+            -reports:"$REPORTS" \
+            -targetdir:"coverage-report" \
+            -reporttypes:"HtmlInline;Cobertura;TextSummary;lcov" \
+            -assemblyfilters:"+AssTrack*;-*.Tests"
+          echo "COVERAGE_SUMMARY<<EOF" >> "$GITHUB_ENV"
+          cat coverage-report/Summary.txt >> "$GITHUB_ENV"
+          echo "EOF" >> "$GITHUB_ENV"
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: backend-test-results
+          path: |
+            tests/**/TestResults/**/*.trx
+            tests/**/TestResults/**/coverage.cobertura.xml
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-report
+          path: coverage-report
+
+      - name: Add coverage summary to PR
+        if: github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@v3
+        with:
+          recreate: true
+          message: |
+            ## AssTrack Coverage
+            ```
+            ${{ env.COVERAGE_SUMMARY }}
+            ```
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: coverage-report/Cobertura.xml
+          flags: backend
+          fail_ci_if_error: false
+          verbose: true
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
   frontend:
+    name: Frontend
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v6
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: 'frontend/package-lock.json'
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
 
       - name: Install
         run: npm ci --prefix frontend
@@ -46,55 +124,80 @@ jobs:
       - name: Build
         run: npm run build --prefix frontend
 
-  docker-build:
+      - name: Upload frontend dist
+        uses: actions/upload-artifact@v7
+        with:
+          name: frontend-dist
+          path: frontend/dist
+
+  docker:
+    name: Docker Images
     runs-on: ubuntu-latest
     needs: [backend, frontend]
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v6
 
       - name: Build API image
         run: docker build -f src/AssTrack.Api/Dockerfile -t asstrack-api:ci .
+
+      - name: Build bridge gateway image
+        run: docker build -f src/AssTrack.BridgeGateway/Dockerfile -t asstrack-bridge-gateway:ci .
 
       - name: Build frontend image
         run: docker build -f frontend/Dockerfile -t asstrack-frontend:ci frontend
 
   e2e:
+    name: E2E
     runs-on: ubuntu-latest
     needs: [backend, frontend]
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v6
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: '10.0.x'
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+          cache: true
+          cache-dependency-path: |
+            **/packages.lock.json
+            **/*.csproj
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: 'frontend/package-lock.json'
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
 
       - name: Restore .NET
-        run: dotnet restore
+        run: dotnet restore AssTrack.sln
 
       - name: Build solution
-        run: dotnet build --no-restore -c Release
+        run: dotnet build AssTrack.sln --configuration Release --no-restore /p:ContinuousIntegrationBuild=true
 
-      - name: Install frontend deps
+      - name: Install frontend dependencies
         run: npm ci --prefix frontend
 
-      - name: Cache Playwright browsers
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-chromium-${{ hashFiles('tests/AssTrack.E2ETests/AssTrack.E2ETests.csproj') }}
-          restore-keys: playwright-chromium-
+      - name: Install Playwright Chromium
+        run: pwsh tests/AssTrack.E2ETests/bin/Release/net10.0/playwright.ps1 install chromium
 
       - name: Run E2E tests
-        run: dotnet test tests/AssTrack.E2ETests/AssTrack.E2ETests.csproj --no-build -c Release --logger "console;verbosity=normal"
+        run: >
+          dotnet test tests/AssTrack.E2ETests/AssTrack.E2ETests.csproj
+          --configuration Release
+          --no-build
+          --logger "trx;LogFileName=e2e-tests.trx"
         env:
           E2E_BACKEND_PORT: "5099"
           E2E_FRONTEND_PORT: "5174"
+
+      - name: Upload E2E results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-test-results
+          path: tests/**/TestResults/**/*.trx

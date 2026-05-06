@@ -27,16 +27,18 @@ public class GeofenceRepository(AssTrackDbContext dbContext)
         return geofence;
     }
 
-    public async Task<Geofence?> UpdateAsync(Guid id, string name, string? description, double centerLatitude, double centerLongitude, double radiusMeters, bool? isActive, CancellationToken cancellationToken = default)
+    public async Task<Geofence?> UpdateAsync(Guid id, string name, string? description, string shapeType, double centerLatitude, double centerLongitude, double radiusMeters, string? polygonJson, bool? isActive, CancellationToken cancellationToken = default)
     {
         var geofence = await dbContext.Geofences.FindAsync([id], cancellationToken);
         if (geofence is null) return null;
 
         geofence.Name = name;
         geofence.Description = description;
+        geofence.ShapeType = shapeType;
         geofence.CenterLatitude = centerLatitude;
         geofence.CenterLongitude = centerLongitude;
         geofence.RadiusMeters = radiusMeters;
+        geofence.PolygonJson = polygonJson;
         geofence.IsActive = isActive ?? geofence.IsActive;
 
         await dbContext.SaveChangesAsync(cancellationToken);

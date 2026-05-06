@@ -7,6 +7,27 @@ function formatTimestamp(value: string) {
   return new Date(value).toLocaleString()
 }
 
+function formatRelativeTime(value: string) {
+  const diffMs = Date.now() - new Date(value).getTime()
+  const minutes = Math.floor(diffMs / 60000)
+  if (minutes < 1) return 'Just now'
+  if (minutes < 60) return `${minutes}m ago`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}h ago`
+  return `${Math.floor(hours / 24)}d ago`
+}
+
+function getObservationStatus(observation: Observation | undefined) {
+  if (!observation) return { label: 'No signal', className: 'badge-danger' }
+  const ageMs = Date.now() - new Date(observation.observedAt).getTime()
+  if (ageMs > 30 * 60 * 1000) return { label: 'Stale', className: 'badge-danger' }
+  if (ageMs > 5 * 60 * 1000) return { label: 'Aging', className: 'badge-warning' }
+  if ((observation.speedKmh ?? 0) > 0) return { label: 'Moving', className: 'badge-success' }
+  return { label: 'Online', className: 'badge-success' }
+}
+
+type AssetStatusFilter = 'all' | 'moving' | 'stale' | 'unassigned'
+
 export function AssetsPage() {
   const [assets, setAssets] = useState<Asset[]>([])
   const [observations, setObservations] = useState<Observation[]>([])
@@ -16,7 +37,10 @@ export function AssetsPage() {
   const [showAddForm, setShowAddForm] = useState(false)
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
+  const [category, setCategory] = useState('')
   const [speedThresholdKmh, setSpeedThresholdKmh] = useState<string>('')
+  const [searchTerm, setSearchTerm] = useState('')
+  const [statusFilter, setStatusFilter] = useState<AssetStatusFilter>('all')
   const [submitting, setSubmitting] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editForm, setEditForm] = useState<UpdateAssetRequest>({ name: '', description: null, category: null, speedThresholdKmh: null })
@@ -53,10 +77,12 @@ export function AssetsPage() {
       await createAsset({
         name: name.trim(),
         description: description.trim() || undefined,
+        category: category.trim() || undefined,
         speedThresholdKmh: speedValue,
       })
       setName('')
       setDescription('')
+      setCategory('')
       setSpeedThresholdKmh('')
       setShowAddForm(false)
       await load()
@@ -102,14 +128,45 @@ export function AssetsPage() {
   const metrics = useMemo(() => {
     const deviceCount = assets.reduce((total, asset) => total + asset.devices.length, 0)
     const movingCount = latestPositions.filter((p) => (p.speedKmh ?? 0) > 0).length
+    const staleCount = assets.filter((asset) => {
+      const latest = latestPositions.find((position) => asset.devices.some((device) => device.id === position.deviceId))
+      return getObservationStatus(latest).label === 'Stale' || getObservationStatus(latest).label === 'No signal'
+    }).length
 
     return [
       { label: 'Assets', value: assets.length },
       { label: 'Devices', value: deviceCount },
       { label: 'Observations', value: observations.length },
       { label: 'Moving now', value: movingCount },
+      { label: 'Needs attention', value: staleCount },
     ]
   }, [assets, observations, latestPositions])
+
+  const filteredAssets = useMemo(() => {
+    const normalizedSearch = searchTerm.trim().toLowerCase()
+
+    return assets.filter((asset) => {
+      const latest = latestPositions.find((position) => asset.devices.some((device) => device.id === position.deviceId))
+      const status = getObservationStatus(latest).label
+      const searchMatches =
+        normalizedSearch.length === 0 ||
+        asset.name.toLowerCase().includes(normalizedSearch) ||
+        (asset.description ?? '').toLowerCase().includes(normalizedSearch) ||
+        (asset.category ?? '').toLowerCase().includes(normalizedSearch) ||
+        asset.devices.some((device) =>
+          device.identifier.toLowerCase().includes(normalizedSearch) ||
+          (device.label ?? '').toLowerCase().includes(normalizedSearch),
+        )
+
+      const statusMatches =
+        statusFilter === 'all' ||
+        (statusFilter === 'moving' && status === 'Moving') ||
+        (statusFilter === 'stale' && (status === 'Stale' || status === 'No signal' || status === 'Aging')) ||
+        (statusFilter === 'unassigned' && asset.devices.length === 0)
+
+      return searchMatches && statusMatches
+    })
+  }, [assets, latestPositions, searchTerm, statusFilter])
 
   if (loading) {
     return <div className="card">Loading AssTrack data…</div>
@@ -137,16 +194,45 @@ export function AssetsPage() {
         <div className="section">
           <div className="page-header">
             <h2>Assets</h2>
-            <button className="button button-secondary" onClick={() => setShowAddForm((value) => !value)} type="button">
-              {showAddForm ? 'Cancel' : 'Add Asset'}
-            </button>
+            {isOperator && (
+              <button className="button button-secondary" onClick={() => setShowAddForm((value) => !value)} type="button">
+                {showAddForm ? 'Cancel' : 'Add Asset'}
+              </button>
+            )}
           </div>
-          {showAddForm && (
+          <div className="card toolbar">
+            <label className="field">
+              <span>Search inventory</span>
+              <input
+                onChange={(event) => setSearchTerm(event.target.value)}
+                placeholder="Asset, category, device"
+                type="search"
+                value={searchTerm}
+              />
+            </label>
+            <label className="field">
+              <span>Status</span>
+              <select onChange={(event) => setStatusFilter(event.target.value as AssetStatusFilter)} value={statusFilter}>
+                <option value="all">All assets</option>
+                <option value="moving">Moving now</option>
+                <option value="stale">Needs attention</option>
+                <option value="unassigned">Unassigned</option>
+              </select>
+            </label>
+            <div className="compact-actions">
+              <span className="muted">{filteredAssets.length} shown</span>
+            </div>
+          </div>
+          {showAddForm && isOperator && (
             <form className="card inline-form" onSubmit={handleCreateAsset}>
               <div className="field-grid">
                 <label className="field">
                   <span>Name</span>
                   <input onChange={(event) => setName(event.target.value)} required value={name} />
+                </label>
+                <label className="field">
+                  <span>Category</span>
+                  <input onChange={(event) => setCategory(event.target.value)} placeholder="Trailer, vehicle, equipment" value={category} />
                 </label>
                 <label className="field field-wide">
                   <span>Description</span>
@@ -171,13 +257,17 @@ export function AssetsPage() {
             </form>
           )}
           {assets.length === 0 && (
-            <div className="card" style={{ borderColor: 'rgba(96, 165, 250, 0.35)', backgroundColor: 'rgba(30, 58, 138, 0.25)' }}>
-              <strong style={{ display: 'block', marginBottom: '0.35rem', color: '#93c5fd' }}>No assets yet</strong>
+            <div className="notice notice-info">
+              <strong>No assets yet</strong>
               <span className="muted">Head to Settings → Demo Data to seed example fleet data and explore the UI.</span>
             </div>
           )}
           <div className="asset-grid">
-            {assets.map((asset) => (
+            {filteredAssets.map((asset) => {
+              const latest = latestPositions.find((position) => asset.devices.some((device) => device.id === position.deviceId))
+              const status = getObservationStatus(latest)
+
+              return (
               <article className="list-card" key={asset.id}>
                 {editingId === asset.id ? (
                   <div className="inline-form">
@@ -218,17 +308,41 @@ export function AssetsPage() {
                   <>
                     <header>
                       <h3>{asset.name}</h3>
-                      {asset.isSeeded && <span className="badge" style={{ backgroundColor: 'rgba(59, 130, 246, 0.25)', color: '#93c5fd', borderColor: 'rgba(96, 165, 250, 0.35)' }}>Demo</span>}
+                      {asset.isSeeded && <span className="badge badge-demo">Demo</span>}
                       <span className="badge">{asset.category ?? 'Uncategorized'}</span>
+                      <span className={`badge ${status.className}`}>{status.label}</span>
                     </header>
                     <p className="muted">{asset.description ?? 'No description provided.'}</p>
-                    <p>Devices: {asset.devices.length}</p>
-                    <p>Speed threshold: {asset.speedThresholdKmh != null ? `${asset.speedThresholdKmh} km/h` : 'Default'}</p>
-                    <p>Updated: {formatTimestamp(asset.updatedAt)}</p>
+                    <div className="asset-meta">
+                      <div className="asset-meta-row">
+                        <span>Devices</span>
+                        <strong>{asset.devices.length}</strong>
+                      </div>
+                      <div className="asset-meta-row">
+                        <span>Speed threshold</span>
+                        <strong>{asset.speedThresholdKmh != null ? `${asset.speedThresholdKmh} km/h` : 'Default'}</strong>
+                      </div>
+                      <div className="asset-meta-row">
+                        <span>Last signal</span>
+                        <strong>{latest ? formatRelativeTime(latest.observedAt) : 'Never'}</strong>
+                      </div>
+                      {latest && (
+                        <div className="asset-meta-row">
+                          <span>Position</span>
+                          <strong className="coords">{latest.latitude.toFixed(4)}, {latest.longitude.toFixed(4)}</strong>
+                        </div>
+                      )}
+                      <div className="asset-meta-row">
+                        <span>Updated</span>
+                        <strong>{formatTimestamp(asset.updatedAt)}</strong>
+                      </div>
+                    </div>
                     <div className="button-row">
-                      <button className="button button-secondary" disabled={submitting} onClick={() => startEdit(asset)} type="button">
-                        Edit
-                      </button>
+                      {isOperator && (
+                        <button className="button button-secondary" disabled={submitting} onClick={() => startEdit(asset)} type="button">
+                          Edit
+                        </button>
+                      )}
                       {isOperator && (
                         <button
                           className="button button-danger"
@@ -243,7 +357,10 @@ export function AssetsPage() {
                   </>
                 )}
               </article>
-            ))}
+            )})}
+            {assets.length > 0 && filteredAssets.length === 0 && (
+              <div className="card">No assets match the current filters.</div>
+            )}
           </div>
         </div>
       </section>

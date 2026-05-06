@@ -234,19 +234,28 @@ await this.FeatureBackgroundAsync();
 #line 19
   await testRunner.ThenAsync("the page contains \"Live Map\"", ((string)(null)), ((global::Reqnroll.Table)(null)), "Then ");
 #line hidden
+#line 20
+  await testRunner.AndAsync("the map layer controls are available", ((string)(null)), ((global::Reqnroll.Table)(null)), "And ");
+#line hidden
+#line 21
+  await testRunner.WhenAsync("I select the first map node", ((string)(null)), ((global::Reqnroll.Table)(null)), "When ");
+#line hidden
+#line 22
+  await testRunner.ThenAsync("the map node details panel is available", ((string)(null)), ((global::Reqnroll.Table)(null)), "Then ");
+#line hidden
             }
             await this.ScenarioCleanupAsync();
         }
         
-        [Xunit.SkippableFactAttribute(DisplayName="View observations list")]
+        [Xunit.SkippableFactAttribute(DisplayName="View geofence authoring controls")]
         [Xunit.TraitAttribute("FeatureTitle", "Core Flows")]
-        [Xunit.TraitAttribute("Description", "View observations list")]
-        public async global::System.Threading.Tasks.Task ViewObservationsList()
+        [Xunit.TraitAttribute("Description", "View geofence authoring controls")]
+        public async global::System.Threading.Tasks.Task ViewGeofenceAuthoringControls()
         {
             string[] tagsOfScenario = ((string[])(null));
             global::System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new global::System.Collections.Specialized.OrderedDictionary();
-            global::Reqnroll.ScenarioInfo scenarioInfo = new global::Reqnroll.ScenarioInfo("View observations list", null, tagsOfScenario, argumentsOfScenario, featureTags);
-#line 21
+            global::Reqnroll.ScenarioInfo scenarioInfo = new global::Reqnroll.ScenarioInfo("View geofence authoring controls", null, tagsOfScenario, argumentsOfScenario, featureTags);
+#line 24
 this.ScenarioInitialize(scenarioInfo);
 #line hidden
             if ((global::Reqnroll.TagHelper.ContainsIgnoreTag(scenarioInfo.CombinedTags) || global::Reqnroll.TagHelper.ContainsIgnoreTag(featureTags)))
@@ -259,13 +268,93 @@ this.ScenarioInitialize(scenarioInfo);
 #line 3
 await this.FeatureBackgroundAsync();
 #line hidden
-#line 22
+#line 25
+  await testRunner.WhenAsync("I navigate to the geofences page", ((string)(null)), ((global::Reqnroll.Table)(null)), "When ");
+#line hidden
+#line 26
+  await testRunner.ThenAsync("the page contains \"Click the map to set the center.\"", ((string)(null)), ((global::Reqnroll.Table)(null)), "Then ");
+#line hidden
+#line 27
+  await testRunner.AndAsync("the page contains \"Radius presets\"", ((string)(null)), ((global::Reqnroll.Table)(null)), "And ");
+#line hidden
+#line 28
+  await testRunner.AndAsync("the page contains \"Shape\"", ((string)(null)), ((global::Reqnroll.Table)(null)), "And ");
+#line hidden
+            }
+            await this.ScenarioCleanupAsync();
+        }
+        
+        [Xunit.SkippableFactAttribute(DisplayName="View bridge-created tracking signals")]
+        [Xunit.TraitAttribute("FeatureTitle", "Core Flows")]
+        [Xunit.TraitAttribute("Description", "View bridge-created tracking signals")]
+        public async global::System.Threading.Tasks.Task ViewBridge_CreatedTrackingSignals()
+        {
+            string[] tagsOfScenario = ((string[])(null));
+            global::System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new global::System.Collections.Specialized.OrderedDictionary();
+            global::Reqnroll.ScenarioInfo scenarioInfo = new global::Reqnroll.ScenarioInfo("View bridge-created tracking signals", null, tagsOfScenario, argumentsOfScenario, featureTags);
+#line 30
+this.ScenarioInitialize(scenarioInfo);
+#line hidden
+            if ((global::Reqnroll.TagHelper.ContainsIgnoreTag(scenarioInfo.CombinedTags) || global::Reqnroll.TagHelper.ContainsIgnoreTag(featureTags)))
+            {
+                testRunner.SkipScenario();
+            }
+            else
+            {
+                await this.ScenarioStartAsync();
+#line 3
+await this.FeatureBackgroundAsync();
+#line hidden
+#line 31
+  await testRunner.GivenAsync("an unassigned bridge device named \"E2E Meshtastic Signal\" exists via the API", ((string)(null)), ((global::Reqnroll.Table)(null)), "Given ");
+#line hidden
+#line 32
+  await testRunner.WhenAsync("I post an observation for the unassigned bridge device via the API", ((string)(null)), ((global::Reqnroll.Table)(null)), "When ");
+#line hidden
+#line 33
+  await testRunner.AndAsync("I navigate to the devices page", ((string)(null)), ((global::Reqnroll.Table)(null)), "And ");
+#line hidden
+#line 34
+  await testRunner.ThenAsync("the page contains \"Tracking signal inbox\"", ((string)(null)), ((global::Reqnroll.Table)(null)), "Then ");
+#line hidden
+#line 35
+  await testRunner.AndAsync("the page contains \"E2E Meshtastic Signal\"", ((string)(null)), ((global::Reqnroll.Table)(null)), "And ");
+#line hidden
+#line 36
+  await testRunner.AndAsync("the page contains \"Create asset\"", ((string)(null)), ((global::Reqnroll.Table)(null)), "And ");
+#line hidden
+            }
+            await this.ScenarioCleanupAsync();
+        }
+        
+        [Xunit.SkippableFactAttribute(DisplayName="View observations list")]
+        [Xunit.TraitAttribute("FeatureTitle", "Core Flows")]
+        [Xunit.TraitAttribute("Description", "View observations list")]
+        public async global::System.Threading.Tasks.Task ViewObservationsList()
+        {
+            string[] tagsOfScenario = ((string[])(null));
+            global::System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new global::System.Collections.Specialized.OrderedDictionary();
+            global::Reqnroll.ScenarioInfo scenarioInfo = new global::Reqnroll.ScenarioInfo("View observations list", null, tagsOfScenario, argumentsOfScenario, featureTags);
+#line 38
+this.ScenarioInitialize(scenarioInfo);
+#line hidden
+            if ((global::Reqnroll.TagHelper.ContainsIgnoreTag(scenarioInfo.CombinedTags) || global::Reqnroll.TagHelper.ContainsIgnoreTag(featureTags)))
+            {
+                testRunner.SkipScenario();
+            }
+            else
+            {
+                await this.ScenarioStartAsync();
+#line 3
+await this.FeatureBackgroundAsync();
+#line hidden
+#line 39
   await testRunner.WhenAsync("I post an observation for the device via the API", ((string)(null)), ((global::Reqnroll.Table)(null)), "When ");
 #line hidden
-#line 23
+#line 40
   await testRunner.AndAsync("I navigate to the assets page", ((string)(null)), ((global::Reqnroll.Table)(null)), "And ");
 #line hidden
-#line 24
+#line 41
   await testRunner.ThenAsync("the page contains \"E2E Test Asset\"", ((string)(null)), ((global::Reqnroll.Table)(null)), "Then ");
 #line hidden
             }
@@ -280,7 +369,7 @@ await this.FeatureBackgroundAsync();
             string[] tagsOfScenario = ((string[])(null));
             global::System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new global::System.Collections.Specialized.OrderedDictionary();
             global::Reqnroll.ScenarioInfo scenarioInfo = new global::Reqnroll.ScenarioInfo("View alerts with threshold", null, tagsOfScenario, argumentsOfScenario, featureTags);
-#line 26
+#line 43
 this.ScenarioInitialize(scenarioInfo);
 #line hidden
             if ((global::Reqnroll.TagHelper.ContainsIgnoreTag(scenarioInfo.CombinedTags) || global::Reqnroll.TagHelper.ContainsIgnoreTag(featureTags)))
@@ -293,13 +382,13 @@ this.ScenarioInitialize(scenarioInfo);
 #line 3
 await this.FeatureBackgroundAsync();
 #line hidden
-#line 27
+#line 44
   await testRunner.WhenAsync("I post an observation with speed 150.0 for the device via the API", ((string)(null)), ((global::Reqnroll.Table)(null)), "When ");
 #line hidden
-#line 28
+#line 45
   await testRunner.AndAsync("I navigate to the alerts page", ((string)(null)), ((global::Reqnroll.Table)(null)), "And ");
 #line hidden
-#line 29
+#line 46
   await testRunner.ThenAsync("the alerts table contains a cell with \"150.0\"", ((string)(null)), ((global::Reqnroll.Table)(null)), "Then ");
 #line hidden
             }
@@ -314,7 +403,7 @@ await this.FeatureBackgroundAsync();
             string[] tagsOfScenario = ((string[])(null));
             global::System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new global::System.Collections.Specialized.OrderedDictionary();
             global::Reqnroll.ScenarioInfo scenarioInfo = new global::Reqnroll.ScenarioInfo("Filter unacknowledged alerts", null, tagsOfScenario, argumentsOfScenario, featureTags);
-#line 31
+#line 48
 this.ScenarioInitialize(scenarioInfo);
 #line hidden
             if ((global::Reqnroll.TagHelper.ContainsIgnoreTag(scenarioInfo.CombinedTags) || global::Reqnroll.TagHelper.ContainsIgnoreTag(featureTags)))
@@ -327,13 +416,13 @@ this.ScenarioInitialize(scenarioInfo);
 #line 3
 await this.FeatureBackgroundAsync();
 #line hidden
-#line 32
+#line 49
   await testRunner.WhenAsync("I post an observation with speed 150.0 for the device via the API", ((string)(null)), ((global::Reqnroll.Table)(null)), "When ");
 #line hidden
-#line 33
+#line 50
   await testRunner.AndAsync("I navigate to the alerts page", ((string)(null)), ((global::Reqnroll.Table)(null)), "And ");
 #line hidden
-#line 34
+#line 51
   await testRunner.ThenAsync("the alerts page has filter tab \"Unacknowledged\"", ((string)(null)), ((global::Reqnroll.Table)(null)), "Then ");
 #line hidden
             }
@@ -348,7 +437,7 @@ await this.FeatureBackgroundAsync();
             string[] tagsOfScenario = ((string[])(null));
             global::System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new global::System.Collections.Specialized.OrderedDictionary();
             global::Reqnroll.ScenarioInfo scenarioInfo = new global::Reqnroll.ScenarioInfo("Bulk acknowledge alerts", null, tagsOfScenario, argumentsOfScenario, featureTags);
-#line 36
+#line 53
 this.ScenarioInitialize(scenarioInfo);
 #line hidden
             if ((global::Reqnroll.TagHelper.ContainsIgnoreTag(scenarioInfo.CombinedTags) || global::Reqnroll.TagHelper.ContainsIgnoreTag(featureTags)))
@@ -361,17 +450,66 @@ this.ScenarioInitialize(scenarioInfo);
 #line 3
 await this.FeatureBackgroundAsync();
 #line hidden
-#line 37
+#line 54
   await testRunner.WhenAsync("I post an observation with speed 150.0 for the device via the API", ((string)(null)), ((global::Reqnroll.Table)(null)), "When ");
 #line hidden
-#line 38
+#line 55
   await testRunner.AndAsync("I post an observation with speed 155.0 for the device via the API", ((string)(null)), ((global::Reqnroll.Table)(null)), "And ");
 #line hidden
-#line 39
+#line 56
   await testRunner.AndAsync("I navigate to the alerts page", ((string)(null)), ((global::Reqnroll.Table)(null)), "And ");
 #line hidden
-#line 40
+#line 57
   await testRunner.ThenAsync("the alerts page has filter tab \"Unacknowledged\"", ((string)(null)), ((global::Reqnroll.Table)(null)), "Then ");
+#line hidden
+            }
+            await this.ScenarioCleanupAsync();
+        }
+        
+        [Xunit.SkippableFactAttribute(DisplayName="Configure bridge providers from the main UI")]
+        [Xunit.TraitAttribute("FeatureTitle", "Core Flows")]
+        [Xunit.TraitAttribute("Description", "Configure bridge providers from the main UI")]
+        public async global::System.Threading.Tasks.Task ConfigureBridgeProvidersFromTheMainUI()
+        {
+            string[] tagsOfScenario = ((string[])(null));
+            global::System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new global::System.Collections.Specialized.OrderedDictionary();
+            global::Reqnroll.ScenarioInfo scenarioInfo = new global::Reqnroll.ScenarioInfo("Configure bridge providers from the main UI", null, tagsOfScenario, argumentsOfScenario, featureTags);
+#line 59
+this.ScenarioInitialize(scenarioInfo);
+#line hidden
+            if ((global::Reqnroll.TagHelper.ContainsIgnoreTag(scenarioInfo.CombinedTags) || global::Reqnroll.TagHelper.ContainsIgnoreTag(featureTags)))
+            {
+                testRunner.SkipScenario();
+            }
+            else
+            {
+                await this.ScenarioStartAsync();
+#line 3
+await this.FeatureBackgroundAsync();
+#line hidden
+#line 60
+  await testRunner.WhenAsync("I navigate to the bridge page", ((string)(null)), ((global::Reqnroll.Table)(null)), "When ");
+#line hidden
+#line 61
+  await testRunner.AndAsync("I configure bridge provider \"Meshtastic\"", ((string)(null)), ((global::Reqnroll.Table)(null)), "And ");
+#line hidden
+#line 62
+  await testRunner.ThenAsync("the bridge feed form is focused with bridge key \"meshtastic\"", ((string)(null)), ((global::Reqnroll.Table)(null)), "Then ");
+#line hidden
+#line 63
+  await testRunner.AndAsync("the Meshtastic public MQTT defaults are configured", ((string)(null)), ((global::Reqnroll.Table)(null)), "And ");
+#line hidden
+#line 64
+  await testRunner.AndAsync("the bridge checkbox \"Bridge enabled\" is compact", ((string)(null)), ((global::Reqnroll.Table)(null)), "And ");
+#line hidden
+#line 65
+  await testRunner.WhenAsync("I configure bridge provider \"Home Assistant\"", ((string)(null)), ((global::Reqnroll.Table)(null)), "When ");
+#line hidden
+#line 66
+  await testRunner.ThenAsync("the bridge feed form is focused with bridge key \"home-assistant\"", ((string)(null)), ((global::Reqnroll.Table)(null)), "Then ");
+#line hidden
+#line 67
+  await testRunner.AndAsync("the page contains \"Home Assistant location polling\"", ((string)(null)), ((global::Reqnroll.Table)(null)), "And ");
 #line hidden
             }
             await this.ScenarioCleanupAsync();

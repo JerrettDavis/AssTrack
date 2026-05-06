@@ -1,0 +1,39 @@
+name: Integration Request
+description: Request or refine a provider bridge or location data source.
+labels: [integration, triage]
+body:
+  - type: input
+    id: provider
+    attributes:
+      label: Provider
+      description: Examples include Meshtastic, Google Find Hub, Samsung SmartThings, Home Assistant, OwnTracks, Traccar, or GPS/cellular hardware.
+    validations:
+      required: true
+  - type: textarea
+    id: use-case
+    attributes:
+      label: Tracking Use Case
+      description: What assets and trackers need to be represented?
+    validations:
+      required: true
+  - type: textarea
+    id: auth
+    attributes:
+      label: Authentication and Setup
+      description: API keys, OAuth, MQTT, webhook, polling, or local-device requirements. Do not paste secrets.
+  - type: textarea
+    id: payloads
+    attributes:
+      label: Example Payloads or Docs
+      description: Link docs or paste sanitized sample payloads.
+  - type: checkboxes
+    id: capabilities
+    attributes:
+      label: Desired Capabilities
+      options:
+        - label: Auto-create devices from signals
+        - label: Attach multiple trackers to one asset
+        - label: Live observation logs
+        - label: Manual resync
+        - label: Health/status monitoring
+        - label: Bidirectional commands or downlink

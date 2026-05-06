@@ -38,4 +38,17 @@ public class ObservationSteps
         };
         await _context.ApiClient.CreateObservationAsync(data);
     }
+
+    [When(@"I post an observation for the unassigned bridge device via the API")]
+    public async Task WhenIPostAnObservationForTheUnassignedBridgeDeviceViaTheAPI()
+    {
+        var data = new Dictionary<string, object>
+        {
+            ["deviceId"] = _context.UnassignedDeviceId ?? throw new InvalidOperationException("UnassignedDeviceId not set"),
+            ["observedAt"] = DateTime.UtcNow.ToString("o"),
+            ["latitude"] = 36.0594826,
+            ["longitude"] = -95.8973805
+        };
+        await _context.ApiClient.CreateObservationAsync(data);
+    }
 }

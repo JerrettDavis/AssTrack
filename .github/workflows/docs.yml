@@ -1,0 +1,81 @@
+name: Docs
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - docs/**
+      - README.md
+      - .github/workflows/docs.yml
+  pull_request:
+    branches: [main, master]
+    paths:
+      - docs/**
+      - README.md
+      - .github/workflows/docs.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build DocFX
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Install DocFX
+        run: dotnet tool update -g docfx
+
+      - name: Build documentation
+        run: docfx docs/docfx.json
+
+      - name: Verify generated site
+        shell: bash
+        run: |
+          test -d docs/_site
+          HTML_COUNT=$(find docs/_site -name "*.html" | wc -l)
+          if [ "$HTML_COUNT" -lt 1 ]; then
+            echo "::error::DocFX did not generate any HTML pages."
+            exit 1
+          fi
+          echo "::notice::DocFX generated $HTML_COUNT pages."
+
+      - name: Upload documentation preview
+        uses: actions/upload-artifact@v7
+        with:
+          name: docfx-site
+          path: docs/_site
+
+      - name: Upload Pages artifact
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: docs/_site
+
+  deploy:
+    name: Deploy Docs
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

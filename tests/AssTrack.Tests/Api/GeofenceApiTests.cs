@@ -20,6 +20,7 @@ public class GeofenceApiTests : IClassFixture<TestWebApplicationFactory>
         {
             name = "Test Geofence",
             description = "A test geofence",
+            shapeType = "circle",
             centerLatitude = 37.7749,
             centerLongitude = -122.4194,
             radiusMeters = 500.0,
@@ -27,6 +28,55 @@ public class GeofenceApiTests : IClassFixture<TestWebApplicationFactory>
         };
         var response = await _client.PostAsJsonAsync("/api/geofences", request);
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task CreateGeofence_Polygon_Returns201()
+    {
+        var request = new
+        {
+            name = "Freeform Yard",
+            description = "A polygon geofence",
+            shapeType = "polygon",
+            centerLatitude = 0,
+            centerLongitude = 0,
+            radiusMeters = 0,
+            polygonCoordinates = new[]
+            {
+                new { latitude = 36.0, longitude = -96.0 },
+                new { latitude = 36.2, longitude = -96.0 },
+                new { latitude = 36.2, longitude = -95.7 },
+                new { latitude = 36.0, longitude = -95.7 }
+            },
+            isActive = true
+        };
+        var response = await _client.PostAsJsonAsync("/api/geofences", request);
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+
+        var created = await response.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+        Assert.Equal("polygon", created.GetProperty("shapeType").GetString());
+        Assert.Equal(4, created.GetProperty("polygonCoordinates").GetArrayLength());
+    }
+
+    [Fact]
+    public async Task CreateGeofence_PolygonWithTooFewPoints_Returns422()
+    {
+        var request = new
+        {
+            name = "Bad Polygon",
+            shapeType = "polygon",
+            centerLatitude = 0,
+            centerLongitude = 0,
+            radiusMeters = 0,
+            polygonCoordinates = new[]
+            {
+                new { latitude = 36.0, longitude = -96.0 },
+                new { latitude = 36.2, longitude = -96.0 }
+            },
+            isActive = true
+        };
+        var response = await _client.PostAsJsonAsync("/api/geofences", request);
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
     }
 
     [Fact]

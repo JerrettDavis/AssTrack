@@ -17,6 +17,23 @@ Scenario: View live map
   When I post an observation for the device via the API
   And I navigate to the map page
   Then the page contains "Live Map"
+  And the map layer controls are available
+  When I select the first map node
+  Then the map node details panel is available
+
+Scenario: View geofence authoring controls
+  When I navigate to the geofences page
+  Then the page contains "Click the map to set the center."
+  And the page contains "Radius presets"
+  And the page contains "Shape"
+
+Scenario: View bridge-created tracking signals
+  Given an unassigned bridge device named "E2E Meshtastic Signal" exists via the API
+  When I post an observation for the unassigned bridge device via the API
+  And I navigate to the devices page
+  Then the page contains "Tracking signal inbox"
+  And the page contains "E2E Meshtastic Signal"
+  And the page contains "Create asset"
 
 Scenario: View observations list
   When I post an observation for the device via the API
@@ -38,3 +55,13 @@ Scenario: Bulk acknowledge alerts
   And I post an observation with speed 155.0 for the device via the API
   And I navigate to the alerts page
   Then the alerts page has filter tab "Unacknowledged"
+
+Scenario: Configure bridge providers from the main UI
+  When I navigate to the bridge page
+  And I configure bridge provider "Meshtastic"
+  Then the bridge feed form is focused with bridge key "meshtastic"
+  And the Meshtastic public MQTT defaults are configured
+  And the bridge checkbox "Bridge enabled" is compact
+  When I configure bridge provider "Home Assistant"
+  Then the bridge feed form is focused with bridge key "home-assistant"
+  And the page contains "Home Assistant location polling"

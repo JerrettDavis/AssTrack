@@ -34,5 +34,50 @@ services:
     depends_on:
       - api
 
+  bridge-gateway:
+    profiles: ["integrations"]
+    build:
+      context: .
+      dockerfile: src/AssTrack.BridgeGateway/Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      BridgeGateway__AssTrackBaseUrl: "http://api:8080"
+      BridgeGateway__IngestApiKey: ${ASSTRACK_BRIDGE_INGEST_API_KEY:-}
+      BridgeGateway__DryRun: ${ASSTRACK_BRIDGE_DRY_RUN:-false}
+      # Example generic feed. Create the feed in AssTrack first, then set these values in .env.
+      BridgeGateway__Feeds__generic__Enabled: ${ASSTRACK_BRIDGE_GENERIC_ENABLED:-false}
+      BridgeGateway__Feeds__generic__FeedId: ${ASSTRACK_BRIDGE_GENERIC_FEED_ID:-00000000-0000-0000-0000-000000000000}
+      BridgeGateway__Feeds__generic__Provider: "generic-webhook"
+      BridgeGateway__Feeds__generic__SharedSecret: ${ASSTRACK_BRIDGE_GENERIC_SECRET:-}
+      BridgeGateway__Feeds__generic__DefaultTags: "bridge, generic"
+      # Example Meshtastic webhook/MQTT-adapter feed.
+      BridgeGateway__Feeds__meshtastic__Enabled: ${ASSTRACK_BRIDGE_MESHTASTIC_ENABLED:-false}
+      BridgeGateway__Feeds__meshtastic__FeedId: ${ASSTRACK_BRIDGE_MESHTASTIC_FEED_ID:-00000000-0000-0000-0000-000000000000}
+      BridgeGateway__Feeds__meshtastic__Provider: "meshtastic"
+      BridgeGateway__Feeds__meshtastic__SharedSecret: ${ASSTRACK_BRIDGE_MESHTASTIC_SECRET:-}
+      BridgeGateway__Feeds__meshtastic__DefaultTags: "bridge, meshtastic, lora"
+      # Example OwnTracks feed.
+      BridgeGateway__Feeds__owntracks__Enabled: ${ASSTRACK_BRIDGE_OWNTRACKS_ENABLED:-false}
+      BridgeGateway__Feeds__owntracks__FeedId: ${ASSTRACK_BRIDGE_OWNTRACKS_FEED_ID:-00000000-0000-0000-0000-000000000000}
+      BridgeGateway__Feeds__owntracks__Provider: "owntracks"
+      BridgeGateway__Feeds__owntracks__SharedSecret: ${ASSTRACK_BRIDGE_OWNTRACKS_SECRET:-}
+      BridgeGateway__Feeds__owntracks__DefaultTags: "bridge, owntracks, phone"
+      # Example Traccar feed.
+      BridgeGateway__Feeds__traccar__Enabled: ${ASSTRACK_BRIDGE_TRACCAR_ENABLED:-false}
+      BridgeGateway__Feeds__traccar__FeedId: ${ASSTRACK_BRIDGE_TRACCAR_FEED_ID:-00000000-0000-0000-0000-000000000000}
+      BridgeGateway__Feeds__traccar__Provider: "traccar"
+      BridgeGateway__Feeds__traccar__SharedSecret: ${ASSTRACK_BRIDGE_TRACCAR_SECRET:-}
+      BridgeGateway__Feeds__traccar__DefaultTags: "bridge, traccar, gps"
+    ports:
+      - "5056:8080"
+    depends_on:
+      - api
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/healthz || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
 volumes:
   asstrack-data:

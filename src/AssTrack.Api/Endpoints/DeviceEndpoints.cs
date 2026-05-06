@@ -69,6 +69,10 @@ public static class DeviceEndpoints
                 Identifier = request.Identifier.Trim(),
                 Label = request.Label,
                 Protocol = string.IsNullOrWhiteSpace(request.Protocol) ? "https" : request.Protocol.Trim().ToLowerInvariant(),
+                Provider = string.IsNullOrWhiteSpace(request.Provider) ? "manual" : request.Provider.Trim().ToLowerInvariant(),
+                ExternalId = string.IsNullOrWhiteSpace(request.ExternalId) ? null : request.ExternalId.Trim(),
+                Tags = string.IsNullOrWhiteSpace(request.Tags) ? null : request.Tags.Trim(),
+                IntegrationFeedId = request.IntegrationFeedId,
                 AssetId = request.AssetId,
                 CreatedAt = DateTime.UtcNow
             };
@@ -84,7 +88,7 @@ public static class DeviceEndpoints
                 return Results.ValidationProblem(new Dictionary<string, string[]> { ["identifier"] = ["Identifier is required."] });
             }
 
-            var updated = await repository.UpdateAsync(id, request.Identifier.Trim(), request.Label, request.Protocol, request.AssetId, cancellationToken);
+            var updated = await repository.UpdateAsync(id, request.Identifier.Trim(), request.Label, request.Protocol, request.AssetId, request.Provider, request.ExternalId, request.Tags, request.IntegrationFeedId, cancellationToken);
             return updated is null ? Results.NotFound() : Results.Ok(Map(updated));
         }).RequireAuthorization("Operator");
 
@@ -105,6 +109,11 @@ public static class DeviceEndpoints
         device.CreatedAt,
         device.AssetId,
         device.Asset?.Name,
-        device.IsSeeded);
+        device.IsSeeded,
+        device.Provider,
+        device.ExternalId,
+        device.Tags,
+        device.IntegrationFeedId,
+        device.IntegrationFeed?.Name);
 }
 

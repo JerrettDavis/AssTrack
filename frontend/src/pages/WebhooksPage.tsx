@@ -4,16 +4,6 @@ import { useIdentityContext } from '../context/IdentityContext'
 
 export default function WebhooksPage() {
   const { isOperator, loading: identityLoading } = useIdentityContext()
-
-  if (!isOperator && !identityLoading) {
-    return (
-      <div className="card">
-        <h1>Webhooks</h1>
-        <p className="muted">Webhook management is only accessible to operator keys.</p>
-      </div>
-    )
-  }
-
   const [status, setStatus] = useState<WebhookStatus | null>(null)
   const [deliveries, setDeliveries] = useState<WebhookDeliveryLog[]>([])
   const [deliveriesTotal, setDeliveriesTotal] = useState(0)
@@ -45,6 +35,7 @@ export default function WebhooksPage() {
   }
 
   useEffect(() => {
+    if (identityLoading || !isOperator) return
     void load()
     pollRef.current = window.setInterval(() => {
       void load()
@@ -55,7 +46,7 @@ export default function WebhooksPage() {
         window.clearInterval(pollRef.current)
       }
     }
-  }, [deliveriesPage])
+  }, [deliveriesPage, identityLoading, isOperator])
 
   async function handleFireTest() {
     setTestLoading(true)
@@ -71,7 +62,16 @@ export default function WebhooksPage() {
     }
   }
 
-  if (loading) return <div className="card">Loading webhook status…</div>
+  if (!isOperator && !identityLoading) {
+    return (
+      <div className="card">
+        <h1>Webhooks</h1>
+        <p className="muted">Webhook management is only accessible to operator keys.</p>
+      </div>
+    )
+  }
+
+  if (loading || identityLoading) return <div className="card">Loading webhook status…</div>
   if (error) return <div className="card">Error: {error}</div>
 
   const notConfigured = !status?.configured
@@ -84,7 +84,7 @@ export default function WebhooksPage() {
       </div>
 
       <div className="card">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+        <div className="page-header">
           <h2>Webhook Status</h2>
           <button className="button button-secondary" onClick={() => void load()} type="button">
             Refresh
@@ -92,53 +92,66 @@ export default function WebhooksPage() {
         </div>
 
         {notConfigured ? (
-          <div style={{ padding: '1rem', backgroundColor: '#f5f5f5', borderRadius: '4px', color: '#666' }}>
-            <p>No webhook URL configured in server settings</p>
+          <div className="notice notice-warning">
+            <strong>No webhook URL configured</strong>
+            <p className="muted">Alert delivery is paused until server webhook settings include a target URL.</p>
           </div>
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
-            <div style={{ padding: '1rem', backgroundColor: '#f9f9f9', borderRadius: '4px' }}>
-              <div style={{ fontSize: '0.9rem', color: '#666', marginBottom: '0.5rem' }}>Status</div>
-              <div style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>
-                {status?.configured ? '✓ Configured' : '✗ Not Configured'}
-              </div>
+          <div className="panel-grid">
+            <div className="status-tile">
+              <span className="muted">Status</span>
+              <span className={`badge ${status?.configured ? 'badge-success' : 'badge-danger'}`}>
+                {status?.configured ? 'Configured' : 'Not configured'}
+              </span>
             </div>
-            <div style={{ padding: '1rem', backgroundColor: '#f9f9f9', borderRadius: '4px' }}>
-              <div style={{ fontSize: '0.9rem', color: '#666', marginBottom: '0.5rem' }}>Last 24h Deliveries</div>
-              <div style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>{status?.last24hDeliveries ?? 0}</div>
+            <div className="status-tile">
+              <span className="muted">Last 24h Deliveries</span>
+              <strong>{status?.last24hDeliveries ?? 0}</strong>
             </div>
-            <div style={{ padding: '1rem', backgroundColor: '#f9f9f9', borderRadius: '4px' }}>
-              <div style={{ fontSize: '0.9rem', color: '#666', marginBottom: '0.5rem' }}>Last 24h Failures</div>
-              <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: status?.last24hFailures && status.last24hFailures > 0 ? '#d9534f' : '#5cb85c' }}>
+            <div className="status-tile">
+              <span className="muted">Last 24h Failures</span>
+              <strong className={status?.last24hFailures && status.last24hFailures > 0 ? 'error-text' : undefined}>
                 {status?.last24hFailures ?? 0}
-              </div>
+              </strong>
             </div>
-            <div style={{ padding: '1rem', backgroundColor: '#f9f9f9', borderRadius: '4px' }}>
-              <div style={{ fontSize: '0.9rem', color: '#666', marginBottom: '0.5rem' }}>Last Delivered</div>
-              <div style={{ fontSize: '1rem', fontWeight: 'bold' }}>
+            <div className="status-tile">
+              <span className="muted">Last Delivered</span>
+              <strong>
                 {status?.lastDeliveredAt ? new Date(status.lastDeliveredAt).toLocaleString() : '—'}
-              </div>
+              </strong>
             </div>
-            <div style={{ padding: '1rem', backgroundColor: '#f9f9f9', borderRadius: '4px' }}>
-              <div style={{ fontSize: '0.9rem', color: '#666', marginBottom: '0.5rem' }}>Avg Duration</div>
-              <div style={{ fontSize: '1rem', fontWeight: 'bold' }}>
+            <div className="status-tile">
+              <span className="muted">Avg Duration</span>
+              <strong>
                 {status?.avgDurationMs != null ? `${status.avgDurationMs.toFixed(0)}ms` : '—'}
-              </div>
+              </strong>
+            </div>
+            <div className="status-tile">
+              <span className="muted">Retry Queue</span>
+              <strong>{status?.retryQueueDepth ?? 0}</strong>
+            </div>
+            <div className="status-tile">
+              <span className="muted">Signing</span>
+              <span className={`badge ${status?.signingEnabled ? 'badge-success' : 'badge-warning'}`}>
+                {status?.signingEnabled ? 'Enabled' : 'Disabled'}
+              </span>
             </div>
           </div>
         )}
 
-        <div style={{ marginTop: '1.5rem', paddingTop: '1.5rem', borderTop: '1px solid #eee' }}>
+        <div className="status-tile">
           <h3>Test Webhook</h3>
-          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginTop: '1rem' }}>
-            <select
-              value={selectedEventType}
-              onChange={(e) => setSelectedEventType(e.target.value as 'speed_alert' | 'geofence_breach')}
-              style={{ padding: '0.5rem', borderRadius: '4px', border: '1px solid #ddd' }}
-            >
-              <option value="speed_alert">Speed Alert</option>
-              <option value="geofence_breach">Geofence Breach</option>
-            </select>
+          <div className="compact-actions">
+            <label className="field">
+              <span>Event type</span>
+              <select
+                value={selectedEventType}
+                onChange={(e) => setSelectedEventType(e.target.value as 'speed_alert' | 'geofence_breach')}
+              >
+                <option value="speed_alert">Speed Alert</option>
+                <option value="geofence_breach">Geofence Breach</option>
+              </select>
+            </label>
             <button
               className="button button-primary"
               onClick={() => void handleFireTest()}
@@ -149,7 +162,7 @@ export default function WebhooksPage() {
             </button>
           </div>
           {testResult && (
-            <div style={{ marginTop: '1rem', padding: '0.75rem', backgroundColor: '#f5f5f5', borderRadius: '4px', fontSize: '0.9rem' }}>
+            <div className={`notice ${testResult.startsWith('Error:') ? 'notice-danger' : 'notice-success'}`}>
               {testResult}
             </div>
           )}
@@ -167,6 +180,8 @@ export default function WebhooksPage() {
                 <th>Target URL</th>
                 <th>Success</th>
                 <th>Status Code</th>
+                <th>Attempt</th>
+                <th>Correlation</th>
                 <th>Duration (ms)</th>
                 <th>Error Message</th>
               </tr>
@@ -176,31 +191,37 @@ export default function WebhooksPage() {
                 <tr key={delivery.id}>
                   <td>{new Date(delivery.attemptedAt).toLocaleString()}</td>
                   <td>{delivery.eventType}</td>
-                  <td style={{ maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={delivery.targetUrl}>
+                  <td className="truncate-cell" title={delivery.targetUrl}>
                     {delivery.targetUrl.length > 40 ? delivery.targetUrl.substring(0, 40) + '…' : delivery.targetUrl}
                   </td>
-                  <td>{delivery.success ? '✓' : '✗'}</td>
+                  <td>
+                    <span className={`badge ${delivery.success ? 'badge-success' : 'badge-danger'}`}>
+                      {delivery.success ? 'Success' : 'Failed'}
+                    </span>
+                  </td>
                   <td>{delivery.httpStatusCode ?? '—'}</td>
+                  <td>{delivery.attemptNumber ?? '—'}</td>
+                  <td className="coords">{delivery.correlationId ?? '—'}</td>
                   <td>{delivery.durationMs}</td>
-                  <td style={{ color: delivery.errorMessage ? '#d9534f' : '#ccc' }}>
+                  <td className={delivery.errorMessage ? 'error-text' : 'muted'}>
                     {delivery.errorMessage ? delivery.errorMessage.substring(0, 50) + (delivery.errorMessage.length > 50 ? '…' : '') : '—'}
                   </td>
                 </tr>
               ))}
               {deliveries.length === 0 && (
                 <tr>
-                  <td className="muted" colSpan={7}>
+                  <td className="muted" colSpan={9}>
                     No delivery logs available.
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
-          <div style={{ marginTop: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div className="table-actions">
             <span className="muted">
               Page {deliveriesPage} of {Math.ceil(deliveriesTotal / 20) || 1} (Total: {deliveriesTotal})
             </span>
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <div className="compact-actions">
               <button
                 className="button button-secondary"
                 onClick={() => setDeliveriesPage(Math.max(1, deliveriesPage - 1))}

@@ -276,6 +276,51 @@ public class GeofenceBreachTests : IClassFixture<TestWebApplicationFactory>
     }
 
     [Fact]
+    public async Task PostObservationInsidePolygonGeofence_Creates_GeofenceBreach()
+    {
+        await _factory.ResetDatabaseAsync();
+
+        Guid deviceId;
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AssTrackDbContext>();
+            var device = new Device { Identifier = "geo-poly-001" };
+            var geofence = new Geofence
+            {
+                Name = "Polygon Zone",
+                ShapeType = "polygon",
+                CenterLatitude = 36.1,
+                CenterLongitude = -95.85,
+                RadiusMeters = 0,
+                PolygonJson = """
+                    [
+                      { "latitude": 36.0, "longitude": -96.0 },
+                      { "latitude": 36.2, "longitude": -96.0 },
+                      { "latitude": 36.2, "longitude": -95.7 },
+                      { "latitude": 36.0, "longitude": -95.7 }
+                    ]
+                    """,
+                IsActive = true
+            };
+            db.Devices.Add(device);
+            db.Geofences.Add(geofence);
+            await db.SaveChangesAsync();
+            deviceId = device.Id;
+        }
+
+        using var client = _factory.CreateAuthenticatedClient();
+        var request = new CreateObservationRequest(deviceId, DateTime.UtcNow, 36.05, -95.9, null, null, 50, null, null);
+        var response = await client.PostAsJsonAsync("/api/observations", request);
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+
+        using var verifyScope = _factory.Services.CreateScope();
+        var verifyDb = verifyScope.ServiceProvider.GetRequiredService<AssTrackDbContext>();
+        var breaches = await verifyDb.GeofenceBreaches.ToListAsync();
+        breaches.Should().ContainSingle();
+        breaches[0].DeviceId.Should().Be(deviceId);
+    }
+
+    [Fact]
     public async Task GetGeofenceBreachesCsv_WithFilter_ReturnsCsv()
     {
         await _factory.ResetDatabaseAsync();

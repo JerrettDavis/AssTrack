@@ -35,6 +35,7 @@ namespace AssTrack.Infrastructure.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<bool>("IsSeeded")
+                        .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER")
                         .HasDefaultValue(false);
 
@@ -66,12 +67,20 @@ namespace AssTrack.Infrastructure.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("ExternalId")
+                        .HasMaxLength(300)
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Identifier")
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid?>("IntegrationFeedId")
+                        .HasColumnType("TEXT");
+
                     b.Property<bool>("IsSeeded")
+                        .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER")
                         .HasDefaultValue(false);
 
@@ -84,12 +93,25 @@ namespace AssTrack.Infrastructure.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(80)
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue("manual");
+
+                    b.Property<string>("Tags")
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
 
                     b.HasIndex("AssetId");
 
                     b.HasIndex("Identifier")
                         .IsUnique();
+
+                    b.HasIndex("IntegrationFeedId", "ExternalId");
 
                     b.ToTable("Devices");
                 });
@@ -141,6 +163,7 @@ namespace AssTrack.Infrastructure.Migrations
                         .HasColumnType("INTEGER");
 
                     b.Property<bool>("IsSeeded")
+                        .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER")
                         .HasDefaultValue(false);
 
@@ -149,8 +172,18 @@ namespace AssTrack.Infrastructure.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("PolygonJson")
+                        .HasColumnType("TEXT");
+
                     b.Property<double>("RadiusMeters")
                         .HasColumnType("REAL");
+
+                    b.Property<string>("ShapeType")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue("circle");
 
                     b.HasKey("Id");
 
@@ -200,6 +233,48 @@ namespace AssTrack.Infrastructure.Migrations
                     b.HasIndex("DeviceId", "DetectedAt");
 
                     b.ToTable("GeofenceBreaches");
+                });
+
+            modelBuilder.Entity("AssTrack.Domain.Models.IntegrationFeed", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("AutoCreateDevices")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ConfigurationJson")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DefaultTags")
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("IsEnabled")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Provider");
+
+                    b.ToTable("IntegrationFeeds");
                 });
 
             modelBuilder.Entity("AssTrack.Domain.Models.Observation", b =>
@@ -305,6 +380,7 @@ namespace AssTrack.Infrastructure.Migrations
 
                     b.Property<string>("CorrelationId")
                         .IsRequired()
+                        .ValueGeneratedOnAdd()
                         .HasMaxLength(50)
                         .HasColumnType("TEXT")
                         .HasDefaultValue("");
@@ -354,7 +430,14 @@ namespace AssTrack.Infrastructure.Migrations
                         .HasForeignKey("AssetId")
                         .OnDelete(DeleteBehavior.SetNull);
 
+                    b.HasOne("AssTrack.Domain.Models.IntegrationFeed", "IntegrationFeed")
+                        .WithMany("Devices")
+                        .HasForeignKey("IntegrationFeedId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.Navigation("Asset");
+
+                    b.Navigation("IntegrationFeed");
                 });
 
             modelBuilder.Entity("AssTrack.Domain.Models.DeviceGeofenceState", b =>
@@ -455,6 +538,11 @@ namespace AssTrack.Infrastructure.Migrations
             modelBuilder.Entity("AssTrack.Domain.Models.Device", b =>
                 {
                     b.Navigation("Observations");
+                });
+
+            modelBuilder.Entity("AssTrack.Domain.Models.IntegrationFeed", b =>
+                {
+                    b.Navigation("Devices");
                 });
 #pragma warning restore 612, 618
         }

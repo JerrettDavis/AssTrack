@@ -13,6 +13,7 @@ public class AssTrackDbContext(DbContextOptions<AssTrackDbContext> options) : Db
     public DbSet<GeofenceBreach> GeofenceBreaches => Set<GeofenceBreach>();
     public DbSet<DeviceGeofenceState> DeviceGeofenceStates => Set<DeviceGeofenceState>();
     public DbSet<WebhookDeliveryLog> WebhookDeliveryLogs => Set<WebhookDeliveryLog>();
+    public DbSet<IntegrationFeed> IntegrationFeeds => Set<IntegrationFeed>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -32,12 +33,30 @@ public class AssTrackDbContext(DbContextOptions<AssTrackDbContext> options) : Db
             entity.Property(x => x.Identifier).IsRequired().HasMaxLength(200);
             entity.Property(x => x.Label).HasMaxLength(200);
             entity.Property(x => x.Protocol).IsRequired().HasMaxLength(20);
+            entity.Property(x => x.Provider).IsRequired().HasMaxLength(80).HasDefaultValue("manual");
+            entity.Property(x => x.ExternalId).HasMaxLength(300);
+            entity.Property(x => x.Tags).HasMaxLength(500);
             entity.Property(x => x.IsSeeded).HasDefaultValue(false);
             entity.HasIndex(x => x.Identifier).IsUnique();
+            entity.HasIndex(x => new { x.IntegrationFeedId, x.ExternalId });
             entity.HasOne(x => x.Asset)
                 .WithMany(x => x.Devices)
                 .HasForeignKey(x => x.AssetId)
                 .OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(x => x.IntegrationFeed)
+                .WithMany(x => x.Devices)
+                .HasForeignKey(x => x.IntegrationFeedId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<IntegrationFeed>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Name).IsRequired().HasMaxLength(200);
+            entity.Property(x => x.Provider).IsRequired().HasMaxLength(80);
+            entity.Property(x => x.DefaultTags).HasMaxLength(500);
+            entity.Property(x => x.ConfigurationJson).HasColumnType("TEXT");
+            entity.HasIndex(x => x.Provider);
         });
 
         modelBuilder.Entity<Observation>(entity =>
@@ -57,6 +76,8 @@ public class AssTrackDbContext(DbContextOptions<AssTrackDbContext> options) : Db
             entity.HasKey(x => x.Id);
             entity.Property(x => x.Name).IsRequired().HasMaxLength(200);
             entity.Property(x => x.Description).HasMaxLength(2000);
+            entity.Property(x => x.ShapeType).IsRequired().HasMaxLength(32).HasDefaultValue("circle");
+            entity.Property(x => x.PolygonJson).HasColumnType("TEXT");
             entity.Property(x => x.IsSeeded).HasDefaultValue(false);
         });
 

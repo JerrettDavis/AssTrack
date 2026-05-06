@@ -1,7 +1,9 @@
-import { useEffect, useState, type CSSProperties } from 'react'
+import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { apiPost } from '../api/client'
 import { getSystemStatus, seedDemoData, type SeedResult, type SystemStatus } from '../api/system'
 import { useIdentityContext } from '../context/IdentityContext'
+import { useAppearance, type ColorMode, type ThemeStyle } from '../context/AppearanceContext'
 
 interface SimulateResult {
   observationsCreated: number
@@ -15,30 +17,23 @@ interface SimulateResult {
 
 type SimulationPreset = 'NormalRoute' | 'SpeedViolation' | 'GeofenceEntryExit'
 
-const badgeStyle = (enabled: boolean): CSSProperties => ({
-  display: 'inline-flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  padding: '0.2rem 0.6rem',
-  borderRadius: '999px',
-  fontSize: '0.85rem',
-  fontWeight: 700,
-  color: enabled ? '#dcfce7' : '#fee2e2',
-  backgroundColor: enabled ? 'rgba(22, 163, 74, 0.2)' : 'rgba(220, 38, 38, 0.2)',
-  border: `1px solid ${enabled ? 'rgba(34, 197, 94, 0.35)' : 'rgba(248, 113, 113, 0.35)'}`,
-})
+const themeOptions: Array<{ value: ThemeStyle; label: string; description: string }> = [
+  { value: 'modern', label: 'Modern', description: 'Balanced spacing, soft surfaces, and operational color cues.' },
+  { value: 'classic', label: 'Classic', description: 'Warmer surfaces, stronger borders, and a more traditional console feel.' },
+  { value: 'condensed', label: 'Condensed', description: 'Higher-density tables and controls for monitoring large fleets.' },
+  { value: 'minimal', label: 'Minimal', description: 'Reduced shadows and quieter chrome for low-distraction work.' },
+  { value: 'contrast', label: 'Contrast', description: 'Stronger color separation and borders for fast scanning.' },
+]
 
-const tileStyle: CSSProperties = {
-  padding: '1rem',
-  backgroundColor: 'rgba(30, 41, 59, 0.7)',
-  borderRadius: '12px',
-  border: '1px solid rgba(148, 163, 184, 0.15)',
-  display: 'grid',
-  gap: '0.6rem',
-}
+const colorModeOptions: Array<{ value: ColorMode; label: string }> = [
+  { value: 'system', label: 'System' },
+  { value: 'light', label: 'Light' },
+  { value: 'dark', label: 'Dark' },
+]
 
 export default function SettingsPage() {
   const { isOperator, loading: identityLoading } = useIdentityContext()
+  const { colorMode, effectiveColorMode, themeStyle, setColorMode, setThemeStyle } = useAppearance()
   const [status, setStatus] = useState<SystemStatus | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -51,15 +46,6 @@ export default function SettingsPage() {
   const [seedResult, setSeedResult] = useState<SeedResult | null>(null)
   const [seedError, setSeedError] = useState<string | null>(null)
   const [seedLoading, setSeedLoading] = useState(false)
-
-  if (!isOperator && !identityLoading) {
-    return (
-      <div className="card">
-        <h1>Settings</h1>
-        <p className="muted">Settings are only accessible to operator keys.</p>
-      </div>
-    )
-  }
 
   async function loadStatus() {
     try {
@@ -75,8 +61,9 @@ export default function SettingsPage() {
   }
 
   useEffect(() => {
+    if (identityLoading || !isOperator) return
     void loadStatus()
-  }, [])
+  }, [identityLoading, isOperator])
 
   async function handleRunSimulation() {
     try {
@@ -109,94 +96,193 @@ export default function SettingsPage() {
     }
   }
 
-  if (loading) {
-    return <div className="card">Loading settings…</div>
-  }
-
-  if (error || !status) {
-    return (
-      <div className="section">
-        <div className="card">
-          <h1 style={{ marginTop: 0 }}>Settings</h1>
-          <p style={{ color: '#fca5a5' }}>Error: {error ?? 'Unable to load system status.'}</p>
-          <button className="button button-secondary" type="button" onClick={() => void loadStatus()}>
-            Retry
-          </button>
-        </div>
-      </div>
-    )
-  }
+  const showOperatorSettings = isOperator && !identityLoading && !loading && status !== null && error === null
 
   return (
     <div className="section">
       <div className="page-header">
         <div>
-          <h1 style={{ margin: 0 }}>Settings</h1>
-          <p className="muted" style={{ margin: '0.35rem 0 0' }}>
-            System status, safe configuration visibility, and simulation tooling.
+          <h1>Settings</h1>
+          <p className="muted">
+            Appearance, system status, safe configuration visibility, and simulation tooling.
           </p>
         </div>
-        <div style={{ display: 'grid', gap: '0.35rem', justifyItems: 'end' }}>
-          <span className="muted">Last updated: {lastUpdated ?? '—'}</span>
-          <button className="button button-secondary" type="button" onClick={() => void loadStatus()}>
-            Refresh
-          </button>
+        {isOperator && (
+          <div className="compact-actions">
+            <span className="muted">Last updated: {lastUpdated ?? '—'}</span>
+            <button className="button button-secondary" type="button" onClick={() => void loadStatus()}>
+              Refresh
+            </button>
+          </div>
+        )}
+      </div>
+
+      <div className="card">
+        <div className="page-header">
+          <div>
+            <h2>Appearance</h2>
+            <p className="muted">
+              Current mode: {effectiveColorMode}. Your choices are saved on this device.
+            </p>
+          </div>
+        </div>
+
+        <div className="field-grid">
+          <label className="field">
+            <span>Color mode</span>
+            <select onChange={(event) => setColorMode(event.target.value as ColorMode)} value={colorMode}>
+              {colorModeOptions.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+          </label>
+          <label className="field">
+            <span>Theme</span>
+            <select onChange={(event) => setThemeStyle(event.target.value as ThemeStyle)} value={themeStyle}>
+              {themeOptions.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        <div className="theme-grid">
+          {themeOptions.map((option) => (
+            <button
+              className={`theme-option${themeStyle === option.value ? ' active' : ''}`}
+              key={option.value}
+              onClick={() => setThemeStyle(option.value)}
+              type="button"
+            >
+              <span className={`theme-preview theme-preview-${option.value}`}>
+                <span />
+                <span />
+                <span />
+              </span>
+              <strong>{option.label}</strong>
+              <span className="muted">{option.description}</span>
+            </button>
+          ))}
+        </div>
+
+        <div className="segmented-control" aria-label="Color mode">
+          {colorModeOptions.map((option) => (
+            <button
+              className={colorMode === option.value ? 'active' : ''}
+              key={option.value}
+              onClick={() => setColorMode(option.value)}
+              type="button"
+            >
+              {option.label}
+            </button>
+          ))}
         </div>
       </div>
 
+      {!isOperator && !identityLoading && (
+        <div className="notice notice-info">
+          <strong>Viewer settings</strong>
+          <span className="muted">System operations, simulation, and demo data tools require an operator key.</span>
+        </div>
+      )}
+
+      {isOperator && !identityLoading && (
+        <div className="card">
+          <div className="page-header">
+            <div>
+              <h2>Bridge Gateway</h2>
+              <p className="muted">
+                Configure Meshtastic, Home Assistant, Google Find Hub handoffs, Samsung SmartThings handoffs, and webhook feeds.
+              </p>
+            </div>
+            <Link className="button" to="/integrations">Open Bridge Setup</Link>
+          </div>
+          <div className="panel-grid">
+            <div className="status-tile">
+              <span className="muted">Gateway</span>
+              <strong>http://127.0.0.1:5056</strong>
+            </div>
+            <div className="status-tile">
+              <span className="muted">Config source</span>
+              <strong>In-app bridge feeds</strong>
+            </div>
+            <div className="status-tile">
+              <span className="muted">Setup path</span>
+              <strong>Bridge → Add bridge feed</strong>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isOperator && (loading || identityLoading) && <div className="card">Loading operator settings…</div>}
+
+      {isOperator && !identityLoading && (error || !status) && (
+        <div className="card">
+          <h2>Operator Settings</h2>
+          <p className="error-text">Error: {error ?? 'Unable to load system status.'}</p>
+          <button className="button button-secondary" type="button" onClick={() => void loadStatus()}>
+            Retry
+          </button>
+        </div>
+      )}
+
+      {showOperatorSettings && status && (
+        <>
       {!status.webhookConfigured && (
-        <div
-          className="card"
-          style={{ borderColor: 'rgba(250, 204, 21, 0.35)', backgroundColor: 'rgba(120, 53, 15, 0.35)' }}
-        >
-          <strong style={{ display: 'block', marginBottom: '0.35rem', color: '#fde68a' }}>Webhook not configured</strong>
+        <div className="notice notice-warning">
+          <strong>Webhook not configured</strong>
           <span className="muted">Alert events will stay local until Webhooks:Url is configured.</span>
         </div>
       )}
 
       {!status.apiKeyConfigured && (
-        <div
-          className="card"
-          style={{ borderColor: 'rgba(248, 113, 113, 0.35)', backgroundColor: 'rgba(127, 29, 29, 0.35)' }}
-        >
-          <strong style={{ display: 'block', marginBottom: '0.35rem', color: '#fecaca' }}>API key missing</strong>
+        <div className="notice notice-danger">
+          <strong>API key missing</strong>
           <span className="muted">Clients will be unable to authenticate until Auth:ApiKey is configured.</span>
         </div>
       )}
 
       <div className="card">
-        <div className="page-header" style={{ marginBottom: '1rem' }}>
+        <div className="page-header">
           <h2>System Status</h2>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem' }}>
-          <div style={tileStyle}>
+        <div className="panel-grid">
+          <div className="status-tile">
             <span className="muted">Environment</span>
             <strong>{status.environment}</strong>
           </div>
-          <div style={tileStyle}>
+          <div className="status-tile">
             <span className="muted">Simulation</span>
-            <span style={badgeStyle(status.simulationEnabled)}>{status.simulationEnabled ? 'Enabled' : 'Disabled'}</span>
+            <span className={`badge ${status.simulationEnabled ? 'badge-success' : 'badge-danger'}`}>{status.simulationEnabled ? 'Enabled' : 'Disabled'}</span>
           </div>
-          <div style={tileStyle}>
+          <div className="status-tile">
             <span className="muted">Webhooks</span>
-            <span style={badgeStyle(status.webhookConfigured)}>{status.webhookConfigured ? 'Configured' : 'Not configured'}</span>
+            <span className={`badge ${status.webhookConfigured ? 'badge-success' : 'badge-warning'}`}>{status.webhookConfigured ? 'Configured' : 'Not configured'}</span>
           </div>
-          <div style={tileStyle}>
+          <div className="status-tile">
             <span className="muted">API Key</span>
-            <span style={badgeStyle(status.apiKeyConfigured)}>{status.apiKeyConfigured ? 'Configured' : 'Missing'}</span>
+            <span className={`badge ${status.apiKeyConfigured ? 'badge-success' : 'badge-danger'}`}>{status.apiKeyConfigured ? 'Configured' : 'Missing'}</span>
           </div>
-          <div style={tileStyle}>
+          <div className="status-tile">
+            <span className="muted">Ingest Key</span>
+            <span className={`badge ${status.ingestApiKeyConfigured ? 'badge-success' : 'badge-danger'}`}>{status.ingestApiKeyConfigured ? 'Configured' : 'Missing'}</span>
+          </div>
+          <div className="status-tile">
             <span className="muted">Swagger</span>
-            <span style={badgeStyle(status.swaggerEnabled)}>{status.swaggerEnabled ? 'Enabled' : 'Disabled'}</span>
+            <span className={`badge ${status.swaggerEnabled ? 'badge-success' : 'badge-warning'}`}>{status.swaggerEnabled ? 'Enabled' : 'Disabled'}</span>
           </div>
-          <div style={tileStyle}>
+          <div className="status-tile">
             <span className="muted">Rate Limit</span>
             <strong>{status.rateLimitPermitLimit} requests</strong>
             <span className="muted">per {status.rateLimitWindowSeconds}s window</span>
           </div>
-          <div style={tileStyle}>
+          <div className="status-tile">
             <span className="muted">Database</span>
             <strong>{status.databaseProvider}</strong>
+          </div>
+          <div className="status-tile">
+            <span className="muted">Data</span>
+            <span className={`badge ${status.hasData ? 'badge-success' : 'badge-warning'}`}>{status.hasData ? 'Present' : 'Empty'}</span>
           </div>
         </div>
       </div>
@@ -204,10 +290,10 @@ export default function SettingsPage() {
       {status.simulationEnabled && (
         <>
           <div className="card">
-            <div className="page-header" style={{ marginBottom: '1rem' }}>
+            <div className="page-header">
               <div>
                 <h2>Simulation Runner</h2>
-                <p className="muted" style={{ margin: '0.35rem 0 0' }}>
+                <p className="muted">
                   Generate realistic observations and alerts without external devices.
                 </p>
               </div>
@@ -241,74 +327,44 @@ export default function SettingsPage() {
               </div>
 
               {runError && (
-                <div
-                  style={{
-                    padding: '0.9rem 1rem',
-                    borderRadius: '10px',
-                    backgroundColor: 'rgba(127, 29, 29, 0.35)',
-                    border: '1px solid rgba(248, 113, 113, 0.35)',
-                    color: '#fecaca',
-                  }}
-                >
-                  {runError}
-                </div>
+                <div className="notice notice-danger">{runError}</div>
               )}
 
               {result && (
-                <div
-                  style={{
-                    display: 'grid',
-                    gap: '1rem',
-                    marginTop: '0.5rem',
-                    padding: '1rem',
-                    borderRadius: '12px',
-                    backgroundColor: 'rgba(15, 118, 110, 0.2)',
-                    border: '1px solid rgba(45, 212, 191, 0.25)',
-                  }}
-                >
+                <div className="notice notice-success">
                   <div className="page-header">
                     <div>
-                      <h3 style={{ margin: 0 }}>Simulation completed</h3>
-                      <p className="muted" style={{ margin: '0.35rem 0 0' }}>
+                      <h3>Simulation completed</h3>
+                      <p className="muted">
                         Device {result.deviceIdentifier} • Device ID {result.deviceId}
                       </p>
                     </div>
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.75rem' }}>
-                    <div style={tileStyle}>
+                  <div className="panel-grid">
+                    <div className="status-tile">
                       <span className="muted">Observations</span>
                       <strong>{result.observationsCreated}</strong>
                     </div>
-                    <div style={tileStyle}>
+                    <div className="status-tile">
                       <span className="muted">Speed alerts</span>
                       <strong>{result.speedAlertsTriggered}</strong>
                     </div>
-                    <div style={tileStyle}>
+                    <div className="status-tile">
                       <span className="muted">Geofence breaches</span>
                       <strong>{result.geofenceBreaches}</strong>
                     </div>
-                    <div style={tileStyle}>
+                    <div className="status-tile">
                       <span className="muted">Asset ID</span>
-                      <strong style={{ fontSize: '0.95rem' }}>{result.assetId ?? 'Unassigned'}</strong>
+                      <strong>{result.assetId ?? 'Unassigned'}</strong>
                     </div>
                   </div>
 
                   <details>
-                    <summary style={{ cursor: 'pointer', fontWeight: 600 }}>Event log ({result.eventLog.length})</summary>
-                    <div
-                      style={{
-                        marginTop: '0.75rem',
-                        padding: '0.9rem',
-                        borderRadius: '10px',
-                        backgroundColor: 'rgba(15, 23, 42, 0.55)',
-                        border: '1px solid rgba(148, 163, 184, 0.15)',
-                        maxHeight: '260px',
-                        overflowY: 'auto',
-                      }}
-                    >
+                    <summary>Event log ({result.eventLog.length})</summary>
+                    <div className="status-tile scroll-panel">
                       {result.eventLog.length > 0 ? (
-                        <ul style={{ margin: 0, paddingLeft: '1.25rem', display: 'grid', gap: '0.5rem' }}>
+                        <ul className="inline-list">
                           {result.eventLog.map((entry, index) => (
                             <li key={`${entry}-${index}`}>{entry}</li>
                           ))}
@@ -324,10 +380,10 @@ export default function SettingsPage() {
           </div>
 
           <div className="card">
-            <div className="page-header" style={{ marginBottom: '1rem' }}>
+            <div className="page-header">
               <div>
                 <h2>Demo Data</h2>
-                <p className="muted" style={{ margin: '0.35rem 0 0' }}>
+                <p className="muted">
                   Seed realistic demo assets, devices, and geofences to explore the UI.
                 </p>
               </div>
@@ -341,25 +397,25 @@ export default function SettingsPage() {
               </button>
             </div>
             {seedError && (
-              <div style={{ padding: '0.9rem 1rem', borderRadius: '10px', backgroundColor: 'rgba(127, 29, 29, 0.35)', border: '1px solid rgba(248, 113, 113, 0.35)', color: '#fecaca', marginTop: '0.75rem' }}>
-                {seedError}
-              </div>
+              <div className="notice notice-danger">{seedError}</div>
             )}
             {seedResult && (
-              <div style={{ display: 'grid', gap: '1rem', marginTop: '0.5rem', padding: '1rem', borderRadius: '12px', backgroundColor: 'rgba(15, 118, 110, 0.2)', border: '1px solid rgba(45, 212, 191, 0.25)' }}>
+              <div className="notice notice-success">
                 {seedResult.alreadySeeded ? (
                   <p className="muted">Demo data already present. Use Reset &amp; Re-seed to refresh.</p>
                 ) : (
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.75rem' }}>
-                    <div style={tileStyle}><span className="muted">Assets</span><strong>{seedResult.assetsCreated}</strong></div>
-                    <div style={tileStyle}><span className="muted">Devices</span><strong>{seedResult.devicesCreated}</strong></div>
-                    <div style={tileStyle}><span className="muted">Geofences</span><strong>{seedResult.geofencesCreated}</strong></div>
-                    <div style={tileStyle}><span className="muted">Reset</span><strong>{seedResult.resetPerformed ? 'Yes' : 'No'}</strong></div>
+                  <div className="panel-grid">
+                    <div className="status-tile"><span className="muted">Assets</span><strong>{seedResult.assetsCreated}</strong></div>
+                    <div className="status-tile"><span className="muted">Devices</span><strong>{seedResult.devicesCreated}</strong></div>
+                    <div className="status-tile"><span className="muted">Geofences</span><strong>{seedResult.geofencesCreated}</strong></div>
+                    <div className="status-tile"><span className="muted">Reset</span><strong>{seedResult.resetPerformed ? 'Yes' : 'No'}</strong></div>
                   </div>
                 )}
               </div>
             )}
           </div>
+        </>
+      )}
         </>
       )}
     </div>

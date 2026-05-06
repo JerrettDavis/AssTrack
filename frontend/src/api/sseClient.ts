@@ -142,7 +142,11 @@ function disconnect(): void {
 export function subscribeLiveEvents(listener: Listener): () => void {
   listeners.add(listener)
   if (listeners.size === 1) {
-    connect().catch(err => console.error('Connect error:', err))
+    setTimeout(() => {
+      if (listeners.size > 0) {
+        connect().catch(err => console.error('Connect error:', err))
+      }
+    }, 1000)
   }
   return () => {
     listeners.delete(listener)

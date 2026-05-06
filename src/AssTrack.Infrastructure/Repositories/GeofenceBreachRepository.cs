@@ -13,6 +13,7 @@ public class GeofenceBreachRepository(AssTrackDbContext dbContext)
         DateTime? since = null,
         Guid? deviceId = null,
         Guid? assetId = null,
+        Guid? geofenceId = null,
         CancellationToken cancellationToken = default)
     {
         var query = dbContext.GeofenceBreaches
@@ -28,6 +29,8 @@ public class GeofenceBreachRepository(AssTrackDbContext dbContext)
             query = query.Where(x => x.DeviceId == deviceId.Value);
         if (assetId.HasValue)
             query = query.Where(x => x.Device.AssetId == assetId.Value);
+        if (geofenceId.HasValue)
+            query = query.Where(x => x.GeofenceId == geofenceId.Value);
         
         var totalCount = await query.CountAsync(cancellationToken);
         
@@ -46,6 +49,7 @@ public class GeofenceBreachRepository(AssTrackDbContext dbContext)
         DateTime? since = null,
         Guid? deviceId = null,
         Guid? assetId = null,
+        Guid? geofenceId = null,
         CancellationToken cancellationToken = default)
     {
         var query = dbContext.GeofenceBreaches
@@ -61,6 +65,8 @@ public class GeofenceBreachRepository(AssTrackDbContext dbContext)
             query = query.Where(x => x.DeviceId == deviceId.Value);
         if (assetId.HasValue)
             query = query.Where(x => x.Device.AssetId == assetId.Value);
+        if (geofenceId.HasValue)
+            query = query.Where(x => x.GeofenceId == geofenceId.Value);
         return await query
             .OrderByDescending(x => x.DetectedAt)
             .Take(limit)

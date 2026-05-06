@@ -34,6 +34,10 @@ export async function createDevice(data: {
   label?: string
   protocol?: string
   assetId?: string
+  provider?: string
+  externalId?: string
+  tags?: string
+  integrationFeedId?: string
 }): Promise<Device> {
   return apiPost<Device>('/api/devices', data)
 }
@@ -43,6 +47,10 @@ export type UpdateDeviceRequest = {
   label?: string | null
   protocol?: string | null
   assetId?: string | null
+  provider?: string | null
+  externalId?: string | null
+  tags?: string | null
+  integrationFeedId?: string | null
 }
 
 export async function updateDevice(id: string, data: UpdateDeviceRequest): Promise<Device> {

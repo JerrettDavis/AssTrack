@@ -161,7 +161,7 @@ export default function AlertsPage() {
       />
 
       <div className="card table-card">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+        <div className="page-header">
           <h2>Speed Alerts</h2>
           {selectedSpeedAlerts.size > 0 && (
             <button className="button button-primary" onClick={() => void handleBulkAcknowledgeSpeedAlerts()} type="button">
@@ -255,11 +255,11 @@ export default function AlertsPage() {
             )}
           </tbody>
         </table>
-        <div style={{ marginTop: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div className="table-actions">
           <span className="muted">
             Page {alertsPage} of {Math.ceil(alertsTotal / 50) || 1} (Total: {alertsTotal})
           </span>
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <div className="compact-actions">
             <button
               className="button button-secondary"
               onClick={() => setAlertsPage(Math.max(1, alertsPage - 1))}
@@ -281,7 +281,7 @@ export default function AlertsPage() {
       </div>
 
       <div className="card table-card">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+        <div className="page-header">
           <h2>Geofence Breaches</h2>
           {selectedBreaches.size > 0 && (
             <button className="button button-primary" onClick={() => void handleBulkAcknowledgeBreaches()} type="button">
@@ -375,11 +375,11 @@ export default function AlertsPage() {
             )}
           </tbody>
         </table>
-        <div style={{ marginTop: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div className="table-actions">
           <span className="muted">
             Page {breachesPage} of {Math.ceil(breachesTotal / 50) || 1} (Total: {breachesTotal})
           </span>
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <div className="compact-actions">
             <button
               className="button button-secondary"
               onClick={() => setBreachesPage(Math.max(1, breachesPage - 1))}

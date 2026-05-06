@@ -9,18 +9,27 @@ public class DeviceRepository(AssTrackDbContext dbContext)
     public async Task<IReadOnlyList<Device>> GetAllAsync(CancellationToken cancellationToken = default)
         => await dbContext.Devices
             .Include(x => x.Asset)
+            .Include(x => x.IntegrationFeed)
             .OrderBy(x => x.Identifier)
             .ToListAsync(cancellationToken);
 
     public Task<Device?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
         => dbContext.Devices
             .Include(x => x.Asset)
+            .Include(x => x.IntegrationFeed)
             .FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
 
     public Task<Device?> GetByIdentifierAsync(string identifier, CancellationToken cancellationToken = default)
         => dbContext.Devices
             .Include(x => x.Asset)
+            .Include(x => x.IntegrationFeed)
             .FirstOrDefaultAsync(x => x.Identifier == identifier, cancellationToken);
+
+    public Task<Device?> GetByIntegrationExternalIdAsync(Guid integrationFeedId, string externalId, CancellationToken cancellationToken = default)
+        => dbContext.Devices
+            .Include(x => x.Asset)
+            .Include(x => x.IntegrationFeed)
+            .FirstOrDefaultAsync(x => x.IntegrationFeedId == integrationFeedId && x.ExternalId == externalId, cancellationToken);
 
     public async Task<Device> AddAsync(Device device, CancellationToken cancellationToken = default)
     {
@@ -29,7 +38,7 @@ public class DeviceRepository(AssTrackDbContext dbContext)
         return await GetByIdAsync(device.Id, cancellationToken) ?? device;
     }
 
-    public async Task<Device?> UpdateAsync(Guid id, string identifier, string? label, string? protocol, Guid? assetId, CancellationToken cancellationToken = default)
+    public async Task<Device?> UpdateAsync(Guid id, string identifier, string? label, string? protocol, Guid? assetId, string? provider, string? externalId, string? tags, Guid? integrationFeedId, CancellationToken cancellationToken = default)
     {
         var device = await dbContext.Devices.FindAsync([id], cancellationToken);
         if (device is null) return null;
@@ -38,6 +47,10 @@ public class DeviceRepository(AssTrackDbContext dbContext)
         device.Label = label;
         device.Protocol = string.IsNullOrWhiteSpace(protocol) ? "https" : protocol.Trim().ToLowerInvariant();
         device.AssetId = assetId;
+        device.Provider = string.IsNullOrWhiteSpace(provider) ? "manual" : provider.Trim().ToLowerInvariant();
+        device.ExternalId = string.IsNullOrWhiteSpace(externalId) ? null : externalId.Trim();
+        device.Tags = string.IsNullOrWhiteSpace(tags) ? null : tags.Trim();
+        device.IntegrationFeedId = integrationFeedId;
 
         await dbContext.SaveChangesAsync(cancellationToken);
         return await GetByIdAsync(id, cancellationToken);

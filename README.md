@@ -14,9 +14,12 @@ AssTrack is an asset tracking platform with a .NET minimal API backend, EF Core 
 | `src\AssTrack.Domain` | Domain models, DTOs, contracts, and the `SpeedAlertEvaluator` service |
 | `src\AssTrack.Infrastructure` | EF Core SQLite context (`AssTrackDbContext`) and repository classes |
 | `src\AssTrack.Api` | ASP.NET Core minimal-API endpoints, Swagger/OpenAPI, and DI composition |
+| `src\AssTrack.BridgeGateway` | Pluggable provider bridge gateway for native webhook/import payloads |
+| `src\AssTrack.AppHost` | .NET Aspire 13.2 AppHost for running the API, bridge gateway, and frontend together |
 | `tests\AssTrack.Tests` | xUnit + `WebApplicationFactory` integration tests |
 | `frontend` | Vite + React 19 + TypeScript SPA with react-router-dom and Leaflet map |
 | `docs\openapi` | Exported OpenAPI artefacts |
+| `docs\integrations.md` | Provider integration playbook and bridge implementation checklist |
 
 ## Backend overview
 
@@ -37,6 +40,12 @@ The API is built with ASP.NET Core minimal APIs on .NET 10. The route prefix for
 | GET | `/api/observations/latest/{deviceId}` | Latest observation for a specific device |
 | POST | `/api/observations` | Ingest an observation (triggers speed alert if `speedKmh > 120`) |
 | POST | `/api/observations/ingest` | Alias for the POST above |
+| GET | `/api/integrations/providers` | List supported integration provider profiles |
+| GET | `/api/integrations` | List configured integration feeds |
+| POST | `/api/integrations` | Create a configurable integration feed |
+| PUT | `/api/integrations/{id}` | Update an integration feed |
+| DELETE | `/api/integrations/{id}` | Delete an integration feed |
+| POST | `/api/integrations/{id}/observations` | Ingest a normalized provider observation for a feed |
 | GET | `/api/speed-alerts` | Recent speed alerts |
 | POST | `/api/speed-alerts/{id}/acknowledge` | Acknowledge a speed alert |
 | GET | `/api/geofences` | List geofences |
@@ -96,8 +105,8 @@ If `ASSTRACK_INGEST_API_KEY` is not set, the operator key (`ASSTRACK_API_KEY`) c
    ```
    ASSTRACK_INGEST_API_KEY=<your-new-ingest-key>
    ```
-3. Update device firmware or ingestion clients to use the new ingest key in the `X-Api-Key` header.
-4. The operator key retains full access. The ingest key is restricted to `POST /api/observations` and `POST /api/observations/ingest`.
+3. Update device firmware, ingestion clients, and integration bridge workers to use the new ingest key in the `X-Api-Key` header.
+4. The operator key retains full access. The ingest key is restricted to direct observation ingest and integration-feed observation ingest.
 
 ### Policy Summary
 
@@ -105,9 +114,22 @@ If `ASSTRACK_INGEST_API_KEY` is not set, the operator key (`ASSTRACK_API_KEY`) c
 |----------|----------------|--------------|
 | `POST /api/observations` | `Ingest` | operator key, ingest key |
 | `POST /api/observations/ingest` | `Ingest` | operator key, ingest key |
+| `POST /api/integrations/{id}/observations` | `Ingest` | operator key, ingest key |
+| `GET /api/integrations/providers` | `Operator` | operator key only |
+| `GET\|POST\|PUT\|DELETE /api/integrations*` | `Operator` | operator key only |
 | `GET /api/system/status` | `Operator` | operator key only |
 | `POST /api/events/token` | `Operator` | operator key only |
 | All other `/api/*` endpoints | `Operator` | operator key only |
+
+## Location Integrations
+
+AssTrack supports configurable location integration feeds for providers such as generic webhooks, GPS/cellular HTTP trackers, Meshtastic, Apple Find My/AirTag bridges, Google Find Hub bridges, Samsung SmartThings Find bridges, OwnTracks, and Traccar.
+
+The AssTrack-side contract is intentionally normalized: each bridge posts a location observation with an external tracker ID, timestamp, coordinates, optional telemetry, and optional tags. Devices can be auto-created from feeds and multiple devices can be linked to one asset.
+
+The repo also includes `src\AssTrack.BridgeGateway`, a standalone bridge gateway that accepts provider-native JSON on `/bridge/{feedKey}`, normalizes it through pluggable adapters, and posts it into `POST /api/integrations/{feedId}/observations`.
+
+See [`docs/integrations.md`](docs/integrations.md) for provider playbooks, payload examples, bridge worker requirements, and the remaining third-party plumbing steps.
 
 ### UI Access Control
 
@@ -620,6 +642,37 @@ VITE_API_BASE_URL=http://localhost:5019
 ```
 
 ## Local startup
+
+### Full stack with Aspire
+
+The easiest development startup path is the Aspire AppHost. It is pinned to Aspire `13.2.2` and starts the API, bridge gateway, and Vite frontend together.
+
+```powershell
+dotnet restore
+npm install --prefix frontend
+dotnet run --project src\AssTrack.AppHost\AssTrack.AppHost.csproj
+```
+
+Default endpoints:
+
+| Service | URL |
+|---|---|
+| Aspire dashboard | `http://localhost:15231` |
+| API | `http://localhost:5019` |
+| Bridge gateway | `http://localhost:5056` |
+| Frontend | `http://localhost:5174` |
+| Swagger | `http://localhost:5019/swagger` |
+
+Useful AppHost overrides:
+
+| Variable | Purpose | Default |
+|---|---|---|
+| `ASSTRACK_API_KEY` | Operator API key also passed to the dev frontend | `local-dev-key-asstrack` |
+| `ASSTRACK_INGEST_API_KEY` | Ingest-only key for devices and bridge gateway posts | Same as `ASSTRACK_API_KEY` |
+| `ASSTRACK_CONNECTION_STRING` | SQLite connection string for local API storage | `Data Source=<repo>\asstrack-dev.db` |
+| `NODE_EXECUTABLE` | Explicit Node executable path if Node is not on the standard install path | Windows: `C:\Program Files\nodejs\node.exe`; otherwise `node` |
+
+The frontend still loads `/config.json` in hosted/containerized deployments. Under the Vite dev server, the AppHost also supplies `VITE_DEV_API_KEY` so the local UI can call the API without a separate config file.
 
 ### Backend
 

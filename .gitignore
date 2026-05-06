@@ -3,6 +3,7 @@ bin/
 obj/
 out/
 TestResults/
+artifacts/
 
 # User-specific files
 *.user
@@ -33,11 +34,14 @@ yarn-error.log*
 
 # Coverage
 coverage/
+coverage-report/
+docs/_site/
 *.coverage
 *.coveragexml
 
 # Environment variables
 .env
+frontend/public/config.json
 
 # OS files
 Thumbs.db

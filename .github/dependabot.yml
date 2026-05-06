@@ -1,0 +1,150 @@
+version: 2
+
+updates:
+  - package-ecosystem: nuget
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+    open-pull-requests-limit: 10
+    reviewers:
+      - JerrettDavis
+    labels:
+      - dependencies
+      - nuget
+    commit-message:
+      prefix: deps
+      include: scope
+    groups:
+      dotnet-platform:
+        patterns:
+          - Microsoft.*
+          - Aspire.*
+        update-types:
+          - minor
+          - patch
+      test-stack:
+        patterns:
+          - xunit*
+          - Reqnroll*
+          - FluentAssertions
+          - coverlet.*
+          - Microsoft.NET.Test.Sdk
+          - Microsoft.Playwright
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:15"
+    open-pull-requests-limit: 10
+    reviewers:
+      - JerrettDavis
+    labels:
+      - dependencies
+      - frontend
+    commit-message:
+      prefix: deps
+      include: scope
+    groups:
+      react-stack:
+        patterns:
+          - react
+          - react-dom
+          - react-router-dom
+          - "@types/react*"
+      map-stack:
+        patterns:
+          - leaflet
+          - react-leaflet
+          - "@types/leaflet"
+      build-tooling:
+        patterns:
+          - vite
+          - "@vitejs/*"
+          - typescript
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:30"
+    open-pull-requests-limit: 5
+    reviewers:
+      - JerrettDavis
+    labels:
+      - dependencies
+      - github-actions
+    commit-message:
+      prefix: ci
+      include: scope
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+
+  - package-ecosystem: docker
+    directory: /src/AssTrack.Api
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:45"
+    open-pull-requests-limit: 5
+    reviewers:
+      - JerrettDavis
+    labels:
+      - dependencies
+      - docker
+    commit-message:
+      prefix: deps
+      include: scope
+    groups:
+      docker-base-images:
+        patterns:
+          - "*"
+
+  - package-ecosystem: docker
+    directory: /src/AssTrack.BridgeGateway
+    schedule:
+      interval: weekly
+      day: monday
+      time: "10:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - JerrettDavis
+    labels:
+      - dependencies
+      - docker
+    commit-message:
+      prefix: deps
+      include: scope
+    groups:
+      bridge-docker-base-images:
+        patterns:
+          - "*"
+
+  - package-ecosystem: docker
+    directory: /frontend
+    schedule:
+      interval: weekly
+      day: monday
+      time: "10:15"
+    open-pull-requests-limit: 5
+    reviewers:
+      - JerrettDavis
+    labels:
+      - dependencies
+      - docker
+    commit-message:
+      prefix: deps
+      include: scope
+    groups:
+      frontend-docker-base-images:
+        patterns:
+          - "*"

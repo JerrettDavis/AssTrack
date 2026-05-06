@@ -7,6 +7,8 @@ export interface WebhookStatus {
   last24hFailures: number
   lastDeliveredAt: string | null
   avgDurationMs: number | null
+  retryQueueDepth?: number
+  signingEnabled?: boolean
 }
 
 export interface WebhookDeliveryLog {
@@ -19,6 +21,8 @@ export interface WebhookDeliveryLog {
   durationMs: number
   errorMessage: string | null
   requestPayloadSummary: string | null
+  attemptNumber?: number
+  correlationId?: string | null
 }
 
 export interface WebhookTestResult {
