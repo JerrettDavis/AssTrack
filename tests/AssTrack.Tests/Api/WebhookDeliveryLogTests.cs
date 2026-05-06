@@ -111,7 +111,8 @@ public class WebhookDeliveryLogTests : IClassFixture<WebhookDeliveryLogFactory>
         result!.Items.Should().ContainSingle(l =>
             l.EventType == "speed_alert" &&
             !l.Success &&
-            l.HttpStatusCode == 500);
+            l.HttpStatusCode == 500 &&
+            l.AttemptNumber == 1);
     }
 
     [Fact]
@@ -133,7 +134,7 @@ public class WebhookDeliveryLogTests : IClassFixture<WebhookDeliveryLogFactory>
 
         var response = await client.GetAsync("/api/webhooks/deliveries");
         var result = await response.Content.ReadFromJsonAsync<PagedResult<WebhookDeliveryLogDto>>();
-        result!.Items.Should().ContainSingle(l => l.EventType == "speed_alert" && !l.Success);
+        result!.Items.Should().ContainSingle(l => l.EventType == "speed_alert" && !l.Success && l.AttemptNumber == 1);
     }
 
     [Fact]
