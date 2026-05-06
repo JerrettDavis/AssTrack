@@ -149,7 +149,7 @@ jobs:
         run: docker build -f frontend/Dockerfile -t asstrack-frontend:ci frontend
 
   e2e:
-    name: E2E
+    name: E2E Managed
     runs-on: ubuntu-latest
     needs: [backend, frontend]
     timeout-minutes: 25
@@ -199,5 +199,169 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: e2e-test-results
+          name: e2e-managed-test-results
           path: tests/**/TestResults/**/*.trx
+
+  e2e-apphost:
+    name: E2E AppHost
+    runs-on: ubuntu-latest
+    needs: [backend, frontend]
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+          cache: true
+          cache-dependency-path: |
+            **/packages.lock.json
+            **/*.csproj
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Restore .NET
+        run: dotnet restore AssTrack.sln
+
+      - name: Build solution
+        run: dotnet build AssTrack.sln --configuration Release --no-restore /p:ContinuousIntegrationBuild=true
+
+      - name: Install Playwright Chromium
+        run: pwsh tests/AssTrack.E2ETests/bin/Release/net10.0/playwright.ps1 install chromium
+
+      - name: Run E2E tests through AppHost
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet run --project src/AssTrack.AppHost/AssTrack.AppHost.csproj --configuration Release --no-build > apphost.log 2>&1 &
+          APPHOST_PID=$!
+          trap 'kill $APPHOST_PID 2>/dev/null || true; cat apphost.log' EXIT
+
+          READY=0
+          for attempt in {1..120}; do
+            if curl -fsS http://127.0.0.1:5019/healthz/live >/dev/null && curl -fsS http://127.0.0.1:5174 >/dev/null; then
+              READY=1
+              break
+            fi
+            if ! kill -0 "$APPHOST_PID" 2>/dev/null; then
+              cat apphost.log
+              exit 1
+            fi
+            sleep 1
+          done
+          if [ "$READY" -ne 1 ]; then
+            echo "AppHost did not become ready in time"
+            exit 1
+          fi
+
+          E2E_STARTUP_MODE=External \
+          E2E_BACKEND_PORT=5019 \
+          E2E_FRONTEND_PORT=5174 \
+          dotnet test tests/AssTrack.E2ETests/AssTrack.E2ETests.csproj \
+            --configuration Release \
+            --no-build \
+            --logger "trx;LogFileName=e2e-apphost-tests.trx"
+        env:
+          ASSTRACK_API_KEY: e2e-test-key
+          ASSTRACK_CONNECTION_STRING: Data Source=/tmp/asstrack_apphost_e2e.db
+
+      - name: Upload AppHost E2E results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-apphost-test-results
+          path: |
+            tests/**/TestResults/**/*.trx
+            apphost.log
+
+  e2e-production:
+    name: E2E Production Publish
+    runs-on: ubuntu-latest
+    needs: [backend, frontend]
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+          cache: true
+          cache-dependency-path: |
+            **/packages.lock.json
+            **/*.csproj
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Restore .NET
+        run: dotnet restore AssTrack.sln
+
+      - name: Publish integrated production app
+        run: dotnet publish src/AssTrack.Api/AssTrack.Api.csproj --configuration Release --no-restore --output artifacts/production-app /p:ContinuousIntegrationBuild=true
+
+      - name: Build E2E tests
+        run: dotnet build tests/AssTrack.E2ETests/AssTrack.E2ETests.csproj --configuration Release --no-restore /p:ContinuousIntegrationBuild=true
+
+      - name: Install Playwright Chromium
+        run: pwsh tests/AssTrack.E2ETests/bin/Release/net10.0/playwright.ps1 install chromium
+
+      - name: Run E2E tests against production publish
+        shell: bash
+        run: |
+          set -euo pipefail
+          (cd artifacts/production-app && dotnet AssTrack.Api.dll) > production-app.log 2>&1 &
+          APP_PID=$!
+          trap 'kill $APP_PID 2>/dev/null || true; cat production-app.log' EXIT
+
+          READY=0
+          for attempt in {1..90}; do
+            if curl -fsS http://127.0.0.1:5099/healthz/live >/dev/null && curl -fsS http://127.0.0.1:5099 >/dev/null; then
+              READY=1
+              break
+            fi
+            if ! kill -0 "$APP_PID" 2>/dev/null; then
+              cat production-app.log
+              exit 1
+            fi
+            sleep 1
+          done
+          if [ "$READY" -ne 1 ]; then
+            echo "Production app did not become ready in time"
+            exit 1
+          fi
+
+          E2E_STARTUP_MODE=External \
+          E2E_BACKEND_PORT=5099 \
+          E2E_FRONTEND_PORT=5099 \
+          dotnet test tests/AssTrack.E2ETests/AssTrack.E2ETests.csproj \
+            --configuration Release \
+            --no-build \
+            --logger "trx;LogFileName=e2e-production-tests.trx"
+        env:
+          ASPNETCORE_ENVIRONMENT: Production
+          ASPNETCORE_URLS: http://127.0.0.1:5099
+          Auth__ApiKey: e2e-test-key
+          Frontend__ApiKey: e2e-test-key
+          ConnectionStrings__DefaultConnection: Data Source=/tmp/asstrack_production_e2e.db
+
+      - name: Upload production E2E results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-production-test-results
+          path: |
+            tests/**/TestResults/**/*.trx
+            production-app.log

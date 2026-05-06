@@ -9,6 +9,7 @@ var ingestApiKey = Environment.GetEnvironmentVariable("ASSTRACK_INGEST_API_KEY")
 var repoRoot = FindRepoRoot(Directory.GetCurrentDirectory());
 var connectionString = Environment.GetEnvironmentVariable("ASSTRACK_CONNECTION_STRING") ?? $"Data Source={Path.Combine(repoRoot, "asstrack-dev.db")}";
 var frontendDirectory = Path.Combine(repoRoot, "frontend");
+var frontendLauncher = Path.Combine(frontendDirectory, "start-vite.mjs");
 var nodeExecutable = Environment.GetEnvironmentVariable("NODE_EXECUTABLE")
     ?? (OperatingSystem.IsWindows() ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "nodejs", "node.exe") : "node");
 
@@ -39,7 +40,7 @@ var bridge = builder.AddProject<Projects.AssTrack_BridgeGateway>("bridge-gateway
     .WaitFor(api)
     .WithExternalHttpEndpoints();
 
-builder.AddExecutable("frontend", nodeExecutable, frontendDirectory, "node_modules/vite/bin/vite.js", "--host", "127.0.0.1", "--port", "5174")
+builder.AddExecutable("frontend", nodeExecutable, frontendDirectory, frontendLauncher, "--host", "127.0.0.1", "--port", "5174")
     .WithEnvironment("VITE_DEV_API_KEY", apiKey)
     .WithEnvironment("VITE_E2E_PROXY_TARGET", apiUrl)
     .WithEnvironment("VITE_BRIDGE_PROXY_TARGET", "http://localhost:5056")

@@ -15,7 +15,7 @@ RUN dotnet restore src/AssTrack.Api/AssTrack.Api.csproj
 COPY src/ src/
 
 # Publish the API
-RUN dotnet publish src/AssTrack.Api/AssTrack.Api.csproj -c Release --no-restore -o /app/publish
+RUN dotnet publish src/AssTrack.Api/AssTrack.Api.csproj -c Release --no-restore -o /app/publish /p:BuildIntegratedFrontend=false
 
 # Runtime stage
 FROM mcr.microsoft.com/dotnet/aspnet:10.0

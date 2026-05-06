@@ -1,5 +1,10 @@
 # AssTrack
 
+[![CI](https://github.com/JerrettDavis/AssTrack/actions/workflows/ci.yml/badge.svg)](https://github.com/JerrettDavis/AssTrack/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/JerrettDavis/AssTrack/actions/workflows/codeql.yml/badge.svg)](https://github.com/JerrettDavis/AssTrack/actions/workflows/codeql.yml)
+[![Docs](https://github.com/JerrettDavis/AssTrack/actions/workflows/docs.yml/badge.svg)](https://github.com/JerrettDavis/AssTrack/actions/workflows/docs.yml)
+[![codecov](https://codecov.io/gh/JerrettDavis/AssTrack/branch/master/graph/badge.svg)](https://codecov.io/gh/JerrettDavis/AssTrack)
+
 AssTrack is an asset tracking platform with a .NET minimal API backend, EF Core persistence, xUnit integration tests, and a React + TypeScript frontend with routing, a live map, and speed-alert views.
 
 ## Prerequisites
@@ -649,9 +654,10 @@ The easiest development startup path is the Aspire AppHost. It is pinned to Aspi
 
 ```powershell
 dotnet restore
-npm install --prefix frontend
 dotnet run --project src\AssTrack.AppHost\AssTrack.AppHost.csproj
 ```
+
+The AppHost starts the API, bridge gateway, and Vite frontend. On a clean clone, the frontend launcher runs `npm ci` automatically before Vite starts.
 
 Default endpoints:
 
@@ -673,6 +679,21 @@ Useful AppHost overrides:
 | `NODE_EXECUTABLE` | Explicit Node executable path if Node is not on the standard install path | Windows: `C:\Program Files\nodejs\node.exe`; otherwise `node` |
 
 The frontend still loads `/config.json` in hosted/containerized deployments. Under the Vite dev server, the AppHost also supplies `VITE_DEV_API_KEY` so the local UI can call the API without a separate config file.
+
+### Integrated production publish
+
+The API project can publish a production-ready single-origin app with the built SPA under `wwwroot`. The publish target runs `npm ci` and `npm run build` automatically.
+
+```powershell
+dotnet publish src\AssTrack.Api\AssTrack.Api.csproj -c Release -o artifacts\production-app
+$env:ASPNETCORE_ENVIRONMENT = "Production"
+$env:ASPNETCORE_URLS = "http://localhost:5099"
+$env:Auth__ApiKey = "local-production-key"
+$env:Frontend__ApiKey = "local-production-key"
+dotnet artifacts\production-app\AssTrack.Api.dll
+```
+
+Open `http://localhost:5099`. Use `BuildIntegratedFrontend=false` when publishing an API-only artifact for split frontend/API deployments.
 
 ### Backend
 
@@ -765,8 +786,8 @@ Full-stack E2E tests that start the real backend and Vite dev server, seed data 
 |---|---|
 | **Test runner** | xUnit via Reqnroll (BDD scenarios in `tests\AssTrack.E2ETests\Features\CoreFlows.feature`) |
 | **Browser automation** | Playwright .NET — headless Chromium |
-| **Backend** | Starts on `http://localhost:5099` with a temporary isolated SQLite DB |
-| **Frontend** | Vite dev server on `http://localhost:5174`, proxying `/api` to port 5099 |
+| **Managed backend** | Starts on `http://localhost:5099` with a temporary isolated SQLite DB |
+| **Managed frontend** | Vite dev server on `http://localhost:5174`, proxying `/api` to port 5099 |
 | **Data setup** | Seeded via direct HTTP calls in step definitions (no UI forms required) |
 
 ### Scenarios covered
@@ -804,10 +825,12 @@ GitHub Actions runs on every push and pull request:
 |---|---|
 | `backend` | `dotnet restore` → `dotnet build` → `dotnet test` (unit + integration) |
 | `frontend` | `npm ci` → `npm run build` |
-| `docker-build` | Builds both Docker images to validate Dockerfiles |
-| `e2e` | Starts real backend + Vite dev server, runs Reqnroll + Playwright scenarios headlessly |
+| `docker` | Builds API, bridge gateway, and frontend Docker images to validate Dockerfiles |
+| `e2e-managed` | Starts the real backend and Vite dev server from the test harness |
+| `e2e-apphost` | Runs the app through the Aspire AppHost from a clean checkout; AppHost auto-installs frontend packages |
+| `e2e-production` | Publishes the integrated production app and runs the browser scenarios against the built artifact |
 
-The E2E job runs on `ubuntu-latest` after `backend` and `frontend` succeed. Playwright Chromium browsers are cached by browser version. You can also run E2E tests locally on Windows with `.\tests\run-e2e.ps1`.
+The E2E jobs run on `ubuntu-latest` after `backend` and `frontend` succeed. You can also run the managed E2E tests locally on Windows with `.\tests\run-e2e.ps1`.
 
 ## Capabilities
 
@@ -867,15 +890,13 @@ Auth__ApiKey=your-production-api-key
 Cors__AllowedOrigins__0=https://your-frontend.example.com
 ```
 
-### CORS (required in production)
+### CORS
 
-**CORS is required in production.** If `Cors:AllowedOrigins` is empty or unset when the environment is `Production`, startup will fail with:
-
-> `InvalidOperationException: Cors:AllowedOrigins must be configured in Production.`
-
-Set at least one allowed origin via:
+For split frontend/API deployments, set at least one allowed origin via:
 - `appsettings.Production.json` → `"Cors": { "AllowedOrigins": ["https://your-frontend.example.com"] }`
 - Environment variable: `Cors__AllowedOrigins__0=https://your-frontend.example.com`
+
+For the integrated production publish, the SPA and API run on the same origin, so CORS can stay empty.
 
 ### Swagger
 

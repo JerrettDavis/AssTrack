@@ -8,9 +8,11 @@ public class E2ESettings
     public static int FrontendPort =>
         int.TryParse(Environment.GetEnvironmentVariable("E2E_FRONTEND_PORT"), out var p) ? p : 5174;
 
-    public static string BackendUrl => $"http://localhost:{BackendPort}";
-    public static string FrontendUrl => $"http://localhost:{FrontendPort}";
+    public static string BackendUrl => $"http://127.0.0.1:{BackendPort}";
+    public static string FrontendUrl => $"http://127.0.0.1:{FrontendPort}";
     public static string ApiKey => Environment.GetEnvironmentVariable("E2E_API_KEY") ?? "e2e-test-key";
+    public static bool UseExternalApp =>
+        string.Equals(Environment.GetEnvironmentVariable("E2E_STARTUP_MODE"), "External", StringComparison.OrdinalIgnoreCase);
 
     public static string GetRepoRoot()
     {

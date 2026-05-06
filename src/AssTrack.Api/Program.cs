@@ -33,9 +33,14 @@ builder.Services.AddCors(options =>
     options.AddPolicy("Frontend", policy =>
     {
         if (corsOrigins.Length > 0)
+        {
             policy.WithOrigins(corsOrigins).AllowAnyHeader().AllowAnyMethod();
-        else
+        }
+        else if (builder.Environment.IsDevelopment() ||
+            string.Equals(builder.Environment.EnvironmentName, "Testing", StringComparison.OrdinalIgnoreCase))
+        {
             policy.AllowAnyHeader().AllowAnyMethod().AllowAnyOrigin();
+        }
     });
 });
 
@@ -112,17 +117,6 @@ var app = builder.Build();
     }
 }
 
-if (app.Environment.IsProduction())
-{
-    var liveCorsOrigins = app.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
-    if (liveCorsOrigins.Length == 0)
-    {
-        throw new InvalidOperationException(
-            "Cors:AllowedOrigins must be configured in Production. " +
-            "Set at least one origin via appsettings or Cors__AllowedOrigins__0 environment variable.");
-    }
-}
-
 using (var scope = app.Services.CreateScope())
 {
     var dbContext = scope.ServiceProvider.GetRequiredService<AssTrackDbContext>();
@@ -148,15 +142,28 @@ app.Use(async (context, next) =>
     context.Response.Headers.TryAdd("X-Frame-Options", "DENY");
     context.Response.Headers.TryAdd("Referrer-Policy", "no-referrer");
     context.Response.Headers.TryAdd("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
-    if (!context.Request.Path.StartsWithSegments("/swagger"))
+    if (context.Request.Path.StartsWithSegments("/api") ||
+        context.Request.Path.StartsWithSegments("/healthz") ||
+        context.Request.Path.StartsWithSegments("/swagger"))
     {
-        context.Response.Headers.TryAdd("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'; base-uri 'none'");
+        if (!context.Request.Path.StartsWithSegments("/swagger"))
+        {
+            context.Response.Headers.TryAdd("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'; base-uri 'none'");
+        }
+    }
+    else
+    {
+        context.Response.Headers.TryAdd(
+            "Content-Security-Policy",
+            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.tile.openstreetmap.org https://server.arcgisonline.com https://*.tile.opentopomap.org; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'");
     }
     await next();
 });
 
 app.UseExceptionHandler();
 app.UseStatusCodePages();
+app.UseDefaultFiles();
+app.UseStaticFiles();
 app.UseCors("Frontend");
 app.UseAuthentication();
 app.UseAuthorization();
@@ -180,6 +187,12 @@ app.MapHealthChecks("/healthz/ready", new HealthCheckOptions
 {
     ResponseWriter = WriteHealthCheckResponse
 }).AllowAnonymous();
+
+app.MapGet("/config.json", (IConfiguration configuration) =>
+    Results.Json(new
+    {
+        apiKey = configuration["Frontend:ApiKey"] ?? configuration["Auth:ApiKey"] ?? string.Empty
+    })).AllowAnonymous();
 
 var api = app.MapGroup("/api").RequireAuthorization();
 api.MapAssetEndpoints();
@@ -216,6 +229,11 @@ app.MapGet("/api/events", EventsEndpoints.HandleSseAsync).AllowAnonymous();
 
 if (swaggerEnabled)
     app.MapGet("/", () => Results.Redirect("/swagger"));
+
+if (File.Exists(Path.Combine(app.Environment.WebRootPath ?? string.Empty, "index.html")))
+{
+    app.MapFallbackToFile("index.html").AllowAnonymous();
+}
 
 app.Run();
 

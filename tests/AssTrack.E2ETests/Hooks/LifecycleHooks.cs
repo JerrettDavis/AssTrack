@@ -21,16 +21,48 @@ public class LifecycleHooks
             : new[] { "install", "chromium" };
         Microsoft.Playwright.Program.Main(installArgs);
         
-        _dbPath = E2ESettings.GetTempDbPath();
-        
-        _backend = new BackendProcess(_dbPath);
-        await _backend.StartAsync();
-        
-        _frontend = new FrontendProcess();
-        await _frontend.StartAsync();
+        if (E2ESettings.UseExternalApp)
+        {
+            await WaitForExternalAppAsync();
+        }
+        else
+        {
+            _dbPath = E2ESettings.GetTempDbPath();
+
+            _backend = new BackendProcess(_dbPath);
+            await _backend.StartAsync();
+
+            _frontend = new FrontendProcess();
+            await _frontend.StartAsync();
+        }
         
         _playwrightFixture = new PlaywrightFixture();
         await _playwrightFixture.InitializeAsync();
+    }
+
+    private static async Task WaitForExternalAppAsync()
+    {
+        using var client = new HttpClient();
+        for (var i = 0; i < 60; i++)
+        {
+            try
+            {
+                var backend = await client.GetAsync($"{E2ESettings.BackendUrl}/healthz/live");
+                var frontend = await client.GetAsync(E2ESettings.FrontendUrl);
+                if (backend.IsSuccessStatusCode && frontend.IsSuccessStatusCode)
+                {
+                    return;
+                }
+            }
+            catch
+            {
+                // Retry while the externally orchestrated app finishes starting.
+            }
+
+            await Task.Delay(1000);
+        }
+
+        throw new TimeoutException("External E2E app failed to become ready within expected time");
     }
 
     [AfterTestRun]

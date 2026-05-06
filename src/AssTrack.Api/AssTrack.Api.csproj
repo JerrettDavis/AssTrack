@@ -4,6 +4,11 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <SpaRoot>../../frontend/</SpaRoot>
+    <BuildIntegratedFrontend Condition="'$(BuildIntegratedFrontend)' == ''">true</BuildIntegratedFrontend>
+    <NpmExecutable>npm</NpmExecutable>
+    <NpmExecutable Condition="'$(OS)' == 'Windows_NT' And Exists('$(ProgramFiles)\nodejs\npm.cmd')">$(ProgramFiles)\nodejs\npm.cmd</NpmExecutable>
+    <NodePathPrefix Condition="'$(OS)' == 'Windows_NT' And Exists('$(ProgramFiles)\nodejs\node.exe')">$(ProgramFiles)\nodejs;</NodePathPrefix>
   </PropertyGroup>
 
   <ItemGroup>
@@ -21,5 +26,19 @@
     <ProjectReference Include="..\AssTrack.Infrastructure\AssTrack.Infrastructure.csproj" />
     <ProjectReference Include="..\AssTrack.Domain\AssTrack.Domain.csproj" />
   </ItemGroup>
+
+  <Target Name="BuildFrontendForPublish" BeforeTargets="ComputeFilesToPublish" Condition="'$(BuildIntegratedFrontend)' == 'true'">
+    <Exec Command="set &quot;PATH=$(NodePathPrefix)%PATH%&quot; &amp;&amp; &quot;$(NpmExecutable)&quot; ci" WorkingDirectory="$(SpaRoot)" Condition="'$(OS)' == 'Windows_NT'" />
+    <Exec Command="set &quot;PATH=$(NodePathPrefix)%PATH%&quot; &amp;&amp; &quot;$(NpmExecutable)&quot; run build" WorkingDirectory="$(SpaRoot)" Condition="'$(OS)' == 'Windows_NT'" />
+    <Exec Command="&quot;$(NpmExecutable)&quot; ci" WorkingDirectory="$(SpaRoot)" Condition="'$(OS)' != 'Windows_NT'" />
+    <Exec Command="&quot;$(NpmExecutable)&quot; run build" WorkingDirectory="$(SpaRoot)" Condition="'$(OS)' != 'Windows_NT'" />
+    <ItemGroup>
+      <DistFiles Include="$(SpaRoot)dist/**/*" />
+      <ResolvedFileToPublish Include="@(DistFiles->'%(FullPath)')" Exclude="@(ResolvedFileToPublish)">
+        <RelativePath>wwwroot/%(RecursiveDir)%(FileName)%(Extension)</RelativePath>
+        <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      </ResolvedFileToPublish>
+    </ItemGroup>
+  </Target>
 
 </Project>

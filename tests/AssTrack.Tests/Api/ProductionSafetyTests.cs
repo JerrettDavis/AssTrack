@@ -98,12 +98,15 @@ public class ProductionSafetyTests
     }
 
     [Fact]
-    public void Startup_ThrowsInvalidOperationException_WhenCorsOriginsEmpty_InProduction()
+    public async Task Startup_AllowsEmptyCorsOrigins_ForIntegratedProductionHost()
     {
-        using var factory = new ProductionWebApplicationFactory(corsOrigins: []);
-        var act = () => factory.CreateClient();
-        act.Should().Throw<Exception>()
-            .Which.ToString().Should().Contain("Cors:AllowedOrigins must be configured in Production");
+        await using var factory = new ProductionWebApplicationFactory(corsOrigins: []);
+        var client = factory.CreateAuthenticatedClient();
+
+        var response = await client.GetAsync("/api/health");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        response.Headers.Should().NotContainKey("Access-Control-Allow-Origin");
     }
 
     [Fact]
