@@ -16,6 +16,23 @@ public class MaintenanceSchedule
     public string? Notes { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    public ICollection<MaintenanceServiceRecord> ServiceRecords { get; set; } = new List<MaintenanceServiceRecord>();
+}
+
+public class MaintenanceServiceRecord
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid MaintenanceScheduleId { get; set; }
+    public MaintenanceSchedule MaintenanceSchedule { get; set; } = null!;
+    public Guid AssetId { get; set; }
+    public Asset Asset { get; set; } = null!;
+    public DateTime CompletedAt { get; set; } = DateTime.UtcNow;
+    public double? OdometerKm { get; set; }
+    public double? RuntimeHours { get; set; }
+    public string? PerformedBy { get; set; }
+    public decimal? Cost { get; set; }
+    public string? Notes { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
 
 public static class MaintenanceServiceTypes

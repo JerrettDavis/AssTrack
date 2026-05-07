@@ -35,6 +35,17 @@ public static class MaintenanceEndpoints
             return Results.Ok(Map(schedule, latestReadings));
         }).RequireAuthorization("Operator");
 
+        maintenance.MapGet("/records", async (
+            Guid? scheduleId,
+            Guid? assetId,
+            int? limit,
+            MaintenanceScheduleRepository repository,
+            CancellationToken cancellationToken) =>
+        {
+            var records = await repository.GetServiceRecordsAsync(scheduleId, assetId, limit ?? 200, cancellationToken);
+            return Results.Ok(records.Select(MapRecord));
+        }).RequireAuthorization("Operator");
+
         maintenance.MapPost("/schedules", async (
             CreateMaintenanceScheduleRequest request,
             MaintenanceScheduleRepository repository,
@@ -104,6 +115,36 @@ public static class MaintenanceEndpoints
             return deleted ? Results.NoContent() : Results.NotFound();
         }).RequireAuthorization("Operator");
 
+        maintenance.MapPost("/schedules/{id:guid}/complete", async (
+            Guid id,
+            CompleteMaintenanceScheduleRequest request,
+            MaintenanceScheduleRepository repository,
+            SensorReadingRepository sensorRepository,
+            CancellationToken cancellationToken) =>
+        {
+            var schedule = await repository.GetByIdAsync(id, cancellationToken);
+            if (schedule is null) return Results.NotFound();
+
+            var latestReadings = await GetLatestReadingsAsync([schedule], sensorRepository, cancellationToken);
+            latestReadings.TryGetValue(schedule.AssetId, out var readings);
+            var odometerKm = request.OdometerKm ?? readings?.LatestOdometerKm;
+            var runtimeHours = request.RuntimeHours ?? readings?.LatestRuntimeHours;
+            var validation = ValidateCompletion(request.CompletedAt, odometerKm, runtimeHours, request.Cost);
+            if (validation.Count > 0) return Results.ValidationProblem(validation);
+
+            var record = await repository.AddServiceRecordAsync(
+                id,
+                request.CompletedAt ?? DateTime.UtcNow,
+                odometerKm,
+                runtimeHours,
+                string.IsNullOrWhiteSpace(request.PerformedBy) ? null : request.PerformedBy.Trim(),
+                request.Cost,
+                string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim(),
+                cancellationToken);
+
+            return record is null ? Results.NotFound() : Results.Created($"/api/maintenance/records/{record.Id}", MapRecord(record));
+        }).RequireAuthorization("Operator");
+
         return group;
     }
 
@@ -139,6 +180,21 @@ public static class MaintenanceEndpoints
             readings?.LatestOdometerKm,
             readings?.LatestRuntimeHours);
     }
+
+    internal static MaintenanceServiceRecordDto MapRecord(MaintenanceServiceRecord record) => new(
+        record.Id,
+        record.MaintenanceScheduleId,
+        record.AssetId,
+        record.Asset?.Name,
+        record.MaintenanceSchedule?.Title ?? string.Empty,
+        record.MaintenanceSchedule?.ServiceType ?? MaintenanceServiceTypes.General,
+        ApiDateTime.Utc(record.CompletedAt),
+        record.OdometerKm,
+        record.RuntimeHours,
+        record.PerformedBy,
+        record.Cost,
+        record.Notes,
+        ApiDateTime.Utc(record.CreatedAt));
 
     private static string CalculateStatus(MaintenanceSchedule schedule, DateTime? nextDueAt, double? nextOdometerKm, double? nextRuntimeHours, AssetMaintenanceReadings? readings)
     {
@@ -218,6 +274,16 @@ public static class MaintenanceEndpoints
         if (!IsPositive(intervalRuntimeHours)) errors["intervalRuntimeHours"] = ["Runtime interval must be positive."];
         if (!IsNonNegative(lastOdometerKm)) errors["lastOdometerKm"] = ["Last odometer must be zero or greater."];
         if (!IsNonNegative(lastRuntimeHours)) errors["lastRuntimeHours"] = ["Last runtime must be zero or greater."];
+        return errors;
+    }
+
+    private static Dictionary<string, string[]> ValidateCompletion(DateTime? completedAt, double? odometerKm, double? runtimeHours, decimal? cost)
+    {
+        var errors = new Dictionary<string, string[]>();
+        if (completedAt.HasValue && completedAt.Value > DateTime.UtcNow.AddMinutes(5)) errors["completedAt"] = ["Completed time cannot be in the future."];
+        if (!IsNonNegative(odometerKm)) errors["odometerKm"] = ["Odometer must be zero or greater."];
+        if (!IsNonNegative(runtimeHours)) errors["runtimeHours"] = ["Runtime must be zero or greater."];
+        if (cost.HasValue && cost.Value < 0) errors["cost"] = ["Cost must be zero or greater."];
         return errors;
     }
 

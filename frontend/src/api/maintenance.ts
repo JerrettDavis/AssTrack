@@ -25,6 +25,22 @@ export type MaintenanceSchedule = {
   latestRuntimeHours?: number | null
 }
 
+export type MaintenanceServiceRecord = {
+  id: string
+  maintenanceScheduleId: string
+  assetId: string
+  assetName?: string | null
+  scheduleTitle: string
+  serviceType: string
+  completedAt: string
+  odometerKm?: number | null
+  runtimeHours?: number | null
+  performedBy?: string | null
+  cost?: number | null
+  notes?: string | null
+  createdAt: string
+}
+
 export type MaintenanceScheduleRequest = {
   assetId: string
   title: string
@@ -38,10 +54,27 @@ export type MaintenanceScheduleRequest = {
   notes?: string | null
 }
 
+export type CompleteMaintenanceScheduleRequest = {
+  completedAt?: string | null
+  odometerKm?: number | null
+  runtimeHours?: number | null
+  performedBy?: string | null
+  cost?: number | null
+  notes?: string | null
+}
+
 export function getMaintenanceSchedules(assetId?: string) {
   const query = new URLSearchParams()
   if (assetId) query.append('assetId', assetId)
   return apiGet<MaintenanceSchedule[]>(`/api/maintenance/schedules?${query}`)
+}
+
+export function getMaintenanceServiceRecords(params: { assetId?: string; scheduleId?: string; limit?: number } = {}) {
+  const query = new URLSearchParams()
+  if (params.assetId) query.append('assetId', params.assetId)
+  if (params.scheduleId) query.append('scheduleId', params.scheduleId)
+  if (params.limit) query.append('limit', params.limit.toString())
+  return apiGet<MaintenanceServiceRecord[]>(`/api/maintenance/records?${query}`)
 }
 
 export function createMaintenanceSchedule(data: MaintenanceScheduleRequest) {
@@ -50,6 +83,10 @@ export function createMaintenanceSchedule(data: MaintenanceScheduleRequest) {
 
 export function updateMaintenanceSchedule(id: string, data: MaintenanceScheduleRequest) {
   return apiPut<MaintenanceSchedule>(`/api/maintenance/schedules/${id}`, data)
+}
+
+export function completeMaintenanceSchedule(id: string, data: CompleteMaintenanceScheduleRequest) {
+  return apiPost<MaintenanceServiceRecord>(`/api/maintenance/schedules/${id}/complete`, data)
 }
 
 export async function deleteMaintenanceSchedule(id: string): Promise<void> {

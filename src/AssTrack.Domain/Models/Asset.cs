@@ -15,6 +15,7 @@ public class Asset
     public ICollection<Device> Devices { get; set; } = new List<Device>();
     public ICollection<SensorReading> SensorReadings { get; set; } = new List<SensorReading>();
     public ICollection<MaintenanceSchedule> MaintenanceSchedules { get; set; } = new List<MaintenanceSchedule>();
+    public ICollection<MaintenanceServiceRecord> MaintenanceServiceRecords { get; set; } = new List<MaintenanceServiceRecord>();
 }
 
 public static class AssetClasses

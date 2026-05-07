@@ -1619,6 +1619,20 @@ p {
   min-width: 0;
 }
 
+.maintenance-records {
+  display: grid;
+  gap: 0.4rem;
+  padding-top: 0.65rem;
+  border-top: 1px solid var(--border);
+}
+
+.maintenance-record-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: baseline;
+}
+
 .button-compact {
   min-height: 32px;
   padding: 0.35rem 0.6rem;

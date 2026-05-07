@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react'
 import { createAsset, deleteAsset, getAssetClasses, getAssets, type Asset, type AssetClass, type SensorReading, updateAsset, type UpdateAssetRequest } from '../api/assets'
-import { createMaintenanceSchedule, deleteMaintenanceSchedule, getMaintenanceSchedules, type MaintenanceSchedule, type MaintenanceStatus } from '../api/maintenance'
+import { completeMaintenanceSchedule, createMaintenanceSchedule, deleteMaintenanceSchedule, getMaintenanceSchedules, getMaintenanceServiceRecords, type MaintenanceSchedule, type MaintenanceServiceRecord, type MaintenanceStatus } from '../api/maintenance'
 import { getLatestPositions, getObservations, type Observation } from '../api/observations'
 import { getSensorReadings } from '../api/sensors'
 import { useIdentityContext } from '../context/IdentityContext'
@@ -151,9 +151,30 @@ function maintenanceDueText(schedule: MaintenanceSchedule) {
   return parts.length > 0 ? parts.join(' | ') : 'No due target'
 }
 
-function MaintenancePanel({ schedules, onDelete, submitting, isOperator }: { schedules: MaintenanceSchedule[], onDelete: (schedule: MaintenanceSchedule) => void, submitting: boolean, isOperator: boolean }) {
+function MaintenancePanel({
+  records,
+  schedules,
+  onComplete,
+  onDelete,
+  submitting,
+  isOperator,
+}: {
+  records: MaintenanceServiceRecord[]
+  schedules: MaintenanceSchedule[]
+  onComplete: (schedule: MaintenanceSchedule) => void
+  onDelete: (schedule: MaintenanceSchedule) => void
+  submitting: boolean
+  isOperator: boolean
+}) {
   if (schedules.length === 0) {
-    return <div className="maintenance-panel maintenance-empty"><span className="muted">No maintenance schedules.</span></div>
+    return (
+      <div className="maintenance-panel maintenance-empty">
+        <span className="muted">No maintenance schedules.</span>
+        {records.length > 0 && (
+          <span className="muted">Last service: {records[0].scheduleTitle} on {formatTimestamp(records[0].completedAt)}</span>
+        )}
+      </div>
+    )
   }
 
   return (
@@ -171,13 +192,29 @@ function MaintenancePanel({ schedules, onDelete, submitting, isOperator }: { sch
             </div>
             <span className={`badge ${maintenanceStatusClass(schedule.status)}`}>{schedule.status}</span>
             {isOperator && (
-              <button className="button button-secondary button-compact" disabled={submitting} onClick={() => onDelete(schedule)} type="button">
-                Remove
-              </button>
+              <div className="compact-actions">
+                <button className="button button-secondary button-compact" disabled={submitting} onClick={() => onComplete(schedule)} type="button">
+                  Complete
+                </button>
+                <button className="button button-secondary button-compact" disabled={submitting} onClick={() => onDelete(schedule)} type="button">
+                  Remove
+                </button>
+              </div>
             )}
           </div>
         ))}
       </div>
+      {records.length > 0 && (
+        <div className="maintenance-records">
+          <strong>Recent service</strong>
+          {records.slice(0, 3).map((record) => (
+            <div className="maintenance-record-row" key={record.id}>
+              <span>{record.notes ? `${record.scheduleTitle}: ${record.notes}` : record.scheduleTitle}</span>
+              <span className="muted">{formatTimestamp(record.completedAt)}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -189,6 +226,7 @@ export function AssetsPage() {
   const [latestPositions, setLatestPositions] = useState<Observation[]>([])
   const [sensorReadings, setSensorReadings] = useState<SensorReading[]>([])
   const [maintenanceSchedules, setMaintenanceSchedules] = useState<MaintenanceSchedule[]>([])
+  const [maintenanceRecords, setMaintenanceRecords] = useState<MaintenanceServiceRecord[]>([])
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [showAddForm, setShowAddForm] = useState(false)
@@ -209,13 +247,14 @@ export function AssetsPage() {
   async function load() {
     try {
       setError(null)
-      const [assetItems, classItems, observationItems, latestPositionItems, sensorItems, maintenanceItems] = await Promise.all([
+      const [assetItems, classItems, observationItems, latestPositionItems, sensorItems, maintenanceItems, maintenanceRecordItems] = await Promise.all([
         getAssets(),
         getAssetClasses(),
         getObservations(),
         getLatestPositions(),
         getSensorReadings({ limit: 500 }),
         getMaintenanceSchedules(),
+        getMaintenanceServiceRecords({ limit: 200 }),
       ])
       setAssets(assetItems)
       setAssetClasses(classItems)
@@ -223,6 +262,7 @@ export function AssetsPage() {
       setLatestPositions(latestPositionItems)
       setSensorReadings(sensorItems)
       setMaintenanceSchedules(maintenanceItems)
+      setMaintenanceRecords(maintenanceRecordItems)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to load API data.')
     } finally {
@@ -343,6 +383,25 @@ export function AssetsPage() {
     }
   }
 
+  async function handleCompleteMaintenance(schedule: MaintenanceSchedule) {
+    const notes = window.prompt(`Complete "${schedule.title}"? Optional service notes:`)
+    if (notes === null) return
+    setSubmitting(true)
+    try {
+      await completeMaintenanceSchedule(schedule.id, {
+        completedAt: new Date().toISOString(),
+        odometerKm: schedule.latestOdometerKm ?? null,
+        runtimeHours: schedule.latestRuntimeHours ?? null,
+        notes: notes.trim() || null,
+      })
+      await load()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to complete maintenance schedule.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   const metrics = useMemo(() => {
     const deviceCount = assets.reduce((total, asset) => total + asset.devices.length, 0)
     const movingCount = latestPositions.filter((p) => (p.speedKmh ?? 0) > 0).length
@@ -383,6 +442,14 @@ export function AssetsPage() {
     })
     return grouped
   }, [maintenanceSchedules])
+
+  const maintenanceRecordsByAssetId = useMemo(() => {
+    const grouped = new Map<string, MaintenanceServiceRecord[]>()
+    maintenanceRecords.forEach((record) => {
+      grouped.set(record.assetId, [...(grouped.get(record.assetId) ?? []), record])
+    })
+    return grouped
+  }, [maintenanceRecords])
 
   const filteredAssets = useMemo(() => {
     const normalizedSearch = searchTerm.trim().toLowerCase()
@@ -687,7 +754,9 @@ export function AssetsPage() {
                     <TelemetryPanel latestReadings={asset.latestSensorReadings} recentReadings={readingsByAssetId.get(asset.id) ?? []} />
                     <MaintenancePanel
                       isOperator={isOperator}
+                      onComplete={(schedule) => void handleCompleteMaintenance(schedule)}
                       onDelete={(schedule) => void handleDeleteMaintenance(schedule)}
+                      records={maintenanceRecordsByAssetId.get(asset.id) ?? []}
                       schedules={maintenanceByAssetId.get(asset.id) ?? []}
                       submitting={submitting}
                     />

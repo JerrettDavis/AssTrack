@@ -58,6 +58,69 @@ public class MaintenanceScheduleRepository(AssTrackDbContext dbContext)
         return true;
     }
 
+    public async Task<MaintenanceServiceRecord?> AddServiceRecordAsync(
+        Guid scheduleId,
+        DateTime completedAt,
+        double? odometerKm,
+        double? runtimeHours,
+        string? performedBy,
+        decimal? cost,
+        string? notes,
+        CancellationToken cancellationToken = default)
+    {
+        var schedule = await dbContext.MaintenanceSchedules
+            .Include(x => x.Asset)
+            .FirstOrDefaultAsync(x => x.Id == scheduleId, cancellationToken);
+        if (schedule is null) return null;
+
+        var now = DateTime.UtcNow;
+        var record = new MaintenanceServiceRecord
+        {
+            MaintenanceScheduleId = schedule.Id,
+            AssetId = schedule.AssetId,
+            CompletedAt = completedAt,
+            OdometerKm = odometerKm,
+            RuntimeHours = runtimeHours,
+            PerformedBy = performedBy,
+            Cost = cost,
+            Notes = notes,
+            CreatedAt = now
+        };
+
+        schedule.LastServiceAt = completedAt;
+        if (odometerKm.HasValue) schedule.LastOdometerKm = odometerKm;
+        if (runtimeHours.HasValue) schedule.LastRuntimeHours = runtimeHours;
+        schedule.UpdatedAt = now;
+
+        dbContext.MaintenanceServiceRecords.Add(record);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return await QueryRecords()
+            .FirstOrDefaultAsync(x => x.Id == record.Id, cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<MaintenanceServiceRecord>> GetServiceRecordsAsync(
+        Guid? scheduleId = null,
+        Guid? assetId = null,
+        int limit = 200,
+        CancellationToken cancellationToken = default)
+    {
+        var query = QueryRecords();
+        if (scheduleId.HasValue) query = query.Where(x => x.MaintenanceScheduleId == scheduleId.Value);
+        if (assetId.HasValue) query = query.Where(x => x.AssetId == assetId.Value);
+
+        return await query
+            .OrderByDescending(x => x.CompletedAt)
+            .ThenByDescending(x => x.CreatedAt)
+            .Take(Math.Clamp(limit, 1, 1000))
+            .ToListAsync(cancellationToken);
+    }
+
     private IQueryable<MaintenanceSchedule> Query()
         => dbContext.MaintenanceSchedules.Include(x => x.Asset);
+
+    private IQueryable<MaintenanceServiceRecord> QueryRecords()
+        => dbContext.MaintenanceServiceRecords
+            .Include(x => x.Asset)
+            .Include(x => x.MaintenanceSchedule);
 }

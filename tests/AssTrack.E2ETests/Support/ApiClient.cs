@@ -52,4 +52,12 @@ public class ApiClient
         var result = await response.Content.ReadFromJsonAsync<JsonElement>();
         return result.GetProperty("id").GetString() ?? throw new Exception("No maintenance schedule ID returned");
     }
+
+    public async Task<string> CompleteMaintenanceScheduleAsync(string scheduleId, Dictionary<string, object> data)
+    {
+        var response = await _client.PostAsJsonAsync($"/api/maintenance/schedules/{scheduleId}/complete", data);
+        response.EnsureSuccessStatusCode();
+        var result = await response.Content.ReadFromJsonAsync<JsonElement>();
+        return result.GetProperty("id").GetString() ?? throw new Exception("No maintenance service record ID returned");
+    }
 }

@@ -20,6 +20,13 @@ Scenario: View asset maintenance due status
   And the page contains "Mileage inspection"
   And the page contains "due"
 
+Scenario: Complete due asset maintenance
+  Given a due maintenance schedule named "Mileage inspection" exists for the asset
+  When I navigate to the assets page
+  And I complete maintenance schedule "Mileage inspection"
+  Then the page contains "Recent service"
+  And the page contains "current"
+
 Scenario: View live map
   When I post an observation for the device via the API
   And I navigate to the map page

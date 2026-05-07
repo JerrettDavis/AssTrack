@@ -375,6 +375,50 @@ namespace AssTrack.Infrastructure.Migrations
                     b.ToTable("MaintenanceSchedules");
                 });
 
+            modelBuilder.Entity("AssTrack.Domain.Models.MaintenanceServiceRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("AssetId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CompletedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal?>("Cost")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("MaintenanceScheduleId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(2000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<double?>("OdometerKm")
+                        .HasColumnType("REAL");
+
+                    b.Property<string>("PerformedBy")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<double?>("RuntimeHours")
+                        .HasColumnType("REAL");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AssetId", "CompletedAt");
+
+                    b.HasIndex("MaintenanceScheduleId", "CompletedAt");
+
+                    b.ToTable("MaintenanceServiceRecords");
+                });
+
             modelBuilder.Entity("AssTrack.Domain.Models.MessageEntry", b =>
                 {
                     b.Property<Guid>("Id")
@@ -793,6 +837,25 @@ namespace AssTrack.Infrastructure.Migrations
                     b.Navigation("Asset");
                 });
 
+            modelBuilder.Entity("AssTrack.Domain.Models.MaintenanceServiceRecord", b =>
+                {
+                    b.HasOne("AssTrack.Domain.Models.Asset", "Asset")
+                        .WithMany("MaintenanceServiceRecords")
+                        .HasForeignKey("AssetId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("AssTrack.Domain.Models.MaintenanceSchedule", "MaintenanceSchedule")
+                        .WithMany("ServiceRecords")
+                        .HasForeignKey("MaintenanceScheduleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Asset");
+
+                    b.Navigation("MaintenanceSchedule");
+                });
+
             modelBuilder.Entity("AssTrack.Domain.Models.MessageEntry", b =>
                 {
                     b.HasOne("AssTrack.Domain.Models.MessageThread", "Thread")
@@ -895,6 +958,8 @@ namespace AssTrack.Infrastructure.Migrations
 
                     b.Navigation("MaintenanceSchedules");
 
+                    b.Navigation("MaintenanceServiceRecords");
+
                     b.Navigation("SensorReadings");
                 });
 
@@ -906,6 +971,11 @@ namespace AssTrack.Infrastructure.Migrations
             modelBuilder.Entity("AssTrack.Domain.Models.IntegrationFeed", b =>
                 {
                     b.Navigation("Devices");
+                });
+
+            modelBuilder.Entity("AssTrack.Domain.Models.MaintenanceSchedule", b =>
+                {
+                    b.Navigation("ServiceRecords");
                 });
 
             modelBuilder.Entity("AssTrack.Domain.Models.MessageThread", b =>

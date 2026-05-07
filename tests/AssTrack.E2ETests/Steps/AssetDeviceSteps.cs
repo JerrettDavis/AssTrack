@@ -61,7 +61,7 @@ public class AssetDeviceSteps
     public async Task GivenADueMaintenanceScheduleNamedExistsForTheAsset(string title)
     {
         var assetId = _context.AssetId ?? throw new InvalidOperationException("AssetId not set");
-        await _context.ApiClient.CreateMaintenanceScheduleAsync(new Dictionary<string, object>
+        var scheduleId = await _context.ApiClient.CreateMaintenanceScheduleAsync(new Dictionary<string, object>
         {
             ["assetId"] = assetId,
             ["title"] = title,
@@ -69,6 +69,7 @@ public class AssetDeviceSteps
             ["intervalOdometerKm"] = 1000,
             ["lastOdometerKm"] = 20000
         });
+        _context.MaintenanceScheduleId = scheduleId;
 
         await _context.ApiClient.CreateSensorReadingAsync(new Dictionary<string, object>
         {
@@ -79,5 +80,18 @@ public class AssetDeviceSteps
             ["unit"] = "km",
             ["observedAt"] = DateTime.UtcNow.ToString("o")
         });
+    }
+
+    [When(@"I complete maintenance schedule ""([^""]*)""")]
+    public async Task WhenICompleteMaintenanceSchedule(string title)
+    {
+        var scheduleId = _context.MaintenanceScheduleId ?? throw new InvalidOperationException("MaintenanceScheduleId not set");
+        await _context.ApiClient.CompleteMaintenanceScheduleAsync(scheduleId, new Dictionary<string, object>
+        {
+            ["notes"] = "Completed in e2e"
+        });
+        await _context.Page.ReloadAsync();
+        await _context.Page.GetByText("Recent service").WaitForAsync();
+        await _context.Page.GetByText("Completed in e2e").WaitForAsync();
     }
 }

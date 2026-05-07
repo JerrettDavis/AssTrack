@@ -18,6 +18,7 @@ public class AssTrackDbContext(DbContextOptions<AssTrackDbContext> options) : Db
     public DbSet<MessageEntry> MessageEntries => Set<MessageEntry>();
     public DbSet<SensorReading> SensorReadings => Set<SensorReading>();
     public DbSet<MaintenanceSchedule> MaintenanceSchedules => Set<MaintenanceSchedule>();
+    public DbSet<MaintenanceServiceRecord> MaintenanceServiceRecords => Set<MaintenanceServiceRecord>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -239,6 +240,24 @@ public class AssTrackDbContext(DbContextOptions<AssTrackDbContext> options) : Db
             entity.HasIndex(x => x.ServiceType);
             entity.HasOne(x => x.Asset)
                 .WithMany(x => x.MaintenanceSchedules)
+                .HasForeignKey(x => x.AssetId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<MaintenanceServiceRecord>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.PerformedBy).HasMaxLength(200);
+            entity.Property(x => x.Cost).HasColumnType("decimal(18,2)");
+            entity.Property(x => x.Notes).HasMaxLength(2000);
+            entity.HasIndex(x => new { x.MaintenanceScheduleId, x.CompletedAt });
+            entity.HasIndex(x => new { x.AssetId, x.CompletedAt });
+            entity.HasOne(x => x.MaintenanceSchedule)
+                .WithMany(x => x.ServiceRecords)
+                .HasForeignKey(x => x.MaintenanceScheduleId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Asset)
+                .WithMany(x => x.MaintenanceServiceRecords)
                 .HasForeignKey(x => x.AssetId)
                 .OnDelete(DeleteBehavior.Cascade);
         });

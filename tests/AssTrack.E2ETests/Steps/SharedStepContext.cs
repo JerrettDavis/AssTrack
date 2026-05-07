@@ -33,4 +33,10 @@ public class SharedStepContext
         get => _scenarioContext.TryGetValue("UnassignedDeviceId", out string? id) ? id : null;
         set => _scenarioContext["UnassignedDeviceId"] = value;
     }
+
+    public string? MaintenanceScheduleId
+    {
+        get => _scenarioContext.TryGetValue("MaintenanceScheduleId", out string? id) ? id : null;
+        set => _scenarioContext["MaintenanceScheduleId"] = value;
+    }
 }

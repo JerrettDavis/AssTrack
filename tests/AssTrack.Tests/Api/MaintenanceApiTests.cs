@@ -91,4 +91,54 @@ public class MaintenanceApiTests : IClassFixture<TestWebApplicationFactory>
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
+
+    [Fact]
+    public async Task CompleteMaintenanceSchedule_Should_CreateRecordAndResetDueBaseline()
+    {
+        await _factory.ResetDatabaseAsync();
+        using var operatorClient = _factory.CreateAuthenticatedClient();
+        using var ingestClient = _factory.CreateIngestClient();
+
+        var assetResponse = await operatorClient.PostAsJsonAsync("/api/assets", new CreateAssetRequest("Fleet Van 24", null, "Vehicle", AssetClass: "vehicle"));
+        var asset = await assetResponse.Content.ReadFromJsonAsync<AssetDto>();
+
+        var scheduleResponse = await operatorClient.PostAsJsonAsync("/api/maintenance/schedules", new CreateMaintenanceScheduleRequest(
+            asset!.Id,
+            "Mileage inspection",
+            "inspection",
+            IntervalOdometerKm: 1000,
+            LastOdometerKm: 20000));
+        var schedule = await scheduleResponse.Content.ReadFromJsonAsync<MaintenanceScheduleDto>();
+
+        await ingestClient.PostAsJsonAsync("/api/sensors/readings", new CreateSensorReadingRequest(
+            asset.Id,
+            null,
+            null,
+            null,
+            "odometer",
+            "Odometer",
+            21000,
+            null,
+            "km",
+            DateTime.UtcNow,
+            null));
+
+        var completeResponse = await operatorClient.PostAsJsonAsync($"/api/maintenance/schedules/{schedule!.Id}/complete", new CompleteMaintenanceScheduleRequest(Notes: "Changed oil and inspected belts."));
+
+        completeResponse.StatusCode.Should().Be(HttpStatusCode.Created);
+        var record = await completeResponse.Content.ReadFromJsonAsync<MaintenanceServiceRecordDto>();
+        record.Should().NotBeNull();
+        record!.MaintenanceScheduleId.Should().Be(schedule.Id);
+        record.OdometerKm.Should().Be(21000);
+        record.Notes.Should().Be("Changed oil and inspected belts.");
+
+        var schedules = await operatorClient.GetFromJsonAsync<List<MaintenanceScheduleDto>>($"/api/maintenance/schedules?assetId={asset.Id}");
+        schedules.Should().ContainSingle();
+        schedules![0].Status.Should().Be("current");
+        schedules[0].LastOdometerKm.Should().Be(21000);
+        schedules[0].NextOdometerKm.Should().Be(22000);
+
+        var records = await operatorClient.GetFromJsonAsync<List<MaintenanceServiceRecordDto>>($"/api/maintenance/records?assetId={asset.Id}");
+        records.Should().ContainSingle(x => x.Id == record.Id && x.ScheduleTitle == "Mileage inspection");
+    }
 }

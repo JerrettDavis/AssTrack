@@ -22,6 +22,21 @@ public sealed record MaintenanceScheduleDto(
     double? LatestOdometerKm,
     double? LatestRuntimeHours);
 
+public sealed record MaintenanceServiceRecordDto(
+    Guid Id,
+    Guid MaintenanceScheduleId,
+    Guid AssetId,
+    string? AssetName,
+    string ScheduleTitle,
+    string ServiceType,
+    DateTime CompletedAt,
+    double? OdometerKm,
+    double? RuntimeHours,
+    string? PerformedBy,
+    decimal? Cost,
+    string? Notes,
+    DateTime CreatedAt);
+
 public sealed record CreateMaintenanceScheduleRequest(
     Guid AssetId,
     string Title,
@@ -44,4 +59,12 @@ public sealed record UpdateMaintenanceScheduleRequest(
     DateTime? LastServiceAt = null,
     double? LastOdometerKm = null,
     double? LastRuntimeHours = null,
+    string? Notes = null);
+
+public sealed record CompleteMaintenanceScheduleRequest(
+    DateTime? CompletedAt = null,
+    double? OdometerKm = null,
+    double? RuntimeHours = null,
+    string? PerformedBy = null,
+    decimal? Cost = null,
     string? Notes = null);
