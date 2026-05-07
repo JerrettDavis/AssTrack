@@ -10,6 +10,7 @@ This audit tracks the product areas AssTrack should cover as it grows from a loc
 - Integration feed configuration with normalized location ingest and a pluggable bridge gateway.
 - Asset classes and criticality for people, vehicles, property, pets, equipment, containers, and other assets.
 - Generic sensor readings attached to assets, devices, and integration feeds.
+- Sensor telemetry summaries in asset and device inventory views, including recent numeric trends and stale-sensor warnings.
 
 ## Commercial Verticals
 
@@ -32,13 +33,12 @@ This audit tracks the product areas AssTrack should cover as it grows from a loc
 
 ## Next Iterations
 
-1. Sensor UI: add a dedicated telemetry panel on asset/device details with recent readings, charts, and stale-sensor warnings.
-2. Maintenance: add vehicle/equipment service intervals based on odometer, runtime, date, and diagnostic events.
-3. Alert routing: add escalation rules that send alerts through message providers, SMS, email, and webhooks.
-4. Messaging providers: implement Signal and Telegram bridge adapters against the existing message-thread API.
-5. Reports: add daily/weekly utilization, dwell time, geofence visits, mileage, stop summaries, and sensor exceptions.
-6. Custody: add assignment, checkout/check-in, custody transfer, and audit history for tools, containers, and vehicles.
-7. Privacy: add per-asset retention, hidden zones, share links, and stricter handling for people/pet classes.
-8. Import/enrollment: provide controlled bulk enrollment for known devices without auto-creating unwanted assets.
-9. Mobile UX: optimize map, messaging, and alert acknowledgement for field use.
-10. Operations: add integration health checks, per-feed metrics, secret rotation, and dead-letter replay.
+1. Maintenance: add vehicle/equipment service intervals based on odometer, runtime, date, and diagnostic events.
+2. Alert routing: add escalation rules that send alerts through message providers, SMS, email, and webhooks.
+3. Messaging providers: implement Signal and Telegram bridge adapters against the existing message-thread API.
+4. Reports: add daily/weekly utilization, dwell time, geofence visits, mileage, stop summaries, and sensor exceptions.
+5. Custody: add assignment, checkout/check-in, custody transfer, and audit history for tools, containers, and vehicles.
+6. Privacy: add per-asset retention, hidden zones, share links, and stricter handling for people/pet classes.
+7. Import/enrollment: provide controlled bulk enrollment for known devices without auto-creating unwanted assets.
+8. Mobile UX: optimize map, messaging, and alert acknowledgement for field use.
+9. Operations: add integration health checks, per-feed metrics, secret rotation, and dead-letter replay.

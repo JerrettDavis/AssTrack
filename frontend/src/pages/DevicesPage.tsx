@@ -1,12 +1,61 @@
 import { Fragment, FormEvent, useEffect, useMemo, useState } from 'react'
 import { createAsset, getAssets, type Asset } from '../api/assets'
+import type { SensorReading } from '../api/assets'
 import { createDevice, deleteDevice, getDevices, updateDevice, type DeviceListItem, type UpdateDeviceRequest } from '../api/devices'
 import { getIntegrationFeeds, type IntegrationFeed } from '../api/integrations'
 import { getLatestPositions, type Observation } from '../api/observations'
+import { getSensorReadings } from '../api/sensors'
 import { useIdentityContext } from '../context/IdentityContext'
 
 function providerDisplayName(device: DeviceListItem): string {
   return device.providerLongName || device.providerLabel || device.providerShortName || device.label || device.identifier
+}
+
+function sensorName(reading: SensorReading) {
+  return reading.name || reading.sensorType.replaceAll('_', ' ')
+}
+
+function sensorValue(reading: SensorReading) {
+  if (reading.numericValue != null) return `${reading.numericValue}${reading.unit ? ` ${reading.unit}` : ''}`
+  return reading.textValue ?? 'N/A'
+}
+
+function getSensorStatus(reading: SensorReading) {
+  const ageMs = Math.max(0, Date.now() - new Date(reading.observedAt).getTime())
+  if (ageMs > 24 * 60 * 60 * 1000) return { label: 'Stale', className: 'badge-danger' }
+  if (ageMs > 6 * 60 * 60 * 1000) return { label: 'Aging', className: 'badge-warning' }
+  return { label: 'Fresh', className: 'badge-success' }
+}
+
+function latestBySensorType(readings: SensorReading[]) {
+  const latest = new Map<string, SensorReading>()
+  readings.forEach((reading) => {
+    const current = latest.get(reading.sensorType)
+    if (!current || new Date(reading.observedAt).getTime() > new Date(current.observedAt).getTime()) {
+      latest.set(reading.sensorType, reading)
+    }
+  })
+  return Array.from(latest.values()).sort((a, b) => a.sensorType.localeCompare(b.sensorType))
+}
+
+function DeviceTelemetrySummary({ readings }: { readings: SensorReading[] }) {
+  const latest = latestBySensorType(readings).slice(0, 3)
+  if (latest.length === 0) return <span className="muted">No telemetry</span>
+
+  return (
+    <div className="device-telemetry">
+      {latest.map((reading) => {
+        const status = getSensorStatus(reading)
+        return (
+          <span className="device-telemetry-item" key={`${reading.sensorType}-${reading.id}`}>
+            <span>{sensorName(reading)}</span>
+            <strong>{sensorValue(reading)}</strong>
+            <span className={`badge ${status.className}`}>{status.label}</span>
+          </span>
+        )
+      })}
+    </div>
+  )
 }
 
 export default function DevicesPage() {
@@ -14,6 +63,7 @@ export default function DevicesPage() {
   const [assets, setAssets] = useState<Asset[]>([])
   const [feeds, setFeeds] = useState<IntegrationFeed[]>([])
   const [latestPositions, setLatestPositions] = useState<Observation[]>([])
+  const [sensorReadings, setSensorReadings] = useState<SensorReading[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showAddForm, setShowAddForm] = useState(false)
@@ -37,11 +87,18 @@ export default function DevicesPage() {
   async function load() {
     try {
       setError(null)
-      const [deviceItems, assetItems, feedItems, latestItems] = await Promise.all([getDevices(), getAssets(), getIntegrationFeeds(), getLatestPositions()])
+      const [deviceItems, assetItems, feedItems, latestItems, sensorItems] = await Promise.all([
+        getDevices(),
+        getAssets(),
+        getIntegrationFeeds(),
+        getLatestPositions(),
+        getSensorReadings({ limit: 500 }),
+      ])
       setDevices(deviceItems)
       setAssets(assetItems)
       setFeeds(feedItems)
       setLatestPositions(latestItems)
+      setSensorReadings(sensorItems)
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -195,6 +252,14 @@ export default function DevicesPage() {
   const protocols = useMemo(() => new Set(devices.map((device) => device.protocol || 'Unspecified')).size, [devices])
   const providers = useMemo(() => new Set(devices.map((device) => device.provider || 'manual')).size, [devices])
   const latestByDeviceId = useMemo(() => new Map(latestPositions.map((position) => [position.deviceId, position])), [latestPositions])
+  const readingsByDeviceId = useMemo(() => {
+    const grouped = new Map<string, SensorReading[]>()
+    sensorReadings.forEach((reading) => {
+      if (!reading.deviceId) return
+      grouped.set(reading.deviceId, [...(grouped.get(reading.deviceId) ?? []), reading])
+    })
+    return grouped
+  }, [sensorReadings])
   const signalInbox = useMemo(() => devices
     .filter((device) => !device.assetId && (device.integrationFeedId || (device.provider && device.provider !== 'manual')))
     .sort((a, b) => {
@@ -415,6 +480,7 @@ export default function DevicesPage() {
               <th>Provider</th>
               <th>Tags</th>
               <th>Asset</th>
+              <th>Telemetry</th>
               <th>Created</th>
               <th>Actions</th>
             </tr>
@@ -441,6 +507,7 @@ export default function DevicesPage() {
                   </td>
                   <td>{device.tags ?? '—'}</td>
                   <td>{device.assetName ?? <span className="badge badge-warning">Unassigned</span>}</td>
+                  <td><DeviceTelemetrySummary readings={readingsByDeviceId.get(device.id) ?? []} /></td>
                   <td>{new Date(device.createdAt).toLocaleString()}</td>
                   <td>
                     <div className="button-row">
@@ -464,7 +531,7 @@ export default function DevicesPage() {
                 </tr>
                 {editingId === device.id && (
                   <tr key={`${device.id}-edit`}>
-                    <td colSpan={8}>
+                    <td colSpan={9}>
                       <div className="inline-form">
                         <div className="field-grid">
                           <label className="field">
@@ -526,14 +593,14 @@ export default function DevicesPage() {
             ))}
             {devices.length === 0 && (
               <tr>
-                <td className="muted" colSpan={8}>
+                <td className="muted" colSpan={9}>
                   No devices available yet.
                 </td>
               </tr>
             )}
             {devices.length > 0 && filteredDevices.length === 0 && (
               <tr>
-                <td className="muted" colSpan={8}>
+                <td className="muted" colSpan={9}>
                   No devices match the current filters.
                 </td>
               </tr>

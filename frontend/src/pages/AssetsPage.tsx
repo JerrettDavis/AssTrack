@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react'
 import { createAsset, deleteAsset, getAssetClasses, getAssets, type Asset, type AssetClass, type SensorReading, updateAsset, type UpdateAssetRequest } from '../api/assets'
 import { getLatestPositions, getObservations, type Observation } from '../api/observations'
+import { getSensorReadings } from '../api/sensors'
 import { useIdentityContext } from '../context/IdentityContext'
 
 function formatTimestamp(value: string) {
@@ -53,11 +54,88 @@ function sensorLabel(reading: SensorReading) {
   return `${name}: ${value}`
 }
 
+function sensorName(reading: SensorReading) {
+  return reading.name || reading.sensorType.replaceAll('_', ' ')
+}
+
+function sensorValue(reading: SensorReading) {
+  if (reading.numericValue != null) return `${reading.numericValue}${reading.unit ? ` ${reading.unit}` : ''}`
+  return reading.textValue ?? 'N/A'
+}
+
+function getSensorStatus(reading: SensorReading) {
+  const ageMs = Math.max(0, Date.now() - new Date(reading.observedAt).getTime())
+  if (ageMs > 24 * 60 * 60 * 1000) return { label: 'Stale', className: 'badge-danger' }
+  if (ageMs > 6 * 60 * 60 * 1000) return { label: 'Aging', className: 'badge-warning' }
+  return { label: 'Fresh', className: 'badge-success' }
+}
+
+function latestBySensorType(readings: SensorReading[]) {
+  const latest = new Map<string, SensorReading>()
+  readings.forEach((reading) => {
+    const current = latest.get(reading.sensorType)
+    if (!current || new Date(reading.observedAt).getTime() > new Date(current.observedAt).getTime()) {
+      latest.set(reading.sensorType, reading)
+    }
+  })
+  return Array.from(latest.values()).sort((a, b) => a.sensorType.localeCompare(b.sensorType))
+}
+
+function TelemetryPanel({ latestReadings, recentReadings }: { latestReadings: SensorReading[], recentReadings: SensorReading[] }) {
+  const latest = latestBySensorType([...latestReadings, ...recentReadings])
+  const numericSeries = recentReadings
+    .filter((reading) => reading.numericValue != null)
+    .sort((a, b) => new Date(a.observedAt).getTime() - new Date(b.observedAt).getTime())
+    .slice(-12)
+  const maxValue = Math.max(1, ...numericSeries.map((reading) => Math.abs(reading.numericValue ?? 0)))
+
+  if (latest.length === 0) {
+    return (
+      <div className="telemetry-panel telemetry-empty">
+        <div className="muted">No telemetry readings yet.</div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="telemetry-panel">
+      <div className="telemetry-header">
+        <strong>Telemetry</strong>
+        <span className="muted">{latest.length} sensors</span>
+      </div>
+      <div className="telemetry-grid">
+        {latest.slice(0, 6).map((reading) => {
+          const status = getSensorStatus(reading)
+          return (
+            <div className="telemetry-reading" key={`${reading.sensorType}-${reading.id}`}>
+              <span>{sensorName(reading)}</span>
+              <strong>{sensorValue(reading)}</strong>
+              <span className={`badge ${status.className}`}>{status.label}</span>
+            </div>
+          )
+        })}
+      </div>
+      {numericSeries.length > 1 && (
+        <div className="telemetry-chart" aria-label="Recent numeric telemetry">
+          {numericSeries.map((reading) => (
+            <span
+              key={reading.id}
+              title={`${sensorName(reading)} ${sensorValue(reading)} at ${formatTimestamp(reading.observedAt)}`}
+              style={{ height: `${Math.max(12, Math.round((Math.abs(reading.numericValue ?? 0) / maxValue) * 100))}%` }}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function AssetsPage() {
   const [assets, setAssets] = useState<Asset[]>([])
   const [assetClasses, setAssetClasses] = useState<AssetClass[]>([])
   const [observations, setObservations] = useState<Observation[]>([])
   const [latestPositions, setLatestPositions] = useState<Observation[]>([])
+  const [sensorReadings, setSensorReadings] = useState<SensorReading[]>([])
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [showAddForm, setShowAddForm] = useState(false)
@@ -77,11 +155,18 @@ export function AssetsPage() {
   async function load() {
     try {
       setError(null)
-      const [assetItems, classItems, observationItems, latestPositionItems] = await Promise.all([getAssets(), getAssetClasses(), getObservations(), getLatestPositions()])
+      const [assetItems, classItems, observationItems, latestPositionItems, sensorItems] = await Promise.all([
+        getAssets(),
+        getAssetClasses(),
+        getObservations(),
+        getLatestPositions(),
+        getSensorReadings({ limit: 500 }),
+      ])
       setAssets(assetItems)
       setAssetClasses(classItems)
       setObservations(observationItems)
       setLatestPositions(latestPositionItems)
+      setSensorReadings(sensorItems)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to load API data.')
     } finally {
@@ -172,17 +257,29 @@ export function AssetsPage() {
       const latest = latestPositions.find((position) => asset.devices.some((device) => device.id === position.deviceId))
       return getObservationStatus(latest).label === 'Stale' || getObservationStatus(latest).label === 'No signal'
     }).length
+    const staleSensorCount = sensorReadings.filter((reading) => getSensorStatus(reading).label === 'Stale').length
 
     return [
       { label: 'Assets', value: assets.length },
       { label: 'Devices', value: deviceCount },
       { label: 'Observations', value: observations.length },
+      { label: 'Sensor readings', value: sensorReadings.length },
       { label: 'Vehicles', value: assets.filter((asset) => asset.assetClass === 'vehicle').length },
       { label: 'Pets', value: assets.filter((asset) => asset.assetClass === 'pet').length },
       { label: 'Moving now', value: movingCount },
       { label: 'Needs attention', value: staleCount },
+      { label: 'Stale sensors', value: staleSensorCount },
     ]
-  }, [assets, observations, latestPositions])
+  }, [assets, observations, latestPositions, sensorReadings])
+
+  const readingsByAssetId = useMemo(() => {
+    const grouped = new Map<string, SensorReading[]>()
+    sensorReadings.forEach((reading) => {
+      if (!reading.assetId) return
+      grouped.set(reading.assetId, [...(grouped.get(reading.assetId) ?? []), reading])
+    })
+    return grouped
+  }, [sensorReadings])
 
   const filteredAssets = useMemo(() => {
     const normalizedSearch = searchTerm.trim().toLowerCase()
@@ -421,6 +518,7 @@ export function AssetsPage() {
                         <strong>{formatTimestamp(asset.updatedAt)}</strong>
                       </div>
                     </div>
+                    <TelemetryPanel latestReadings={asset.latestSensorReadings} recentReadings={readingsByAssetId.get(asset.id) ?? []} />
                     <div className="button-row">
                       {isOperator && (
                         <button className="button button-secondary" disabled={submitting} onClick={() => startEdit(asset)} type="button">
