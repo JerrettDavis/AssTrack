@@ -122,6 +122,26 @@ public class AppSteps
     public async Task WhenISelectTheFirstMapNode()
     {
         var marker = _context.Page.Locator(".device-marker").First;
+        var cluster = _context.Page.Locator(".device-cluster-marker").First;
+
+        for (var attempt = 0; attempt < 6; attempt++)
+        {
+            if (await marker.CountAsync() > 0 && await marker.IsVisibleAsync())
+            {
+                await marker.ClickAsync(new() { Force = true });
+                return;
+            }
+
+            if (await cluster.CountAsync() > 0 && await cluster.IsVisibleAsync())
+            {
+                await cluster.ClickAsync(new() { Force = true });
+                await _context.Page.WaitForTimeoutAsync(500);
+                continue;
+            }
+
+            await _context.Page.WaitForTimeoutAsync(500);
+        }
+
         await marker.WaitForAsync();
         await marker.ClickAsync(new() { Force = true });
     }
