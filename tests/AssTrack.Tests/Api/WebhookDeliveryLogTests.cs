@@ -28,7 +28,8 @@ public sealed class WebhookDeliveryLogFactory : TestWebApplicationFactory
         {
             config.AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["Webhooks:Url"] = "https://hooks.test.local/delivery"
+                ["Webhooks:Url"] = "https://hooks.test.local/delivery",
+                ["Webhooks:MaxRetries"] = "0"
             });
         });
 
