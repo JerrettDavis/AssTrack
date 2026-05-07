@@ -1,0 +1,57 @@
+import { apiDelete, apiGet, apiPost, apiPut } from './client'
+
+export type MaintenanceStatus = 'current' | 'upcoming' | 'due' | 'overdue'
+
+export type MaintenanceSchedule = {
+  id: string
+  assetId: string
+  assetName?: string | null
+  title: string
+  serviceType: string
+  intervalDays?: number | null
+  intervalOdometerKm?: number | null
+  intervalRuntimeHours?: number | null
+  lastServiceAt?: string | null
+  lastOdometerKm?: number | null
+  lastRuntimeHours?: number | null
+  notes?: string | null
+  createdAt: string
+  updatedAt: string
+  status: MaintenanceStatus
+  nextDueAt?: string | null
+  nextOdometerKm?: number | null
+  nextRuntimeHours?: number | null
+  latestOdometerKm?: number | null
+  latestRuntimeHours?: number | null
+}
+
+export type MaintenanceScheduleRequest = {
+  assetId: string
+  title: string
+  serviceType?: string | null
+  intervalDays?: number | null
+  intervalOdometerKm?: number | null
+  intervalRuntimeHours?: number | null
+  lastServiceAt?: string | null
+  lastOdometerKm?: number | null
+  lastRuntimeHours?: number | null
+  notes?: string | null
+}
+
+export function getMaintenanceSchedules(assetId?: string) {
+  const query = new URLSearchParams()
+  if (assetId) query.append('assetId', assetId)
+  return apiGet<MaintenanceSchedule[]>(`/api/maintenance/schedules?${query}`)
+}
+
+export function createMaintenanceSchedule(data: MaintenanceScheduleRequest) {
+  return apiPost<MaintenanceSchedule>('/api/maintenance/schedules', data)
+}
+
+export function updateMaintenanceSchedule(id: string, data: MaintenanceScheduleRequest) {
+  return apiPut<MaintenanceSchedule>(`/api/maintenance/schedules/${id}`, data)
+}
+
+export async function deleteMaintenanceSchedule(id: string): Promise<void> {
+  await apiDelete(`/api/maintenance/schedules/${id}`)
+}

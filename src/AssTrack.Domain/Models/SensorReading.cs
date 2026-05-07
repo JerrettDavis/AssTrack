@@ -27,6 +27,7 @@ public static class SensorTypes
     public const string Fuel = "fuel";
     public const string Odometer = "odometer";
     public const string Engine = "engine";
+    public const string Runtime = "runtime";
     public const string TirePressure = "tire_pressure";
     public const string Impact = "impact";
     public const string Door = "door";

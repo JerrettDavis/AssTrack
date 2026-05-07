@@ -14,6 +14,7 @@ public class Asset
     public bool IsSeeded { get; set; }
     public ICollection<Device> Devices { get; set; } = new List<Device>();
     public ICollection<SensorReading> SensorReadings { get; set; } = new List<SensorReading>();
+    public ICollection<MaintenanceSchedule> MaintenanceSchedules { get; set; } = new List<MaintenanceSchedule>();
 }
 
 public static class AssetClasses

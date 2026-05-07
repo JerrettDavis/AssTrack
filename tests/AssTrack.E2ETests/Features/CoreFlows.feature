@@ -13,6 +13,13 @@ Scenario: View asset details
   When I navigate to the assets page
   Then the page contains "E2E Test Asset"
 
+Scenario: View asset maintenance due status
+  Given a due maintenance schedule named "Mileage inspection" exists for the asset
+  When I navigate to the assets page
+  Then the page contains "Maintenance"
+  And the page contains "Mileage inspection"
+  And the page contains "due"
+
 Scenario: View live map
   When I post an observation for the device via the API
   And I navigate to the map page

@@ -3,9 +3,9 @@ import react from '@vitejs/plugin-react'
 
 export default defineConfig(({ command, mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
-  const proxyTarget = env.VITE_E2E_PROXY_TARGET || 'http://localhost:5019'
-  const bridgeProxyTarget = env.VITE_BRIDGE_PROXY_TARGET || 'http://localhost:5056'
-  const port = Number.parseInt(env.PORT || env.VITE_PORT || '5174', 10)
+  const proxyTarget = process.env.VITE_E2E_PROXY_TARGET || env.VITE_E2E_PROXY_TARGET || 'http://localhost:5019'
+  const bridgeProxyTarget = process.env.VITE_BRIDGE_PROXY_TARGET || env.VITE_BRIDGE_PROXY_TARGET || 'http://localhost:5056'
+  const port = Number.parseInt(process.env.PORT || process.env.VITE_PORT || env.PORT || env.VITE_PORT || '5174', 10)
 
   return {
     plugins: [reactRefreshPreamble(command), react()],

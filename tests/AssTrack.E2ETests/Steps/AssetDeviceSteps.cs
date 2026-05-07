@@ -56,4 +56,28 @@ public class AssetDeviceSteps
         var deviceId = await _context.ApiClient.CreateDeviceAsync(data);
         _context.UnassignedDeviceId = deviceId;
     }
+
+    [Given(@"a due maintenance schedule named ""([^""]*)"" exists for the asset")]
+    public async Task GivenADueMaintenanceScheduleNamedExistsForTheAsset(string title)
+    {
+        var assetId = _context.AssetId ?? throw new InvalidOperationException("AssetId not set");
+        await _context.ApiClient.CreateMaintenanceScheduleAsync(new Dictionary<string, object>
+        {
+            ["assetId"] = assetId,
+            ["title"] = title,
+            ["serviceType"] = "inspection",
+            ["intervalOdometerKm"] = 1000,
+            ["lastOdometerKm"] = 20000
+        });
+
+        await _context.ApiClient.CreateSensorReadingAsync(new Dictionary<string, object>
+        {
+            ["assetId"] = assetId,
+            ["sensorType"] = "odometer",
+            ["name"] = "Odometer",
+            ["numericValue"] = 21000,
+            ["unit"] = "km",
+            ["observedAt"] = DateTime.UtcNow.ToString("o")
+        });
+    }
 }

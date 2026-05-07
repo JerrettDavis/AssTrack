@@ -36,4 +36,20 @@ public class ApiClient
         var result = await response.Content.ReadFromJsonAsync<JsonElement>();
         return result.GetProperty("id").GetString() ?? throw new Exception("No observation ID returned");
     }
+
+    public async Task<string> CreateSensorReadingAsync(Dictionary<string, object> data)
+    {
+        var response = await _client.PostAsJsonAsync("/api/sensors/readings", data);
+        response.EnsureSuccessStatusCode();
+        var result = await response.Content.ReadFromJsonAsync<JsonElement>();
+        return result.GetProperty("id").GetString() ?? throw new Exception("No sensor reading ID returned");
+    }
+
+    public async Task<string> CreateMaintenanceScheduleAsync(Dictionary<string, object> data)
+    {
+        var response = await _client.PostAsJsonAsync("/api/maintenance/schedules", data);
+        response.EnsureSuccessStatusCode();
+        var result = await response.Content.ReadFromJsonAsync<JsonElement>();
+        return result.GetProperty("id").GetString() ?? throw new Exception("No maintenance schedule ID returned");
+    }
 }

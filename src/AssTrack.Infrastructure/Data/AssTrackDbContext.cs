@@ -17,6 +17,7 @@ public class AssTrackDbContext(DbContextOptions<AssTrackDbContext> options) : Db
     public DbSet<MessageThread> MessageThreads => Set<MessageThread>();
     public DbSet<MessageEntry> MessageEntries => Set<MessageEntry>();
     public DbSet<SensorReading> SensorReadings => Set<SensorReading>();
+    public DbSet<MaintenanceSchedule> MaintenanceSchedules => Set<MaintenanceSchedule>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -226,6 +227,20 @@ public class AssTrackDbContext(DbContextOptions<AssTrackDbContext> options) : Db
                 .WithMany()
                 .HasForeignKey(x => x.IntegrationFeedId)
                 .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<MaintenanceSchedule>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Title).IsRequired().HasMaxLength(200);
+            entity.Property(x => x.ServiceType).IsRequired().HasMaxLength(60).HasDefaultValue(MaintenanceServiceTypes.General);
+            entity.Property(x => x.Notes).HasMaxLength(2000);
+            entity.HasIndex(x => x.AssetId);
+            entity.HasIndex(x => x.ServiceType);
+            entity.HasOne(x => x.Asset)
+                .WithMany(x => x.MaintenanceSchedules)
+                .HasForeignKey(x => x.AssetId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

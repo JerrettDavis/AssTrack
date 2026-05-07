@@ -11,16 +11,17 @@ This audit tracks the product areas AssTrack should cover as it grows from a loc
 - Asset classes and criticality for people, vehicles, property, pets, equipment, containers, and other assets.
 - Generic sensor readings attached to assets, devices, and integration feeds.
 - Sensor telemetry summaries in asset and device inventory views, including recent numeric trends and stale-sensor warnings.
+- Maintenance schedules for vehicle and equipment service intervals based on date, odometer, and runtime telemetry.
 
 ## Commercial Verticals
 
 | Vertical | Expected capabilities | AssTrack status |
 |---|---|---|
-| Fleet and vehicles | OBD/CAN telemetry, odometer, fuel, ignition, tire pressure, maintenance schedules, driver assignment, route replay. | Location, alerts, and generic sensor readings are present; maintenance and driver workflows remain. |
+| Fleet and vehicles | OBD/CAN telemetry, odometer, fuel, ignition, tire pressure, maintenance schedules, driver assignment, route replay. | Location, alerts, generic sensor readings, and maintenance schedules are present; driver workflows and route replay remain. |
 | People and teams | Privacy-aware tracking, check-ins, SOS, messaging, temporary sharing, audit logs. | Location, messaging foundation, and asset class are present; SOS/escalation workflow remains. |
 | Pets and working animals | Wearable battery, temperature, activity, safe zones, missing-mode escalation. | Pet asset class and sensors are present; pet-specific workflow remains. |
 | Property and facilities | Fixed/site assets, environmental sensors, motion/door events, service windows. | Property class and sensors are present; service workflows remain. |
-| Equipment and tools | Utilization, impact/motion, runtime, battery, custody, checkout/check-in. | Equipment class and sensors are present; custody and utilization reports remain. |
+| Equipment and tools | Utilization, impact/motion, runtime, battery, custody, checkout/check-in. | Equipment class, sensors, and runtime maintenance schedules are present; custody and utilization reports remain. |
 | Containers and cargo | Door, impact, temperature, humidity, route custody, seal state. | Container class and sensors are present; chain-of-custody remains. |
 
 ## Architecture Direction
@@ -33,7 +34,7 @@ This audit tracks the product areas AssTrack should cover as it grows from a loc
 
 ## Next Iterations
 
-1. Maintenance: add vehicle/equipment service intervals based on odometer, runtime, date, and diagnostic events.
+1. Maintenance depth: add completed service records, diagnostic-event triggers, and reminders.
 2. Alert routing: add escalation rules that send alerts through message providers, SMS, email, and webhooks.
 3. Messaging providers: implement Signal and Telegram bridge adapters against the existing message-thread API.
 4. Reports: add daily/weekly utilization, dwell time, geofence visits, mileage, stop summaries, and sensor exceptions.

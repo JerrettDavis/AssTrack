@@ -158,13 +158,16 @@ public class AppSteps
     [Then(@"the page contains ""([^""]*)""")]
     public async Task ThenThePageContains(string text)
     {
-        try
+        var deadline = DateTime.UtcNow.AddSeconds(30);
+        string bodyText;
+        do
         {
-            await _context.Page.GetByText(text).First.WaitForAsync();
+            bodyText = await _context.Page.Locator("body").InnerTextAsync();
+            if (bodyText.Contains(text, StringComparison.OrdinalIgnoreCase)) return;
+            await _context.Page.WaitForTimeoutAsync(250);
         }
-        catch (TimeoutException)
-        {
-            false.Should().BeTrue($"Expected page to contain text '{text}'");
-        }
+        while (DateTime.UtcNow < deadline);
+
+        false.Should().BeTrue($"Expected page to contain text '{text}'. Body text: {bodyText}");
     }
 }

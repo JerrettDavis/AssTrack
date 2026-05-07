@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react'
 import { createAsset, deleteAsset, getAssetClasses, getAssets, type Asset, type AssetClass, type SensorReading, updateAsset, type UpdateAssetRequest } from '../api/assets'
+import { createMaintenanceSchedule, deleteMaintenanceSchedule, getMaintenanceSchedules, type MaintenanceSchedule, type MaintenanceStatus } from '../api/maintenance'
 import { getLatestPositions, getObservations, type Observation } from '../api/observations'
 import { getSensorReadings } from '../api/sensors'
 import { useIdentityContext } from '../context/IdentityContext'
@@ -130,12 +131,64 @@ function TelemetryPanel({ latestReadings, recentReadings }: { latestReadings: Se
   )
 }
 
+function maintenanceStatusClass(status: MaintenanceStatus) {
+  if (status === 'overdue') return 'badge-danger'
+  if (status === 'due' || status === 'upcoming') return 'badge-warning'
+  return 'badge-success'
+}
+
+function formatNumber(value?: number | null) {
+  if (value == null) return null
+  return Number.isInteger(value) ? value.toString() : value.toFixed(1)
+}
+
+function maintenanceDueText(schedule: MaintenanceSchedule) {
+  const parts = [
+    schedule.nextDueAt ? `date ${formatTimestamp(schedule.nextDueAt)}` : null,
+    schedule.nextOdometerKm != null ? `odometer ${formatNumber(schedule.latestOdometerKm) ?? 'N/A'} / ${formatNumber(schedule.nextOdometerKm)} km` : null,
+    schedule.nextRuntimeHours != null ? `runtime ${formatNumber(schedule.latestRuntimeHours) ?? 'N/A'} / ${formatNumber(schedule.nextRuntimeHours)} h` : null,
+  ].filter(Boolean)
+  return parts.length > 0 ? parts.join(' | ') : 'No due target'
+}
+
+function MaintenancePanel({ schedules, onDelete, submitting, isOperator }: { schedules: MaintenanceSchedule[], onDelete: (schedule: MaintenanceSchedule) => void, submitting: boolean, isOperator: boolean }) {
+  if (schedules.length === 0) {
+    return <div className="maintenance-panel maintenance-empty"><span className="muted">No maintenance schedules.</span></div>
+  }
+
+  return (
+    <div className="maintenance-panel">
+      <div className="maintenance-header">
+        <strong>Maintenance</strong>
+        <span className="muted">{schedules.length} schedules</span>
+      </div>
+      <div className="maintenance-list">
+        {schedules.map((schedule) => (
+          <div className="maintenance-row" key={schedule.id}>
+            <div>
+              <strong>{schedule.title}</strong>
+              <span className="muted">{maintenanceDueText(schedule)}</span>
+            </div>
+            <span className={`badge ${maintenanceStatusClass(schedule.status)}`}>{schedule.status}</span>
+            {isOperator && (
+              <button className="button button-secondary button-compact" disabled={submitting} onClick={() => onDelete(schedule)} type="button">
+                Remove
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export function AssetsPage() {
   const [assets, setAssets] = useState<Asset[]>([])
   const [assetClasses, setAssetClasses] = useState<AssetClass[]>([])
   const [observations, setObservations] = useState<Observation[]>([])
   const [latestPositions, setLatestPositions] = useState<Observation[]>([])
   const [sensorReadings, setSensorReadings] = useState<SensorReading[]>([])
+  const [maintenanceSchedules, setMaintenanceSchedules] = useState<MaintenanceSchedule[]>([])
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [showAddForm, setShowAddForm] = useState(false)
@@ -150,23 +203,26 @@ export function AssetsPage() {
   const [submitting, setSubmitting] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editForm, setEditForm] = useState<UpdateAssetRequest>({ name: '', description: null, assetClass: 'property', category: null, criticality: 'normal', speedThresholdKmh: null })
+  const [maintenanceForm, setMaintenanceForm] = useState({ assetId: '', title: '', serviceType: 'general', intervalDays: '', intervalOdometerKm: '', intervalRuntimeHours: '', lastServiceAt: '', lastOdometerKm: '', lastRuntimeHours: '' })
   const { isOperator } = useIdentityContext()
 
   async function load() {
     try {
       setError(null)
-      const [assetItems, classItems, observationItems, latestPositionItems, sensorItems] = await Promise.all([
+      const [assetItems, classItems, observationItems, latestPositionItems, sensorItems, maintenanceItems] = await Promise.all([
         getAssets(),
         getAssetClasses(),
         getObservations(),
         getLatestPositions(),
         getSensorReadings({ limit: 500 }),
+        getMaintenanceSchedules(),
       ])
       setAssets(assetItems)
       setAssetClasses(classItems)
       setObservations(observationItems)
       setLatestPositions(latestPositionItems)
       setSensorReadings(sensorItems)
+      setMaintenanceSchedules(maintenanceItems)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to load API data.')
     } finally {
@@ -250,6 +306,43 @@ export function AssetsPage() {
     }
   }
 
+  async function handleCreateMaintenance(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setSubmitting(true)
+    try {
+      await createMaintenanceSchedule({
+        assetId: maintenanceForm.assetId,
+        title: maintenanceForm.title.trim(),
+        serviceType: maintenanceForm.serviceType,
+        intervalDays: maintenanceForm.intervalDays ? parseInt(maintenanceForm.intervalDays, 10) : null,
+        intervalOdometerKm: maintenanceForm.intervalOdometerKm ? parseFloat(maintenanceForm.intervalOdometerKm) : null,
+        intervalRuntimeHours: maintenanceForm.intervalRuntimeHours ? parseFloat(maintenanceForm.intervalRuntimeHours) : null,
+        lastServiceAt: maintenanceForm.lastServiceAt ? new Date(maintenanceForm.lastServiceAt).toISOString() : null,
+        lastOdometerKm: maintenanceForm.lastOdometerKm ? parseFloat(maintenanceForm.lastOdometerKm) : null,
+        lastRuntimeHours: maintenanceForm.lastRuntimeHours ? parseFloat(maintenanceForm.lastRuntimeHours) : null,
+      })
+      setMaintenanceForm({ assetId: '', title: '', serviceType: 'general', intervalDays: '', intervalOdometerKm: '', intervalRuntimeHours: '', lastServiceAt: '', lastOdometerKm: '', lastRuntimeHours: '' })
+      await load()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to create maintenance schedule.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  async function handleDeleteMaintenance(schedule: MaintenanceSchedule) {
+    if (!window.confirm(`Remove maintenance schedule "${schedule.title}"?`)) return
+    setSubmitting(true)
+    try {
+      await deleteMaintenanceSchedule(schedule.id)
+      await load()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to remove maintenance schedule.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   const metrics = useMemo(() => {
     const deviceCount = assets.reduce((total, asset) => total + asset.devices.length, 0)
     const movingCount = latestPositions.filter((p) => (p.speedKmh ?? 0) > 0).length
@@ -258,6 +351,7 @@ export function AssetsPage() {
       return getObservationStatus(latest).label === 'Stale' || getObservationStatus(latest).label === 'No signal'
     }).length
     const staleSensorCount = sensorReadings.filter((reading) => getSensorStatus(reading).label === 'Stale').length
+    const maintenanceAttentionCount = maintenanceSchedules.filter((schedule) => schedule.status === 'due' || schedule.status === 'overdue').length
 
     return [
       { label: 'Assets', value: assets.length },
@@ -269,8 +363,9 @@ export function AssetsPage() {
       { label: 'Moving now', value: movingCount },
       { label: 'Needs attention', value: staleCount },
       { label: 'Stale sensors', value: staleSensorCount },
+      { label: 'Maintenance due', value: maintenanceAttentionCount },
     ]
-  }, [assets, observations, latestPositions, sensorReadings])
+  }, [assets, observations, latestPositions, sensorReadings, maintenanceSchedules])
 
   const readingsByAssetId = useMemo(() => {
     const grouped = new Map<string, SensorReading[]>()
@@ -280,6 +375,14 @@ export function AssetsPage() {
     })
     return grouped
   }, [sensorReadings])
+
+  const maintenanceByAssetId = useMemo(() => {
+    const grouped = new Map<string, MaintenanceSchedule[]>()
+    maintenanceSchedules.forEach((schedule) => {
+      grouped.set(schedule.assetId, [...(grouped.get(schedule.assetId) ?? []), schedule])
+    })
+    return grouped
+  }, [maintenanceSchedules])
 
   const filteredAssets = useMemo(() => {
     const normalizedSearch = searchTerm.trim().toLowerCase()
@@ -413,6 +516,69 @@ export function AssetsPage() {
               </div>
             </form>
           )}
+          {isOperator && assets.length > 0 && (
+            <form className="card inline-form" onSubmit={handleCreateMaintenance}>
+              <div className="page-header">
+                <h2>Maintenance schedule</h2>
+                <span className="muted">Date, odometer, and runtime intervals</span>
+              </div>
+              <div className="field-grid">
+                <label className="field">
+                  <span>Asset</span>
+                  <select required onChange={(event) => setMaintenanceForm((f) => ({ ...f, assetId: event.target.value }))} value={maintenanceForm.assetId}>
+                    <option value="">Select asset</option>
+                    {assets.map((asset) => (
+                      <option key={asset.id} value={asset.id}>{asset.name}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="field">
+                  <span>Title</span>
+                  <input onChange={(event) => setMaintenanceForm((f) => ({ ...f, title: event.target.value }))} placeholder="Oil service" required value={maintenanceForm.title} />
+                </label>
+                <label className="field">
+                  <span>Type</span>
+                  <select onChange={(event) => setMaintenanceForm((f) => ({ ...f, serviceType: event.target.value }))} value={maintenanceForm.serviceType}>
+                    <option value="general">General</option>
+                    <option value="oil">Oil</option>
+                    <option value="inspection">Inspection</option>
+                    <option value="tire">Tire</option>
+                    <option value="battery">Battery</option>
+                    <option value="calibration">Calibration</option>
+                  </select>
+                </label>
+                <label className="field">
+                  <span>Every days</span>
+                  <input min={1} onChange={(event) => setMaintenanceForm((f) => ({ ...f, intervalDays: event.target.value }))} type="number" value={maintenanceForm.intervalDays} />
+                </label>
+                <label className="field">
+                  <span>Every km</span>
+                  <input min={0.001} onChange={(event) => setMaintenanceForm((f) => ({ ...f, intervalOdometerKm: event.target.value }))} type="number" value={maintenanceForm.intervalOdometerKm} />
+                </label>
+                <label className="field">
+                  <span>Every runtime h</span>
+                  <input min={0.001} onChange={(event) => setMaintenanceForm((f) => ({ ...f, intervalRuntimeHours: event.target.value }))} type="number" value={maintenanceForm.intervalRuntimeHours} />
+                </label>
+                <label className="field">
+                  <span>Last service</span>
+                  <input onChange={(event) => setMaintenanceForm((f) => ({ ...f, lastServiceAt: event.target.value }))} type="datetime-local" value={maintenanceForm.lastServiceAt} />
+                </label>
+                <label className="field">
+                  <span>Last odometer km</span>
+                  <input min={0} onChange={(event) => setMaintenanceForm((f) => ({ ...f, lastOdometerKm: event.target.value }))} type="number" value={maintenanceForm.lastOdometerKm} />
+                </label>
+                <label className="field">
+                  <span>Last runtime h</span>
+                  <input min={0} onChange={(event) => setMaintenanceForm((f) => ({ ...f, lastRuntimeHours: event.target.value }))} type="number" value={maintenanceForm.lastRuntimeHours} />
+                </label>
+              </div>
+              <div className="button-row">
+                <button className="button" disabled={submitting} type="submit">
+                  {submitting ? 'Saving…' : 'Create maintenance schedule'}
+                </button>
+              </div>
+            </form>
+          )}
           {assets.length === 0 && (
             <div className="notice notice-info">
               <strong>No assets yet</strong>
@@ -519,6 +685,12 @@ export function AssetsPage() {
                       </div>
                     </div>
                     <TelemetryPanel latestReadings={asset.latestSensorReadings} recentReadings={readingsByAssetId.get(asset.id) ?? []} />
+                    <MaintenancePanel
+                      isOperator={isOperator}
+                      onDelete={(schedule) => void handleDeleteMaintenance(schedule)}
+                      schedules={maintenanceByAssetId.get(asset.id) ?? []}
+                      submitting={submitting}
+                    />
                     <div className="button-row">
                       {isOperator && (
                         <button className="button button-secondary" disabled={submitting} onClick={() => startEdit(asset)} type="button">
