@@ -38,6 +38,8 @@ public class MaintenanceScheduleRepository(AssTrackDbContext dbContext)
         existing.IntervalDays = schedule.IntervalDays;
         existing.IntervalOdometerKm = schedule.IntervalOdometerKm;
         existing.IntervalRuntimeHours = schedule.IntervalRuntimeHours;
+        existing.DiagnosticSensorType = schedule.DiagnosticSensorType;
+        existing.DiagnosticTextContains = schedule.DiagnosticTextContains;
         existing.LastServiceAt = schedule.LastServiceAt;
         existing.LastOdometerKm = schedule.LastOdometerKm;
         existing.LastRuntimeHours = schedule.LastRuntimeHours;

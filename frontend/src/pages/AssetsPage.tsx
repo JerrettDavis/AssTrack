@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react'
 import { createAsset, deleteAsset, getAssetClasses, getAssets, type Asset, type AssetClass, type SensorReading, updateAsset, type UpdateAssetRequest } from '../api/assets'
 import { createCustodyEvent, getCustodyEvents, type CustodyEvent } from '../api/custody'
-import { completeMaintenanceSchedule, createMaintenanceSchedule, deleteMaintenanceSchedule, getMaintenanceSchedules, getMaintenanceServiceRecords, type MaintenanceSchedule, type MaintenanceServiceRecord, type MaintenanceStatus } from '../api/maintenance'
+import { completeMaintenanceSchedule, createMaintenanceSchedule, deleteMaintenanceSchedule, getMaintenanceReminders, getMaintenanceSchedules, getMaintenanceServiceRecords, type MaintenanceReminder, type MaintenanceSchedule, type MaintenanceServiceRecord, type MaintenanceStatus } from '../api/maintenance'
 import { getLatestPositions, getObservations, type Observation } from '../api/observations'
 import { getSensorReadings } from '../api/sensors'
 import { useIdentityContext } from '../context/IdentityContext'
@@ -156,8 +156,15 @@ function maintenanceDueText(schedule: MaintenanceSchedule) {
     schedule.nextDueAt ? `date ${formatTimestamp(schedule.nextDueAt)}` : null,
     schedule.nextOdometerKm != null ? `odometer ${formatNumber(schedule.latestOdometerKm) ?? 'N/A'} / ${formatNumber(schedule.nextOdometerKm)} km` : null,
     schedule.nextRuntimeHours != null ? `runtime ${formatNumber(schedule.latestRuntimeHours) ?? 'N/A'} / ${formatNumber(schedule.nextRuntimeHours)} h` : null,
+    schedule.latestDiagnosticAt ? `diagnostic ${schedule.latestDiagnosticValue ?? schedule.diagnosticSensorType} at ${formatTimestamp(schedule.latestDiagnosticAt)}` : null,
   ].filter(Boolean)
   return parts.length > 0 ? parts.join(' | ') : 'No due target'
+}
+
+function reminderText(reminder: MaintenanceReminder) {
+  if (reminder.diagnosticAt) return `${reminder.reason}: ${reminder.diagnosticValue ?? formatTimestamp(reminder.diagnosticAt)}`
+  if (reminder.dueAt) return `${reminder.reason}: ${formatTimestamp(reminder.dueAt)}`
+  return reminder.reason
 }
 
 function MaintenancePanel({
@@ -286,6 +293,7 @@ export function AssetsPage() {
   const [sensorReadings, setSensorReadings] = useState<SensorReading[]>([])
   const [maintenanceSchedules, setMaintenanceSchedules] = useState<MaintenanceSchedule[]>([])
   const [maintenanceRecords, setMaintenanceRecords] = useState<MaintenanceServiceRecord[]>([])
+  const [maintenanceReminders, setMaintenanceReminders] = useState<MaintenanceReminder[]>([])
   const [custodyEvents, setCustodyEvents] = useState<CustodyEvent[]>([])
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -301,14 +309,14 @@ export function AssetsPage() {
   const [submitting, setSubmitting] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editForm, setEditForm] = useState<UpdateAssetRequest>({ name: '', description: null, assetClass: 'property', category: null, criticality: 'normal', speedThresholdKmh: null })
-  const [maintenanceForm, setMaintenanceForm] = useState({ assetId: '', title: '', serviceType: 'general', intervalDays: '', intervalOdometerKm: '', intervalRuntimeHours: '', lastServiceAt: '', lastOdometerKm: '', lastRuntimeHours: '' })
+  const [maintenanceForm, setMaintenanceForm] = useState({ assetId: '', title: '', serviceType: 'general', intervalDays: '', intervalOdometerKm: '', intervalRuntimeHours: '', diagnosticSensorType: '', diagnosticTextContains: '', lastServiceAt: '', lastOdometerKm: '', lastRuntimeHours: '' })
   const [custodyForm, setCustodyForm] = useState({ assetId: '', eventType: 'check_out', custodianName: '', custodianContact: '', custodyStatus: '', location: '', notes: '' })
   const { isOperator } = useIdentityContext()
 
   async function load() {
     try {
       setError(null)
-      const [assetItems, classItems, observationItems, latestPositionItems, sensorItems, maintenanceItems, maintenanceRecordItems, custodyEventItems] = await Promise.all([
+      const [assetItems, classItems, observationItems, latestPositionItems, sensorItems, maintenanceItems, maintenanceRecordItems, maintenanceReminderItems, custodyEventItems] = await Promise.all([
         getAssets(),
         getAssetClasses(),
         getObservations(),
@@ -316,6 +324,7 @@ export function AssetsPage() {
         getSensorReadings({ limit: 500 }),
         getMaintenanceSchedules(),
         getMaintenanceServiceRecords({ limit: 200 }),
+        getMaintenanceReminders(),
         getCustodyEvents({ limit: 200 }),
       ])
       setAssets(assetItems)
@@ -325,6 +334,7 @@ export function AssetsPage() {
       setSensorReadings(sensorItems)
       setMaintenanceSchedules(maintenanceItems)
       setMaintenanceRecords(maintenanceRecordItems)
+      setMaintenanceReminders(maintenanceReminderItems)
       setCustodyEvents(custodyEventItems)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to load API data.')
@@ -423,11 +433,13 @@ export function AssetsPage() {
         intervalDays: maintenanceForm.intervalDays ? parseInt(maintenanceForm.intervalDays, 10) : null,
         intervalOdometerKm: maintenanceForm.intervalOdometerKm ? parseFloat(maintenanceForm.intervalOdometerKm) : null,
         intervalRuntimeHours: maintenanceForm.intervalRuntimeHours ? parseFloat(maintenanceForm.intervalRuntimeHours) : null,
+        diagnosticSensorType: maintenanceForm.diagnosticSensorType.trim() || null,
+        diagnosticTextContains: maintenanceForm.diagnosticTextContains.trim() || null,
         lastServiceAt: maintenanceForm.lastServiceAt ? new Date(maintenanceForm.lastServiceAt).toISOString() : null,
         lastOdometerKm: maintenanceForm.lastOdometerKm ? parseFloat(maintenanceForm.lastOdometerKm) : null,
         lastRuntimeHours: maintenanceForm.lastRuntimeHours ? parseFloat(maintenanceForm.lastRuntimeHours) : null,
       })
-      setMaintenanceForm({ assetId: '', title: '', serviceType: 'general', intervalDays: '', intervalOdometerKm: '', intervalRuntimeHours: '', lastServiceAt: '', lastOdometerKm: '', lastRuntimeHours: '' })
+      setMaintenanceForm({ assetId: '', title: '', serviceType: 'general', intervalDays: '', intervalOdometerKm: '', intervalRuntimeHours: '', diagnosticSensorType: '', diagnosticTextContains: '', lastServiceAt: '', lastOdometerKm: '', lastRuntimeHours: '' })
       await load()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to create maintenance schedule.')
@@ -599,6 +611,17 @@ export function AssetsPage() {
               </div>
             ))}
           </div>
+          {maintenanceReminders.length > 0 && (
+            <div className="reminder-strip">
+              {maintenanceReminders.slice(0, 4).map((reminder) => (
+                <div className="reminder-item" key={reminder.scheduleId}>
+                  <span className={`badge ${maintenanceStatusClass(reminder.status)}`}>{reminder.status}</span>
+                  <strong>{reminder.assetName ?? 'Asset'}: {reminder.title}</strong>
+                  <span className="muted">{reminderText(reminder)}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="section">
@@ -724,6 +747,14 @@ export function AssetsPage() {
                 <label className="field">
                   <span>Every runtime h</span>
                   <input min={0.001} onChange={(event) => setMaintenanceForm((f) => ({ ...f, intervalRuntimeHours: event.target.value }))} type="number" value={maintenanceForm.intervalRuntimeHours} />
+                </label>
+                <label className="field">
+                  <span>Diagnostic sensor</span>
+                  <input onChange={(event) => setMaintenanceForm((f) => ({ ...f, diagnosticSensorType: event.target.value }))} placeholder="diagnostic_code" value={maintenanceForm.diagnosticSensorType} />
+                </label>
+                <label className="field">
+                  <span>Diagnostic contains</span>
+                  <input onChange={(event) => setMaintenanceForm((f) => ({ ...f, diagnosticTextContains: event.target.value }))} placeholder="P0420, fault, low pressure" value={maintenanceForm.diagnosticTextContains} />
                 </label>
                 <label className="field">
                   <span>Last service</span>

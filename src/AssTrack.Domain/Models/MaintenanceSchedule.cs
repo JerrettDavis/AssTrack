@@ -10,6 +10,8 @@ public class MaintenanceSchedule
     public int? IntervalDays { get; set; }
     public double? IntervalOdometerKm { get; set; }
     public double? IntervalRuntimeHours { get; set; }
+    public string? DiagnosticSensorType { get; set; }
+    public string? DiagnosticTextContains { get; set; }
     public DateTime? LastServiceAt { get; set; }
     public double? LastOdometerKm { get; set; }
     public double? LastRuntimeHours { get; set; }

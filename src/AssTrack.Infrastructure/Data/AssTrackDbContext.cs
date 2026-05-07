@@ -239,9 +239,12 @@ public class AssTrackDbContext(DbContextOptions<AssTrackDbContext> options) : Db
             entity.HasKey(x => x.Id);
             entity.Property(x => x.Title).IsRequired().HasMaxLength(200);
             entity.Property(x => x.ServiceType).IsRequired().HasMaxLength(60).HasDefaultValue(MaintenanceServiceTypes.General);
+            entity.Property(x => x.DiagnosticSensorType).HasMaxLength(80);
+            entity.Property(x => x.DiagnosticTextContains).HasMaxLength(200);
             entity.Property(x => x.Notes).HasMaxLength(2000);
             entity.HasIndex(x => x.AssetId);
             entity.HasIndex(x => x.ServiceType);
+            entity.HasIndex(x => x.DiagnosticSensorType);
             entity.HasOne(x => x.Asset)
                 .WithMany(x => x.MaintenanceSchedules)
                 .HasForeignKey(x => x.AssetId)

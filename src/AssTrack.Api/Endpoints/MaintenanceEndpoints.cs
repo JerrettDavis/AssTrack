@@ -46,6 +46,20 @@ public static class MaintenanceEndpoints
             return Results.Ok(records.Select(MapRecord));
         }).RequireAuthorization("Operator");
 
+        maintenance.MapGet("/reminders", async (
+            Guid? assetId,
+            MaintenanceScheduleRepository repository,
+            SensorReadingRepository sensorRepository,
+            CancellationToken cancellationToken) =>
+        {
+            var schedules = await repository.GetAllAsync(assetId, cancellationToken);
+            var latestReadings = await GetLatestReadingsAsync(schedules, sensorRepository, cancellationToken);
+            return Results.Ok(schedules
+                .Select(schedule => Map(schedule, latestReadings))
+                .Where(schedule => schedule.Status is MaintenanceStatus.Upcoming or MaintenanceStatus.Due or MaintenanceStatus.Overdue)
+                .Select(MapReminder));
+        }).RequireAuthorization("Operator");
+
         maintenance.MapPost("/schedules", async (
             CreateMaintenanceScheduleRequest request,
             MaintenanceScheduleRepository repository,
@@ -53,9 +67,10 @@ public static class MaintenanceEndpoints
             SensorReadingRepository sensorRepository,
             CancellationToken cancellationToken) =>
         {
-            var validation = await ValidateAsync(request.AssetId, request.Title, request.ServiceType, request.IntervalDays, request.IntervalOdometerKm, request.IntervalRuntimeHours, request.LastOdometerKm, request.LastRuntimeHours, assetRepository, cancellationToken);
+            var validation = await ValidateAsync(request.AssetId, request.Title, request.ServiceType, request.IntervalDays, request.IntervalOdometerKm, request.IntervalRuntimeHours, request.DiagnosticSensorType, request.LastOdometerKm, request.LastRuntimeHours, assetRepository, cancellationToken);
             if (validation.Count > 0) return Results.ValidationProblem(validation);
 
+            var diagnosticSensorType = NormalizeSensorType(request.DiagnosticSensorType);
             var now = DateTime.UtcNow;
             var schedule = new MaintenanceSchedule
             {
@@ -65,6 +80,8 @@ public static class MaintenanceEndpoints
                 IntervalDays = request.IntervalDays,
                 IntervalOdometerKm = request.IntervalOdometerKm,
                 IntervalRuntimeHours = request.IntervalRuntimeHours,
+                DiagnosticSensorType = diagnosticSensorType,
+                DiagnosticTextContains = string.IsNullOrWhiteSpace(request.DiagnosticTextContains) ? null : request.DiagnosticTextContains.Trim(),
                 LastServiceAt = request.LastServiceAt,
                 LastOdometerKm = request.LastOdometerKm,
                 LastRuntimeHours = request.LastRuntimeHours,
@@ -86,9 +103,10 @@ public static class MaintenanceEndpoints
             SensorReadingRepository sensorRepository,
             CancellationToken cancellationToken) =>
         {
-            var validation = await ValidateAsync(request.AssetId, request.Title, request.ServiceType, request.IntervalDays, request.IntervalOdometerKm, request.IntervalRuntimeHours, request.LastOdometerKm, request.LastRuntimeHours, assetRepository, cancellationToken);
+            var validation = await ValidateAsync(request.AssetId, request.Title, request.ServiceType, request.IntervalDays, request.IntervalOdometerKm, request.IntervalRuntimeHours, request.DiagnosticSensorType, request.LastOdometerKm, request.LastRuntimeHours, assetRepository, cancellationToken);
             if (validation.Count > 0) return Results.ValidationProblem(validation);
 
+            var diagnosticSensorType = NormalizeSensorType(request.DiagnosticSensorType);
             var updated = await repository.UpdateAsync(new MaintenanceSchedule
             {
                 Id = id,
@@ -98,6 +116,8 @@ public static class MaintenanceEndpoints
                 IntervalDays = request.IntervalDays,
                 IntervalOdometerKm = request.IntervalOdometerKm,
                 IntervalRuntimeHours = request.IntervalRuntimeHours,
+                DiagnosticSensorType = diagnosticSensorType,
+                DiagnosticTextContains = string.IsNullOrWhiteSpace(request.DiagnosticTextContains) ? null : request.DiagnosticTextContains.Trim(),
                 LastServiceAt = request.LastServiceAt,
                 LastOdometerKm = request.LastOdometerKm,
                 LastRuntimeHours = request.LastRuntimeHours,
@@ -156,7 +176,9 @@ public static class MaintenanceEndpoints
             : null;
         var nextOdometerKm = AddNullable(schedule.LastOdometerKm, schedule.IntervalOdometerKm);
         var nextRuntimeHours = AddNullable(schedule.LastRuntimeHours, schedule.IntervalRuntimeHours);
-        var status = CalculateStatus(schedule, nextDueAt, nextOdometerKm, nextRuntimeHours, readings);
+        AssetDiagnosticReading? diagnostic = null;
+        readings?.LatestDiagnostics.TryGetValue(schedule.Id, out diagnostic);
+        var status = CalculateStatus(schedule, nextDueAt, nextOdometerKm, nextRuntimeHours, readings, diagnostic);
 
         return new MaintenanceScheduleDto(
             schedule.Id,
@@ -167,6 +189,8 @@ public static class MaintenanceEndpoints
             schedule.IntervalDays,
             schedule.IntervalOdometerKm,
             schedule.IntervalRuntimeHours,
+            schedule.DiagnosticSensorType,
+            schedule.DiagnosticTextContains,
             ApiDateTime.Utc(schedule.LastServiceAt),
             schedule.LastOdometerKm,
             schedule.LastRuntimeHours,
@@ -178,8 +202,22 @@ public static class MaintenanceEndpoints
             nextOdometerKm,
             nextRuntimeHours,
             readings?.LatestOdometerKm,
-            readings?.LatestRuntimeHours);
+            readings?.LatestRuntimeHours,
+            ApiDateTime.Utc(diagnostic?.ObservedAt),
+            diagnostic?.Value);
     }
+
+    internal static MaintenanceReminderDto MapReminder(MaintenanceScheduleDto schedule) => new(
+        schedule.Id,
+        schedule.AssetId,
+        schedule.AssetName,
+        schedule.Title,
+        schedule.ServiceType,
+        schedule.Status,
+        ReminderReason(schedule),
+        schedule.NextDueAt,
+        schedule.LatestDiagnosticAt,
+        schedule.LatestDiagnosticValue);
 
     internal static MaintenanceServiceRecordDto MapRecord(MaintenanceServiceRecord record) => new(
         record.Id,
@@ -196,7 +234,7 @@ public static class MaintenanceEndpoints
         record.Notes,
         ApiDateTime.Utc(record.CreatedAt));
 
-    private static string CalculateStatus(MaintenanceSchedule schedule, DateTime? nextDueAt, double? nextOdometerKm, double? nextRuntimeHours, AssetMaintenanceReadings? readings)
+    private static string CalculateStatus(MaintenanceSchedule schedule, DateTime? nextDueAt, double? nextOdometerKm, double? nextRuntimeHours, AssetMaintenanceReadings? readings, AssetDiagnosticReading? diagnostic)
     {
         var now = DateTime.UtcNow;
         var isOverdue =
@@ -208,7 +246,8 @@ public static class MaintenanceEndpoints
         var isDue =
             (nextDueAt.HasValue && now >= nextDueAt.Value) ||
             IsMetricDue(readings?.LatestOdometerKm, nextOdometerKm) ||
-            IsMetricDue(readings?.LatestRuntimeHours, nextRuntimeHours);
+            IsMetricDue(readings?.LatestRuntimeHours, nextRuntimeHours) ||
+            IsDiagnosticDue(schedule, diagnostic?.ObservedAt);
         if (isDue) return MaintenanceStatus.Due;
 
         var isUpcoming =
@@ -232,6 +271,19 @@ public static class MaintenanceEndpoints
         return latest.Value > nextDue.Value + grace;
     }
 
+    private static bool IsDiagnosticDue(MaintenanceSchedule schedule, DateTime? diagnosticAt)
+        => diagnosticAt is DateTime observedAt &&
+            (!schedule.LastServiceAt.HasValue || observedAt > schedule.LastServiceAt.Value);
+
+    private static string ReminderReason(MaintenanceScheduleDto schedule)
+    {
+        if (schedule.LatestDiagnosticAt.HasValue) return "Diagnostic event";
+        if (schedule.NextDueAt.HasValue) return "Scheduled service date";
+        if (schedule.NextOdometerKm.HasValue) return "Odometer interval";
+        if (schedule.NextRuntimeHours.HasValue) return "Runtime interval";
+        return "Maintenance schedule";
+    }
+
     private static double? AddNullable(double? baseline, double? interval)
         => baseline.HasValue && interval.HasValue ? baseline.Value + interval.Value : null;
 
@@ -244,12 +296,38 @@ public static class MaintenanceEndpoints
         foreach (var assetId in schedules.Select(x => x.AssetId).Distinct())
         {
             var readings = await sensorRepository.GetRecentAsync(assetId: assetId, limit: 200, cancellationToken: cancellationToken);
+            var latestDiagnostics = new Dictionary<Guid, AssetDiagnosticReading>();
+            foreach (var schedule in schedules.Where(x => x.AssetId == assetId && !string.IsNullOrWhiteSpace(x.DiagnosticSensorType)))
+            {
+                var reading = readings.FirstOrDefault(candidate => MatchesDiagnostic(candidate, schedule));
+                if (reading is not null)
+                {
+                    latestDiagnostics[schedule.Id] = new AssetDiagnosticReading(reading.ObservedAt, DiagnosticValue(reading));
+                }
+            }
             result[assetId] = new AssetMaintenanceReadings(
                 readings.FirstOrDefault(x => x.SensorType == SensorTypes.Odometer || x.SensorType == "odometer_km")?.NumericValue,
-                readings.FirstOrDefault(x => x.SensorType == SensorTypes.Runtime || x.SensorType == "runtime_hours")?.NumericValue);
+                readings.FirstOrDefault(x => x.SensorType == SensorTypes.Runtime || x.SensorType == "runtime_hours")?.NumericValue,
+                latestDiagnostics);
         }
 
         return result;
+    }
+
+    private static bool MatchesDiagnostic(SensorReading reading, MaintenanceSchedule schedule)
+    {
+        if (!string.Equals(reading.SensorType, schedule.DiagnosticSensorType, StringComparison.OrdinalIgnoreCase)) return false;
+        if (string.IsNullOrWhiteSpace(schedule.DiagnosticTextContains)) return true;
+        return (reading.TextValue ?? reading.Name ?? reading.Metadata ?? string.Empty)
+            .Contains(schedule.DiagnosticTextContains.Trim(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string? DiagnosticValue(SensorReading? reading)
+    {
+        if (reading is null) return null;
+        if (!string.IsNullOrWhiteSpace(reading.TextValue)) return reading.TextValue;
+        if (reading.NumericValue.HasValue) return reading.Unit is null ? reading.NumericValue.Value.ToString("G") : $"{reading.NumericValue.Value:G} {reading.Unit}";
+        return reading.Name;
     }
 
     private static async Task<Dictionary<string, string[]>> ValidateAsync(
@@ -259,6 +337,7 @@ public static class MaintenanceEndpoints
         int? intervalDays,
         double? intervalOdometerKm,
         double? intervalRuntimeHours,
+        string? diagnosticSensorType,
         double? lastOdometerKm,
         double? lastRuntimeHours,
         AssetRepository assetRepository,
@@ -268,10 +347,11 @@ public static class MaintenanceEndpoints
         if (await assetRepository.GetByIdAsync(assetId, cancellationToken) is null) errors["assetId"] = ["Asset is required."];
         if (string.IsNullOrWhiteSpace(title)) errors["title"] = ["Title is required."];
         if (NormalizeServiceType(serviceType) is null) errors["serviceType"] = ["Service type is not supported."];
-        if (!intervalDays.HasValue && !intervalOdometerKm.HasValue && !intervalRuntimeHours.HasValue) errors["interval"] = ["At least one interval is required."];
+        if (!intervalDays.HasValue && !intervalOdometerKm.HasValue && !intervalRuntimeHours.HasValue && string.IsNullOrWhiteSpace(diagnosticSensorType)) errors["interval"] = ["At least one interval or diagnostic trigger is required."];
         if (intervalDays.HasValue && intervalDays.Value <= 0) errors["intervalDays"] = ["Interval days must be positive."];
         if (!IsPositive(intervalOdometerKm)) errors["intervalOdometerKm"] = ["Odometer interval must be positive."];
         if (!IsPositive(intervalRuntimeHours)) errors["intervalRuntimeHours"] = ["Runtime interval must be positive."];
+        if (diagnosticSensorType is not null && NormalizeSensorType(diagnosticSensorType) is null) errors["diagnosticSensorType"] = ["Diagnostic sensor type is not supported."];
         if (!IsNonNegative(lastOdometerKm)) errors["lastOdometerKm"] = ["Last odometer must be zero or greater."];
         if (!IsNonNegative(lastRuntimeHours)) errors["lastRuntimeHours"] = ["Last runtime must be zero or greater."];
         return errors;
@@ -294,11 +374,20 @@ public static class MaintenanceEndpoints
         return MaintenanceServiceTypes.All.Contains(normalized) ? normalized : null;
     }
 
+    private static string? NormalizeSensorType(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        var normalized = value.Trim().ToLowerInvariant().Replace('-', '_').Replace(' ', '_');
+        return normalized.Length <= 80 ? normalized : null;
+    }
+
     private static bool IsPositive(double? value)
         => !value.HasValue || (!double.IsNaN(value.Value) && !double.IsInfinity(value.Value) && value.Value > 0);
 
     private static bool IsNonNegative(double? value)
         => !value.HasValue || (!double.IsNaN(value.Value) && !double.IsInfinity(value.Value) && value.Value >= 0);
 
-    internal sealed record AssetMaintenanceReadings(double? LatestOdometerKm, double? LatestRuntimeHours);
+    internal sealed record AssetMaintenanceReadings(double? LatestOdometerKm, double? LatestRuntimeHours, IReadOnlyDictionary<Guid, AssetDiagnosticReading> LatestDiagnostics);
+
+    internal sealed record AssetDiagnosticReading(DateTime ObservedAt, string? Value);
 }

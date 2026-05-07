@@ -11,6 +11,8 @@ export type MaintenanceSchedule = {
   intervalDays?: number | null
   intervalOdometerKm?: number | null
   intervalRuntimeHours?: number | null
+  diagnosticSensorType?: string | null
+  diagnosticTextContains?: string | null
   lastServiceAt?: string | null
   lastOdometerKm?: number | null
   lastRuntimeHours?: number | null
@@ -23,6 +25,21 @@ export type MaintenanceSchedule = {
   nextRuntimeHours?: number | null
   latestOdometerKm?: number | null
   latestRuntimeHours?: number | null
+  latestDiagnosticAt?: string | null
+  latestDiagnosticValue?: string | null
+}
+
+export type MaintenanceReminder = {
+  scheduleId: string
+  assetId: string
+  assetName?: string | null
+  title: string
+  serviceType: string
+  status: MaintenanceStatus
+  reason: string
+  dueAt?: string | null
+  diagnosticAt?: string | null
+  diagnosticValue?: string | null
 }
 
 export type MaintenanceServiceRecord = {
@@ -48,6 +65,8 @@ export type MaintenanceScheduleRequest = {
   intervalDays?: number | null
   intervalOdometerKm?: number | null
   intervalRuntimeHours?: number | null
+  diagnosticSensorType?: string | null
+  diagnosticTextContains?: string | null
   lastServiceAt?: string | null
   lastOdometerKm?: number | null
   lastRuntimeHours?: number | null
@@ -75,6 +94,12 @@ export function getMaintenanceServiceRecords(params: { assetId?: string; schedul
   if (params.scheduleId) query.append('scheduleId', params.scheduleId)
   if (params.limit) query.append('limit', params.limit.toString())
   return apiGet<MaintenanceServiceRecord[]>(`/api/maintenance/records?${query}`)
+}
+
+export function getMaintenanceReminders(assetId?: string) {
+  const query = new URLSearchParams()
+  if (assetId) query.append('assetId', assetId)
+  return apiGet<MaintenanceReminder[]>(`/api/maintenance/reminders?${query}`)
 }
 
 export function createMaintenanceSchedule(data: MaintenanceScheduleRequest) {

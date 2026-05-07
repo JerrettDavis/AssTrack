@@ -1664,6 +1664,27 @@ p {
   align-items: baseline;
 }
 
+.reminder-strip {
+  display: grid;
+  gap: 0.55rem;
+  margin-top: 0.85rem;
+}
+
+.reminder-item {
+  display: grid;
+  grid-template-columns: auto minmax(140px, 1fr) minmax(180px, 1.5fr);
+  gap: 0.65rem;
+  align-items: center;
+  padding-top: 0.55rem;
+  border-top: 1px solid var(--border);
+}
+
+.reminder-item strong,
+.reminder-item span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .button-compact {
   min-height: 32px;
   padding: 0.35rem 0.6rem;

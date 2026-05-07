@@ -11,18 +11,18 @@ This audit tracks the product areas AssTrack should cover as it grows from a loc
 - Asset classes and criticality for people, vehicles, property, pets, equipment, containers, and other assets.
 - Generic sensor readings attached to assets, devices, and integration feeds.
 - Sensor telemetry summaries in asset and device inventory views, including recent numeric trends and stale-sensor warnings.
-- Maintenance schedules and completed service records for vehicle and equipment service intervals based on date, odometer, and runtime telemetry.
+- Maintenance schedules, completed service records, diagnostic-event triggers, and reminders for vehicle and equipment service intervals based on date, odometer, runtime, and sensor telemetry.
 - Asset custody status, checkout/check-in, transfer events, and custody history for tools, containers, vehicles, and shared equipment.
 
 ## Commercial Verticals
 
 | Vertical | Expected capabilities | AssTrack status |
 |---|---|---|
-| Fleet and vehicles | OBD/CAN telemetry, odometer, fuel, ignition, tire pressure, maintenance schedules, driver assignment, route replay. | Location, alerts, generic sensor readings, maintenance schedules, completed service records, and custody are present; driver workflows and route replay remain. |
+| Fleet and vehicles | OBD/CAN telemetry, odometer, fuel, ignition, tire pressure, maintenance schedules, driver assignment, route replay. | Location, alerts, generic sensor readings, maintenance schedules, diagnostic maintenance triggers, completed service records, reminders, and custody are present; driver workflows and route replay remain. |
 | People and teams | Privacy-aware tracking, check-ins, SOS, messaging, temporary sharing, audit logs. | Location, messaging foundation, and asset class are present; SOS/escalation workflow remains. |
 | Pets and working animals | Wearable battery, temperature, activity, safe zones, missing-mode escalation. | Pet asset class and sensors are present; pet-specific workflow remains. |
 | Property and facilities | Fixed/site assets, environmental sensors, motion/door events, service windows. | Property class and sensors are present; service workflows remain. |
-| Equipment and tools | Utilization, impact/motion, runtime, battery, custody, checkout/check-in. | Equipment class, sensors, runtime maintenance schedules, completed service records, and custody events are present; utilization reports remain. |
+| Equipment and tools | Utilization, impact/motion, runtime, battery, custody, checkout/check-in. | Equipment class, sensors, runtime maintenance schedules, diagnostic triggers, completed service records, reminders, and custody events are present; utilization reports remain. |
 | Containers and cargo | Door, impact, temperature, humidity, route custody, seal state. | Container class, sensors, and custody events are present; seal state and route chain-of-custody remain. |
 
 ## Architecture Direction
@@ -35,11 +35,10 @@ This audit tracks the product areas AssTrack should cover as it grows from a loc
 
 ## Next Iterations
 
-1. Maintenance depth: add diagnostic-event triggers and reminders.
-2. Alert routing: add escalation rules that send alerts through message providers, SMS, email, and webhooks.
-3. Messaging providers: implement Signal and Telegram bridge adapters against the existing message-thread API.
-4. Reports: add daily/weekly utilization, dwell time, geofence visits, mileage, stop summaries, and sensor exceptions.
-5. Privacy: add per-asset retention, hidden zones, share links, and stricter handling for people/pet classes.
-6. Import/enrollment: provide controlled bulk enrollment for known devices without auto-creating unwanted assets.
-7. Mobile UX: optimize map, messaging, and alert acknowledgement for field use.
-8. Operations: add integration health checks, per-feed metrics, secret rotation, and dead-letter replay.
+1. Alert routing: add escalation rules that send alerts through message providers, SMS, email, and webhooks.
+2. Messaging providers: implement Signal and Telegram bridge adapters against the existing message-thread API.
+3. Reports: add daily/weekly utilization, dwell time, geofence visits, mileage, stop summaries, and sensor exceptions.
+4. Privacy: add per-asset retention, hidden zones, share links, and stricter handling for people/pet classes.
+5. Import/enrollment: provide controlled bulk enrollment for known devices without auto-creating unwanted assets.
+6. Mobile UX: optimize map, messaging, and alert acknowledgement for field use.
+7. Operations: add integration health checks, per-feed metrics, secret rotation, and dead-letter replay.

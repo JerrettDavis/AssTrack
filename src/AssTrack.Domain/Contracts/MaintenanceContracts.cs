@@ -9,6 +9,8 @@ public sealed record MaintenanceScheduleDto(
     int? IntervalDays,
     double? IntervalOdometerKm,
     double? IntervalRuntimeHours,
+    string? DiagnosticSensorType,
+    string? DiagnosticTextContains,
     DateTime? LastServiceAt,
     double? LastOdometerKm,
     double? LastRuntimeHours,
@@ -20,7 +22,21 @@ public sealed record MaintenanceScheduleDto(
     double? NextOdometerKm,
     double? NextRuntimeHours,
     double? LatestOdometerKm,
-    double? LatestRuntimeHours);
+    double? LatestRuntimeHours,
+    DateTime? LatestDiagnosticAt,
+    string? LatestDiagnosticValue);
+
+public sealed record MaintenanceReminderDto(
+    Guid ScheduleId,
+    Guid AssetId,
+    string? AssetName,
+    string Title,
+    string ServiceType,
+    string Status,
+    string Reason,
+    DateTime? DueAt,
+    DateTime? DiagnosticAt,
+    string? DiagnosticValue);
 
 public sealed record MaintenanceServiceRecordDto(
     Guid Id,
@@ -44,6 +60,8 @@ public sealed record CreateMaintenanceScheduleRequest(
     int? IntervalDays = null,
     double? IntervalOdometerKm = null,
     double? IntervalRuntimeHours = null,
+    string? DiagnosticSensorType = null,
+    string? DiagnosticTextContains = null,
     DateTime? LastServiceAt = null,
     double? LastOdometerKm = null,
     double? LastRuntimeHours = null,
@@ -56,6 +74,8 @@ public sealed record UpdateMaintenanceScheduleRequest(
     int? IntervalDays = null,
     double? IntervalOdometerKm = null,
     double? IntervalRuntimeHours = null,
+    string? DiagnosticSensorType = null,
+    string? DiagnosticTextContains = null,
     DateTime? LastServiceAt = null,
     double? LastOdometerKm = null,
     double? LastRuntimeHours = null,
