@@ -42,8 +42,17 @@ var bridge = builder.AddProject<Projects.AssTrack_BridgeGateway>("bridge-gateway
     .WithExternalHttpEndpoints();
 
 builder.AddViteApp("frontend", frontendDirectory)
+    .WithEndpoint("http", endpoint =>
+    {
+        endpoint.Port = 5174;
+        endpoint.TargetPort = 5174;
+        endpoint.UriScheme = "http";
+        endpoint.IsProxied = false;
+        endpoint.IsExternal = true;
+    })
     .WithNpm()
     .WithRunScript("dev")
+    .WithEnvironment("PORT", "5174")
     .WithEnvironment("VITE_DEV_API_KEY", apiKey)
     .WithEnvironment("VITE_E2E_PROXY_TARGET", apiUrl)
     .WithEnvironment("VITE_BRIDGE_PROXY_TARGET", "http://localhost:5056")
