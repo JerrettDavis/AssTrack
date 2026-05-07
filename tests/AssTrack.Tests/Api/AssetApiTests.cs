@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text;
+using AssTrack.Api.Endpoints;
 using AssTrack.Domain.Contracts;
 using AssTrack.Infrastructure.Data;
 using FluentAssertions;
@@ -24,12 +25,14 @@ public class AssetApiTests : IClassFixture<TestWebApplicationFactory>
         await _factory.ResetDatabaseAsync();
         using var client = _factory.CreateAuthenticatedClient();
 
-        var response = await client.PostAsJsonAsync("/api/assets", new CreateAssetRequest("Fleet Van 7", "Primary field vehicle", "Vehicle"));
+        var response = await client.PostAsJsonAsync("/api/assets", new CreateAssetRequest("Fleet Van 7", "Primary field vehicle", "Vehicle", AssetClass: "vehicle", Criticality: "high"));
         response.StatusCode.Should().Be(HttpStatusCode.Created);
 
         var created = await response.Content.ReadFromJsonAsync<AssetDto>();
         created.Should().NotBeNull();
         created!.Name.Should().Be("Fleet Van 7");
+        created.AssetClass.Should().Be("vehicle");
+        created.Criticality.Should().Be("high");
 
         var list = await client.GetFromJsonAsync<List<AssetDto>>("/api/assets");
         list.Should().ContainSingle(x => x.Id == created.Id && x.Name == "Fleet Van 7");
@@ -65,6 +68,32 @@ public class AssetApiTests : IClassFixture<TestWebApplicationFactory>
         var updated = await update.Content.ReadFromJsonAsync<AssetDto>();
         updated!.Name.Should().Be("New Name");
         updated.Description.Should().Be("New Desc");
+    }
+
+    [Fact]
+    public async Task GetAssetClasses_Should_ReturnCommercialClasses()
+    {
+        await _factory.ResetDatabaseAsync();
+        using var client = _factory.CreateAuthenticatedClient();
+
+        var classes = await client.GetFromJsonAsync<List<AssetClassDto>>("/api/assets/classes");
+
+        classes.Should().NotBeNull();
+        classes.Should().Contain(x => x.Id == "person");
+        classes.Should().Contain(x => x.Id == "vehicle");
+        classes.Should().Contain(x => x.Id == "property");
+        classes.Should().Contain(x => x.Id == "pet");
+    }
+
+    [Fact]
+    public async Task PostAsset_WithUnsupportedClass_Returns400()
+    {
+        await _factory.ResetDatabaseAsync();
+        using var client = _factory.CreateAuthenticatedClient();
+
+        var response = await client.PostAsJsonAsync("/api/assets", new CreateAssetRequest("Unknown", null, null, AssetClass: "spaceship"));
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
     [Fact]

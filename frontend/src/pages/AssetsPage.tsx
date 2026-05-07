@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react'
-import { createAsset, deleteAsset, getAssets, type Asset, updateAsset, type UpdateAssetRequest } from '../api/assets'
+import { createAsset, deleteAsset, getAssetClasses, getAssets, type Asset, type AssetClass, type SensorReading, updateAsset, type UpdateAssetRequest } from '../api/assets'
 import { getLatestPositions, getObservations, type Observation } from '../api/observations'
 import { useIdentityContext } from '../context/IdentityContext'
 
@@ -34,8 +34,28 @@ function getObservationStatus(observation: Observation | undefined) {
 
 type AssetStatusFilter = 'all' | 'moving' | 'stale' | 'unassigned'
 
+const criticalityOptions = [
+  { value: 'low', label: 'Low' },
+  { value: 'normal', label: 'Normal' },
+  { value: 'high', label: 'High' },
+  { value: 'critical', label: 'Critical' },
+]
+
+function classLabel(value: string, classes: AssetClass[]) {
+  return classes.find((item) => item.id === value)?.name ?? value
+}
+
+function sensorLabel(reading: SensorReading) {
+  const name = reading.name || reading.sensorType.replaceAll('_', ' ')
+  const value = reading.numericValue != null
+    ? `${reading.numericValue}${reading.unit ? ` ${reading.unit}` : ''}`
+    : reading.textValue ?? 'N/A'
+  return `${name}: ${value}`
+}
+
 export function AssetsPage() {
   const [assets, setAssets] = useState<Asset[]>([])
+  const [assetClasses, setAssetClasses] = useState<AssetClass[]>([])
   const [observations, setObservations] = useState<Observation[]>([])
   const [latestPositions, setLatestPositions] = useState<Observation[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -44,19 +64,22 @@ export function AssetsPage() {
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [category, setCategory] = useState('')
+  const [assetClass, setAssetClass] = useState('property')
+  const [criticality, setCriticality] = useState('normal')
   const [speedThresholdKmh, setSpeedThresholdKmh] = useState<string>('')
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<AssetStatusFilter>('all')
   const [submitting, setSubmitting] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [editForm, setEditForm] = useState<UpdateAssetRequest>({ name: '', description: null, category: null, speedThresholdKmh: null })
+  const [editForm, setEditForm] = useState<UpdateAssetRequest>({ name: '', description: null, assetClass: 'property', category: null, criticality: 'normal', speedThresholdKmh: null })
   const { isOperator } = useIdentityContext()
 
   async function load() {
     try {
       setError(null)
-      const [assetItems, observationItems, latestPositionItems] = await Promise.all([getAssets(), getObservations(), getLatestPositions()])
+      const [assetItems, classItems, observationItems, latestPositionItems] = await Promise.all([getAssets(), getAssetClasses(), getObservations(), getLatestPositions()])
       setAssets(assetItems)
+      setAssetClasses(classItems)
       setObservations(observationItems)
       setLatestPositions(latestPositionItems)
     } catch (err) {
@@ -83,12 +106,16 @@ export function AssetsPage() {
       await createAsset({
         name: name.trim(),
         description: description.trim() || undefined,
+        assetClass,
         category: category.trim() || undefined,
+        criticality,
         speedThresholdKmh: speedValue,
       })
       setName('')
       setDescription('')
       setCategory('')
+      setAssetClass('property')
+      setCriticality('normal')
       setSpeedThresholdKmh('')
       setShowAddForm(false)
       await load()
@@ -114,7 +141,14 @@ export function AssetsPage() {
 
   function startEdit(asset: Asset) {
     setEditingId(asset.id)
-    setEditForm({ name: asset.name, description: asset.description ?? null, category: asset.category ?? null, speedThresholdKmh: asset.speedThresholdKmh ?? null })
+    setEditForm({
+      name: asset.name,
+      description: asset.description ?? null,
+      assetClass: asset.assetClass,
+      category: asset.category ?? null,
+      criticality: asset.criticality,
+      speedThresholdKmh: asset.speedThresholdKmh ?? null,
+    })
   }
 
   async function saveEdit() {
@@ -143,6 +177,8 @@ export function AssetsPage() {
       { label: 'Assets', value: assets.length },
       { label: 'Devices', value: deviceCount },
       { label: 'Observations', value: observations.length },
+      { label: 'Vehicles', value: assets.filter((asset) => asset.assetClass === 'vehicle').length },
+      { label: 'Pets', value: assets.filter((asset) => asset.assetClass === 'pet').length },
       { label: 'Moving now', value: movingCount },
       { label: 'Needs attention', value: staleCount },
     ]
@@ -157,6 +193,8 @@ export function AssetsPage() {
       const searchMatches =
         normalizedSearch.length === 0 ||
         asset.name.toLowerCase().includes(normalizedSearch) ||
+        asset.assetClass.toLowerCase().includes(normalizedSearch) ||
+        asset.criticality.toLowerCase().includes(normalizedSearch) ||
         (asset.description ?? '').toLowerCase().includes(normalizedSearch) ||
         (asset.category ?? '').toLowerCase().includes(normalizedSearch) ||
         asset.devices.some((device) =>
@@ -237,12 +275,28 @@ export function AssetsPage() {
                   <input onChange={(event) => setName(event.target.value)} required value={name} />
                 </label>
                 <label className="field">
-                  <span>Category</span>
-                  <input onChange={(event) => setCategory(event.target.value)} placeholder="Trailer, vehicle, equipment" value={category} />
+                  <span>Asset class</span>
+                  <select onChange={(event) => setAssetClass(event.target.value)} value={assetClass}>
+                    {assetClasses.map((item) => (
+                      <option key={item.id} value={item.id}>{item.name}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="field">
+                  <span>Criticality</span>
+                  <select onChange={(event) => setCriticality(event.target.value)} value={criticality}>
+                    {criticalityOptions.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
                 </label>
                 <label className="field field-wide">
                   <span>Description</span>
                   <input onChange={(event) => setDescription(event.target.value)} value={description} />
+                </label>
+                <label className="field">
+                  <span>Category</span>
+                  <input onChange={(event) => setCategory(event.target.value)} placeholder="Trailer, service dog, generator" value={category} />
                 </label>
                 <label className="field">
                   <span>Speed Threshold (km/h)</span>
@@ -287,6 +341,22 @@ export function AssetsPage() {
                         <input onChange={(e) => setEditForm(f => ({ ...f, description: e.target.value || null }))} value={editForm.description ?? ''} />
                       </label>
                       <label className="field">
+                        <span>Asset class</span>
+                        <select onChange={(e) => setEditForm(f => ({ ...f, assetClass: e.target.value }))} value={editForm.assetClass ?? 'property'}>
+                          {assetClasses.map((item) => (
+                            <option key={item.id} value={item.id}>{item.name}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="field">
+                        <span>Criticality</span>
+                        <select onChange={(e) => setEditForm(f => ({ ...f, criticality: e.target.value }))} value={editForm.criticality ?? 'normal'}>
+                          {criticalityOptions.map((option) => (
+                            <option key={option.value} value={option.value}>{option.label}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="field">
                         <span>Category</span>
                         <input onChange={(e) => setEditForm(f => ({ ...f, category: e.target.value || null }))} value={editForm.category ?? ''} />
                       </label>
@@ -315,6 +385,8 @@ export function AssetsPage() {
                     <header>
                       <h3>{asset.name}</h3>
                       {asset.isSeeded && <span className="badge badge-demo">Demo</span>}
+                      <span className="badge">{classLabel(asset.assetClass, assetClasses)}</span>
+                      <span className={`badge ${asset.criticality === 'critical' || asset.criticality === 'high' ? 'badge-warning' : ''}`}>{asset.criticality}</span>
                       <span className="badge">{asset.category ?? 'Uncategorized'}</span>
                       <span className={`badge ${status.className}`}>{status.label}</span>
                     </header>
@@ -328,6 +400,12 @@ export function AssetsPage() {
                         <span>Speed threshold</span>
                         <strong>{asset.speedThresholdKmh != null ? `${asset.speedThresholdKmh} km/h` : 'Default'}</strong>
                       </div>
+                      {asset.latestSensorReadings.slice(0, 4).map((reading) => (
+                        <div className="asset-meta-row" key={reading.id}>
+                          <span>{reading.sensorType.replaceAll('_', ' ')}</span>
+                          <strong>{sensorLabel(reading).split(': ').slice(1).join(': ')}</strong>
+                        </div>
+                      ))}
                       <div className="asset-meta-row">
                         <span>Last signal</span>
                         <strong>{latest ? formatRelativeTime(latest.observedAt, latest.receivedAt) : 'Never'}</strong>

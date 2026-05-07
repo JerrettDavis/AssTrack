@@ -23,9 +23,23 @@ namespace AssTrack.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("AssetClass")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(40)
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue("property");
+
                     b.Property<string>("Category")
                         .HasMaxLength(100)
                         .HasColumnType("TEXT");
+
+                    b.Property<string>("Criticality")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(40)
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue("normal");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("TEXT");
@@ -483,6 +497,63 @@ namespace AssTrack.Infrastructure.Migrations
                     b.ToTable("Observations");
                 });
 
+            modelBuilder.Entity("AssTrack.Domain.Models.SensorReading", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("AssetId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("DeviceId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("IntegrationFeedId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Metadata")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Name")
+                        .HasMaxLength(120)
+                        .HasColumnType("TEXT");
+
+                    b.Property<double?>("NumericValue")
+                        .HasColumnType("REAL");
+
+                    b.Property<DateTime>("ObservedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("ReceivedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SensorType")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("TextValue")
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Unit")
+                        .HasMaxLength(40)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DeviceId", "ObservedAt");
+
+                    b.HasIndex("IntegrationFeedId");
+
+                    b.HasIndex("SensorType");
+
+                    b.HasIndex("AssetId", "ObservedAt");
+
+                    b.ToTable("SensorReadings");
+                });
+
             modelBuilder.Entity("AssTrack.Domain.Models.SpeedAlert", b =>
                 {
                     b.Property<Guid>("Id")
@@ -699,6 +770,30 @@ namespace AssTrack.Infrastructure.Migrations
                     b.Navigation("Device");
                 });
 
+            modelBuilder.Entity("AssTrack.Domain.Models.SensorReading", b =>
+                {
+                    b.HasOne("AssTrack.Domain.Models.Asset", "Asset")
+                        .WithMany("SensorReadings")
+                        .HasForeignKey("AssetId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("AssTrack.Domain.Models.Device", "Device")
+                        .WithMany()
+                        .HasForeignKey("DeviceId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("AssTrack.Domain.Models.IntegrationFeed", "IntegrationFeed")
+                        .WithMany()
+                        .HasForeignKey("IntegrationFeedId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Asset");
+
+                    b.Navigation("Device");
+
+                    b.Navigation("IntegrationFeed");
+                });
+
             modelBuilder.Entity("AssTrack.Domain.Models.SpeedAlert", b =>
                 {
                     b.HasOne("AssTrack.Domain.Models.Asset", "Asset")
@@ -728,6 +823,8 @@ namespace AssTrack.Infrastructure.Migrations
             modelBuilder.Entity("AssTrack.Domain.Models.Asset", b =>
                 {
                     b.Navigation("Devices");
+
+                    b.Navigation("SensorReadings");
                 });
 
             modelBuilder.Entity("AssTrack.Domain.Models.Device", b =>

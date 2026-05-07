@@ -9,12 +9,14 @@ public class AssetRepository(AssTrackDbContext dbContext)
     public async Task<IReadOnlyList<Asset>> GetAllAsync(CancellationToken cancellationToken = default)
         => await dbContext.Assets
             .Include(x => x.Devices)
+            .Include(x => x.SensorReadings.OrderByDescending(reading => reading.ObservedAt).Take(8))
             .OrderBy(x => x.Name)
             .ToListAsync(cancellationToken);
 
     public Task<Asset?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
         => dbContext.Assets
             .Include(x => x.Devices)
+            .Include(x => x.SensorReadings.OrderByDescending(reading => reading.ObservedAt).Take(25))
             .FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
 
     public async Task<Asset> AddAsync(Asset asset, CancellationToken cancellationToken = default)
@@ -24,14 +26,16 @@ public class AssetRepository(AssTrackDbContext dbContext)
         return asset;
     }
 
-    public async Task<Asset?> UpdateAsync(Guid id, string name, string? description, string? category, double? speedThresholdKmh, CancellationToken cancellationToken = default)
+    public async Task<Asset?> UpdateAsync(Guid id, string name, string? description, string? assetClass, string? category, string? criticality, double? speedThresholdKmh, CancellationToken cancellationToken = default)
     {
         var asset = await dbContext.Assets.FindAsync([id], cancellationToken);
         if (asset is null) return null;
 
         asset.Name = name;
         asset.Description = description;
+        asset.AssetClass = assetClass ?? asset.AssetClass;
         asset.Category = category;
+        asset.Criticality = criticality ?? asset.Criticality;
         asset.SpeedThresholdKmh = speedThresholdKmh;
         asset.UpdatedAt = DateTime.UtcNow;
 

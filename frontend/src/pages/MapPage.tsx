@@ -603,13 +603,11 @@ function getBaseLayer(layer: MapBaseLayer, colorMode: 'light' | 'dark', themeSty
 }
 
 function MapViewportUpdater({
-  center,
   selectedCenter,
   selectedFocusKey,
   hasInitialViewport,
   onViewportChange,
 }: {
-  center: [number, number]
   selectedCenter: [number, number] | null
   selectedFocusKey: string | null
   hasInitialViewport: boolean
@@ -662,12 +660,6 @@ function MapViewportUpdater({
       map.panTo(selectedCenter)
     }
   }, [selectedCenter, selectedFocusKey, map])
-
-  useEffect(() => {
-    if (selectedCenter === null && !hasUserMoved.current) {
-      map.setView(center)
-    }
-  }, [center, selectedCenter, map])
 
   return null
 }
@@ -1439,7 +1431,6 @@ export default function MapPage() {
       <section className="map-canvas" aria-label="Asset map">
           <MapContainer center={mapInitialCenter} zoom={mapInitialZoom} style={{ height: '100%', width: '100%' }}>
             <MapViewportUpdater
-              center={mapCenter}
               hasInitialViewport={initialViewport !== null}
               onViewportChange={handleViewportChange}
               selectedCenter={selectedCenter}

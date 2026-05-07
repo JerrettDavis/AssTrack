@@ -16,6 +16,7 @@ public class AssTrackDbContext(DbContextOptions<AssTrackDbContext> options) : Db
     public DbSet<IntegrationFeed> IntegrationFeeds => Set<IntegrationFeed>();
     public DbSet<MessageThread> MessageThreads => Set<MessageThread>();
     public DbSet<MessageEntry> MessageEntries => Set<MessageEntry>();
+    public DbSet<SensorReading> SensorReadings => Set<SensorReading>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -24,7 +25,9 @@ public class AssTrackDbContext(DbContextOptions<AssTrackDbContext> options) : Db
             entity.HasKey(x => x.Id);
             entity.Property(x => x.Name).IsRequired().HasMaxLength(200);
             entity.Property(x => x.Description).HasMaxLength(2000);
+            entity.Property(x => x.AssetClass).IsRequired().HasMaxLength(40).HasDefaultValue(AssetClasses.Property);
             entity.Property(x => x.Category).HasMaxLength(100);
+            entity.Property(x => x.Criticality).IsRequired().HasMaxLength(40).HasDefaultValue(AssetCriticality.Normal);
             entity.Property(x => x.SpeedThresholdKmh);
             entity.Property(x => x.IsSeeded).HasDefaultValue(false);
         });
@@ -198,6 +201,31 @@ public class AssTrackDbContext(DbContextOptions<AssTrackDbContext> options) : Db
                 .WithMany(x => x.Messages)
                 .HasForeignKey(x => x.ThreadId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<SensorReading>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.SensorType).IsRequired().HasMaxLength(80);
+            entity.Property(x => x.Name).HasMaxLength(120);
+            entity.Property(x => x.TextValue).HasMaxLength(500);
+            entity.Property(x => x.Unit).HasMaxLength(40);
+            entity.Property(x => x.Metadata).HasColumnType("TEXT");
+            entity.HasIndex(x => new { x.AssetId, x.ObservedAt });
+            entity.HasIndex(x => new { x.DeviceId, x.ObservedAt });
+            entity.HasIndex(x => x.SensorType);
+            entity.HasOne(x => x.Asset)
+                .WithMany(x => x.SensorReadings)
+                .HasForeignKey(x => x.AssetId)
+                .OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(x => x.Device)
+                .WithMany()
+                .HasForeignKey(x => x.DeviceId)
+                .OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(x => x.IntegrationFeed)
+                .WithMany()
+                .HasForeignKey(x => x.IntegrationFeedId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
     }
 }

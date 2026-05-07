@@ -41,7 +41,31 @@ public static class IntegrationProviderCatalog
         new("traccar", "Traccar", "Tracking server", "Webhook/API bridge", true, true, true, "ready",
             "Traccar can aggregate many GPS devices and forward location events.",
             "Configure Traccar webhooks or a polling bridge to POST normalized observations into AssTrack.",
-            ["traccar", "gps"])
+            ["traccar", "gps"]),
+        new("signal", "Signal", "Messaging", "Bridge", true, false, false, "bridge-required",
+            "Signal can carry operator-to-field messages and receive replies through a local bridge service.",
+            "Run an approved Signal bridge, map contacts or groups to assets/devices, and forward inbound/outbound message events to AssTrack messaging endpoints.",
+            ["signal", "messages", "chat"]),
+        new("telegram", "Telegram", "Messaging", "Bot bridge", true, false, false, "bridge-required",
+            "Telegram bots can provide dispatch, group, and field-user messaging channels for tracked assets.",
+            "Create a Telegram bot, restrict allowed chats, and bridge bot updates into AssTrack message threads.",
+            ["telegram", "messages", "bot"]),
+        new("twilio-sms", "Twilio SMS", "Messaging", "Webhook/API", true, false, false, "ready",
+            "SMS remains useful for low-bandwidth field messaging, check-ins, and escalation alerts.",
+            "Configure Twilio inbound webhooks and outbound credentials, then map phone numbers to people, vehicles, or devices.",
+            ["sms", "twilio", "messages"]),
+        new("smtp-email", "Email", "Messaging", "SMTP/IMAP bridge", true, false, true, "bridge-required",
+            "Email channels support reports, alert delivery, and low-friction operator workflows.",
+            "Configure SMTP for outbound messages and optionally poll IMAP or mailbox webhooks for replies.",
+            ["email", "smtp", "alerts"]),
+        new("obd-telematics", "OBD-II / Vehicle Sensors", "Vehicle sensors", "Bridge", true, true, false, "bridge-required",
+            "Vehicle gateways can report ignition, odometer, fuel, battery, diagnostic codes, and motion telemetry.",
+            "Bridge OBD-II or CAN gateway payloads into sensor readings and normalized observations so vehicle health aggregates with location.",
+            ["obd", "vehicle", "sensors"]),
+        new("ble-sensors", "BLE / IoT Sensors", "IoT sensors", "Gateway bridge", true, true, false, "bridge-required",
+            "BLE and IoT gateways can attach temperature, humidity, motion, door, impact, or battery data to assets.",
+            "Publish gateway sensor readings to AssTrack with asset or device identifiers; use this for cold-chain, property, pet, or equipment telemetry.",
+            ["ble", "iot", "sensors"])
     ];
 
     public static IReadOnlyList<IntegrationProviderDto> GetAll() => Providers;

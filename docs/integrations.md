@@ -14,6 +14,7 @@ AssTrack treats every physical tracker, phone, gateway, tag, or vendor device as
 - Auto-create mode: a feed can create a device automatically from `externalTrackerId`.
 - Existing-device linking: if a device already exists with identifier `{provider}:{externalTrackerId}`, ingest links it to the feed.
 - Observation metadata preservation: provider source details are serialized into the observation metadata payload.
+- Generic sensor telemetry ingest: `POST /api/sensors/readings`.
 
 ## Auth
 
@@ -56,6 +57,41 @@ Request:
   "metadata": "{\"source\":\"vendor-webhook\",\"battery\":88}"
 }
 ```
+
+## Sensor Reading Contract
+
+Use sensor readings for telemetry that is not itself a location fix: vehicle fuel, odometer, ignition, battery, environmental sensors, door state, impact, motion, pet wearable data, and custom readings.
+
+Endpoint:
+
+```text
+POST /api/sensors/readings
+```
+
+Request:
+
+```json
+{
+  "assetId": "00000000-0000-0000-0000-000000000000",
+  "deviceIdentifier": "obd:truck-17",
+  "integrationFeedId": "00000000-0000-0000-0000-000000000000",
+  "sensorType": "fuel",
+  "name": "Fuel level",
+  "numericValue": 72,
+  "textValue": null,
+  "unit": "%",
+  "observedAt": "2026-05-07T15:30:00Z",
+  "metadata": "{\"source\":\"obd-gateway\"}"
+}
+```
+
+Required fields:
+
+- `sensorType`
+- `numericValue` or `textValue`
+- at least one of `assetId`, `deviceId`, or `deviceIdentifier`
+
+When `deviceIdentifier` is supplied and the device is linked to an asset, AssTrack automatically attaches the reading to that asset too. Sensor facts are additive; they do not overwrite operator-maintained asset labels or ownership.
 
 Required fields:
 
@@ -101,6 +137,12 @@ Response:
 | Samsung SmartThings Find | `samsung-find` | Partner/bridge | Use Samsung-supported partner flows, SmartThings-compatible device workflows, or approved export/automation. |
 | OwnTracks | `owntracks` | HTTP/MQTT adapter | Configure OwnTracks HTTP mode to an adapter endpoint or bridge MQTT messages. |
 | Traccar | `traccar` | Webhook/API bridge | Configure Traccar notifications/webhooks or poll Traccar positions and normalize. |
+| Signal | `signal` | Messaging bridge | Bridge contacts or groups into AssTrack message threads. |
+| Telegram | `telegram` | Bot bridge | Bridge bot updates into AssTrack message threads. |
+| Twilio SMS | `twilio-sms` | Webhook/API | Map phone numbers to people, vehicles, assets, or devices for field messaging and escalations. |
+| Email | `smtp-email` | SMTP/IMAP bridge | Send reports and alerts; optionally import replies. |
+| OBD-II / Vehicle Sensors | `obd-telematics` | Bridge | Ingest vehicle health and sensor readings alongside location. |
+| BLE / IoT Sensors | `ble-sensors` | Gateway bridge | Ingest environmental, door, motion, impact, battery, and wearable sensor readings. |
 
 ## Provider Playbooks
 

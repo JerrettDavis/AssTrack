@@ -11,6 +11,9 @@ public static class AssetEndpoints
     {
         var assets = group.MapGroup("/assets");
 
+        assets.MapGet("/classes", () => Results.Ok(AssetClassCatalog.All))
+            .RequireAuthorization("Operator");
+
         assets.MapGet(string.Empty, async (AssetRepository repository, CancellationToken cancellationToken) =>
         {
             var items = await repository.GetAllAsync(cancellationToken);
@@ -35,11 +38,25 @@ public static class AssetEndpoints
                 return Results.ValidationProblem(new Dictionary<string, string[]> { ["speedThresholdKmh"] = ["Speed threshold must be a valid positive number."] });
             }
 
+            var assetClass = NormalizeAssetClass(request.AssetClass);
+            var criticality = NormalizeCriticality(request.Criticality);
+            if (assetClass is null)
+            {
+                return Results.ValidationProblem(new Dictionary<string, string[]> { ["assetClass"] = ["Asset class is not supported."] });
+            }
+
+            if (criticality is null)
+            {
+                return Results.ValidationProblem(new Dictionary<string, string[]> { ["criticality"] = ["Criticality is not supported."] });
+            }
+
             var asset = new Asset
             {
                 Name = request.Name.Trim(),
                 Description = request.Description,
+                AssetClass = assetClass,
                 Category = request.Category,
+                Criticality = criticality,
                 SpeedThresholdKmh = request.SpeedThresholdKmh,
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow
@@ -61,7 +78,19 @@ public static class AssetEndpoints
                 return Results.ValidationProblem(new Dictionary<string, string[]> { ["speedThresholdKmh"] = ["Speed threshold must be a valid positive number."] });
             }
 
-            var updated = await repository.UpdateAsync(id, request.Name.Trim(), request.Description, request.Category, request.SpeedThresholdKmh, cancellationToken);
+            var assetClass = NormalizeAssetClass(request.AssetClass);
+            var criticality = NormalizeCriticality(request.Criticality);
+            if (assetClass is null)
+            {
+                return Results.ValidationProblem(new Dictionary<string, string[]> { ["assetClass"] = ["Asset class is not supported."] });
+            }
+
+            if (criticality is null)
+            {
+                return Results.ValidationProblem(new Dictionary<string, string[]> { ["criticality"] = ["Criticality is not supported."] });
+            }
+
+            var updated = await repository.UpdateAsync(id, request.Name.Trim(), request.Description, assetClass, request.Category, criticality, request.SpeedThresholdKmh, cancellationToken);
             return updated is null ? Results.NotFound() : Results.Ok(Map(updated));
         }).RequireAuthorization("Operator");
 
@@ -78,11 +107,47 @@ public static class AssetEndpoints
         asset.Id,
         asset.Name,
         asset.Description,
+        asset.AssetClass,
         asset.Category,
+        asset.Criticality,
         ApiDateTime.Utc(asset.CreatedAt),
         ApiDateTime.Utc(asset.UpdatedAt),
         asset.Devices.Select(DeviceEndpoints.Map).ToArray(),
+        asset.SensorReadings
+            .OrderByDescending(x => x.ObservedAt)
+            .GroupBy(x => x.SensorType)
+            .Select(group => SensorEndpoints.Map(group.First()))
+            .ToArray(),
         asset.SpeedThresholdKmh,
         asset.IsSeeded);
+
+    private static string? NormalizeAssetClass(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return AssetClasses.Property;
+        var normalized = value.Trim().ToLowerInvariant();
+        return AssetClasses.All.Contains(normalized) ? normalized : null;
+    }
+
+    private static string? NormalizeCriticality(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return AssetCriticality.Normal;
+        var normalized = value.Trim().ToLowerInvariant();
+        return AssetCriticality.All.Contains(normalized) ? normalized : null;
+    }
 }
 
+public sealed record AssetClassDto(string Id, string Name, string Description, IReadOnlyList<string> RecommendedSensors);
+
+public static class AssetClassCatalog
+{
+    public static readonly IReadOnlyList<AssetClassDto> All =
+    [
+        new(AssetClasses.Person, "Person", "People, teams, responders, or family members with privacy-sensitive tracking.", ["battery", "sos", "motion"]),
+        new(AssetClasses.Vehicle, "Vehicle", "Cars, trucks, vans, ATVs, boats, and other powered mobile assets.", ["battery", "fuel", "odometer", "engine", "tire_pressure"]),
+        new(AssetClasses.Property, "Property", "Structures, places, depots, camps, or fixed assets.", ["temperature", "humidity", "motion", "door"]),
+        new(AssetClasses.Pet, "Pet", "Pets and working animals where lightweight wearable trackers are common.", ["battery", "temperature", "motion"]),
+        new(AssetClasses.Equipment, "Equipment", "Tools, generators, machinery, and field equipment.", ["battery", "impact", "runtime", "temperature"]),
+        new(AssetClasses.Container, "Container", "Trailers, cases, cargo, totes, and containers.", ["door", "temperature", "humidity", "impact"]),
+        new(AssetClasses.Other, "Other", "Tracked assets that do not fit a standard class yet.", ["battery"])
+    ];
+}
