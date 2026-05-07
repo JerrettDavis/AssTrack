@@ -1,6 +1,7 @@
 using AssTrack.Domain.Contracts;
 using AssTrack.Domain.Models;
 using AssTrack.Infrastructure.Repositories;
+using AssTrack.Api;
 
 namespace AssTrack.Api.Endpoints;
 
@@ -39,13 +40,20 @@ public static class DeviceEndpoints
                 device.AssetId,
                 device.Asset?.Name,
                 device.Asset?.SpeedThresholdKmh,
-                latestObservation?.ObservedAt,
+                ApiDateTime.Utc(latestObservation?.ObservedAt),
                 latestObservation?.Latitude,
                 latestObservation?.Longitude,
                 latestObservation?.SpeedKmh,
                 latestObservation?.HeadingDegrees,
                 unacknowledgedSpeedAlerts.Count,
-                unacknowledgedBreaches.Count
+                unacknowledgedBreaches.Count,
+                device.ProviderLabel,
+                device.ProviderLongName,
+                device.ProviderShortName,
+                device.ProviderHardwareModel,
+                device.ProviderRole,
+                device.ProviderProfileJson,
+                ApiDateTime.Utc(device.ProviderProfileUpdatedAt)
             );
 
             return Results.Ok(summary);
@@ -106,7 +114,7 @@ public static class DeviceEndpoints
         device.Identifier,
         device.Label,
         device.Protocol,
-        device.CreatedAt,
+        ApiDateTime.Utc(device.CreatedAt),
         device.AssetId,
         device.Asset?.Name,
         device.IsSeeded,
@@ -114,6 +122,13 @@ public static class DeviceEndpoints
         device.ExternalId,
         device.Tags,
         device.IntegrationFeedId,
-        device.IntegrationFeed?.Name);
+        device.IntegrationFeed?.Name,
+        device.ProviderLabel,
+        device.ProviderLongName,
+        device.ProviderShortName,
+        device.ProviderHardwareModel,
+        device.ProviderRole,
+        device.ProviderProfileJson,
+        ApiDateTime.Utc(device.ProviderProfileUpdatedAt));
 }
 

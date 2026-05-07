@@ -1,6 +1,7 @@
 using AssTrack.Api.Services;
 using AssTrack.Domain.Contracts;
 using AssTrack.Infrastructure.Data;
+using AssTrack.Infrastructure.Repositories;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -60,6 +61,39 @@ public static class SystemEndpoints
         })
         .WithName("SeedDemoData")
         .WithSummary("Seed demo data. Use reset=true to wipe and re-seed seeded records only.")
+        .RequireAuthorization("Operator");
+
+        group.MapPost("/system/maintenance/clean-null-island", async (
+            bool? dryRun,
+            ObservationRepository observationRepository,
+            CancellationToken ct) =>
+        {
+            var result = await observationRepository.DeleteNullIslandNoiseAsync(dryRun ?? true, ct);
+            return Results.Ok(new ObservationCleanupResultDto(
+                result.MatchingObservations,
+                result.DeletedObservations,
+                result.AffectedDevices,
+                result.ResetGeofenceStates,
+                dryRun ?? true));
+        })
+        .WithName("CleanNullIslandObservationNoise")
+        .WithSummary("Remove historical observations near 0,0 and reset geofence state for affected devices.")
+        .RequireAuthorization("Operator");
+
+        group.MapPost("/system/maintenance/clean-auto-created-provider-assets", async (
+            bool? dryRun,
+            AssetRepository assetRepository,
+            CancellationToken ct) =>
+        {
+            var result = await assetRepository.DeleteAutoCreatedProviderAssetsAsync(dryRun ?? true, ct);
+            return Results.Ok(new AutoCreatedAssetCleanupResultDto(
+                result.MatchingAssets,
+                result.DeletedAssets,
+                result.DetachedDevices,
+                dryRun ?? true));
+        })
+        .WithName("CleanAutoCreatedProviderAssets")
+        .WithSummary("Detach devices from previously auto-created provider assets and remove those asset records.")
         .RequireAuthorization("Operator");
 
         return group;

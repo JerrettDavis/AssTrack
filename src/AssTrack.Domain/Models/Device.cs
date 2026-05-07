@@ -9,6 +9,13 @@ public class Device
     public string Provider { get; set; } = "manual";
     public string? ExternalId { get; set; }
     public string? Tags { get; set; }
+    public string? ProviderLabel { get; set; }
+    public string? ProviderLongName { get; set; }
+    public string? ProviderShortName { get; set; }
+    public string? ProviderHardwareModel { get; set; }
+    public string? ProviderRole { get; set; }
+    public string? ProviderProfileJson { get; set; }
+    public DateTime? ProviderProfileUpdatedAt { get; set; }
     public bool IsSeeded { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public Guid? AssetId { get; set; }

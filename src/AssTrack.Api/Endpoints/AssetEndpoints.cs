@@ -1,6 +1,7 @@
 using AssTrack.Domain.Contracts;
 using AssTrack.Domain.Models;
 using AssTrack.Infrastructure.Repositories;
+using AssTrack.Api;
 
 namespace AssTrack.Api.Endpoints;
 
@@ -78,8 +79,8 @@ public static class AssetEndpoints
         asset.Name,
         asset.Description,
         asset.Category,
-        asset.CreatedAt,
-        asset.UpdatedAt,
+        ApiDateTime.Utc(asset.CreatedAt),
+        ApiDateTime.Utc(asset.UpdatedAt),
         asset.Devices.Select(DeviceEndpoints.Map).ToArray(),
         asset.SpeedThresholdKmh,
         asset.IsSeeded);

@@ -14,6 +14,8 @@ public class AssTrackDbContext(DbContextOptions<AssTrackDbContext> options) : Db
     public DbSet<DeviceGeofenceState> DeviceGeofenceStates => Set<DeviceGeofenceState>();
     public DbSet<WebhookDeliveryLog> WebhookDeliveryLogs => Set<WebhookDeliveryLog>();
     public DbSet<IntegrationFeed> IntegrationFeeds => Set<IntegrationFeed>();
+    public DbSet<MessageThread> MessageThreads => Set<MessageThread>();
+    public DbSet<MessageEntry> MessageEntries => Set<MessageEntry>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -36,6 +38,12 @@ public class AssTrackDbContext(DbContextOptions<AssTrackDbContext> options) : Db
             entity.Property(x => x.Provider).IsRequired().HasMaxLength(80).HasDefaultValue("manual");
             entity.Property(x => x.ExternalId).HasMaxLength(300);
             entity.Property(x => x.Tags).HasMaxLength(500);
+            entity.Property(x => x.ProviderLabel).HasMaxLength(200);
+            entity.Property(x => x.ProviderLongName).HasMaxLength(200);
+            entity.Property(x => x.ProviderShortName).HasMaxLength(80);
+            entity.Property(x => x.ProviderHardwareModel).HasMaxLength(120);
+            entity.Property(x => x.ProviderRole).HasMaxLength(80);
+            entity.Property(x => x.ProviderProfileJson).HasColumnType("TEXT");
             entity.Property(x => x.IsSeeded).HasDefaultValue(false);
             entity.HasIndex(x => x.Identifier).IsUnique();
             entity.HasIndex(x => new { x.IntegrationFeedId, x.ExternalId });
@@ -143,6 +151,53 @@ public class AssTrackDbContext(DbContextOptions<AssTrackDbContext> options) : Db
             entity.HasIndex(x => x.AttemptedAt);
             entity.HasIndex(x => x.EventType);
             entity.HasIndex(x => x.CorrelationId);
+        });
+
+        modelBuilder.Entity<MessageThread>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Channel).IsRequired().HasMaxLength(80);
+            entity.Property(x => x.Provider).IsRequired().HasMaxLength(80);
+            entity.Property(x => x.ExternalPeerId).HasMaxLength(300);
+            entity.Property(x => x.DisplayName).HasMaxLength(200);
+            entity.Property(x => x.Subject).HasMaxLength(300);
+            entity.Property(x => x.Status).IsRequired().HasMaxLength(40).HasDefaultValue(MessageThreadStatus.Open);
+            entity.Property(x => x.Metadata).HasColumnType("TEXT");
+            entity.HasIndex(x => new { x.Provider, x.ExternalPeerId });
+            entity.HasIndex(x => new { x.IntegrationFeedId, x.ExternalPeerId });
+            entity.HasIndex(x => x.LastMessageAt);
+            entity.HasOne(x => x.IntegrationFeed)
+                .WithMany()
+                .HasForeignKey(x => x.IntegrationFeedId)
+                .OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(x => x.Device)
+                .WithMany()
+                .HasForeignKey(x => x.DeviceId)
+                .OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(x => x.Asset)
+                .WithMany()
+                .HasForeignKey(x => x.AssetId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<MessageEntry>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Direction).IsRequired().HasMaxLength(20);
+            entity.Property(x => x.Status).IsRequired().HasMaxLength(40);
+            entity.Property(x => x.Sender).HasMaxLength(300);
+            entity.Property(x => x.Recipient).HasMaxLength(300);
+            entity.Property(x => x.Body).IsRequired().HasMaxLength(4000);
+            entity.Property(x => x.ProviderMessageId).HasMaxLength(300);
+            entity.Property(x => x.ErrorMessage).HasMaxLength(2000);
+            entity.Property(x => x.Metadata).HasColumnType("TEXT");
+            entity.HasIndex(x => new { x.ThreadId, x.CreatedAt });
+            entity.HasIndex(x => new { x.Status, x.Direction, x.CreatedAt });
+            entity.HasIndex(x => x.ProviderMessageId);
+            entity.HasOne(x => x.Thread)
+                .WithMany(x => x.Messages)
+                .HasForeignKey(x => x.ThreadId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

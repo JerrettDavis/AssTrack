@@ -10,17 +10,9 @@ public sealed class AssTrackIngestClient(HttpClient httpClient, IOptions<BridgeG
     public async Task<BridgeDeliveryResult> SendAsync(Guid feedId, ProviderObservation observation, CancellationToken cancellationToken)
     {
         var config = options.Value;
-        if (config.AssTrackBaseUrl is null)
-        {
-            throw new InvalidOperationException("BridgeGateway:AssTrackBaseUrl is required when DryRun is false.");
-        }
+        EnsureConfigured(config);
 
-        if (string.IsNullOrWhiteSpace(config.IngestApiKey))
-        {
-            throw new InvalidOperationException("BridgeGateway:IngestApiKey is required when DryRun is false.");
-        }
-
-        var url = new Uri(config.AssTrackBaseUrl, $"/api/integrations/{feedId}/observations");
+        var url = new Uri(config.AssTrackBaseUrl!, $"/api/integrations/{feedId}/observations");
         using var request = new HttpRequestMessage(HttpMethod.Post, url)
         {
             Content = JsonContent.Create(new IntegrationFeedObservationRequest(
@@ -46,6 +38,54 @@ public sealed class AssTrackIngestClient(HttpClient httpClient, IOptions<BridgeG
         var body = await response.Content.ReadAsStringAsync(cancellationToken);
         return new BridgeDeliveryResult(response.IsSuccessStatusCode, (int)response.StatusCode, body, IsRetryable(response.StatusCode));
     }
+
+    public async Task<BridgeDeliveryResult> SendDeviceProfileAsync(Guid feedId, ProviderDeviceProfile profile, CancellationToken cancellationToken)
+    {
+        var config = options.Value;
+        EnsureConfigured(config);
+
+        var url = new Uri(config.AssTrackBaseUrl!, $"/api/integrations/{feedId}/devices/profile");
+        using var request = new HttpRequestMessage(HttpMethod.Post, url)
+        {
+            Content = JsonContent.Create(new IntegrationDeviceProfileRequest(
+                profile.ExternalTrackerId,
+                NormalizeUtc(profile.ObservedAt),
+                profile.Label,
+                profile.LongName,
+                profile.ShortName,
+                profile.HardwareModel,
+                profile.Role,
+                profile.Tags,
+                profile.AssetId,
+                profile.Metadata))
+        };
+
+        request.Headers.TryAddWithoutValidation("X-Api-Key", config.IngestApiKey);
+
+        using var response = await httpClient.SendAsync(request, cancellationToken);
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        return new BridgeDeliveryResult(response.IsSuccessStatusCode, (int)response.StatusCode, body, IsRetryable(response.StatusCode));
+    }
+
+    private static void EnsureConfigured(BridgeGatewayOptions config)
+    {
+        if (config.AssTrackBaseUrl is null)
+        {
+            throw new InvalidOperationException("BridgeGateway:AssTrackBaseUrl is required when DryRun is false.");
+        }
+
+        if (string.IsNullOrWhiteSpace(config.IngestApiKey))
+        {
+            throw new InvalidOperationException("BridgeGateway:IngestApiKey is required when DryRun is false.");
+        }
+    }
+
+    private static DateTime? NormalizeUtc(DateTime? value)
+        => value is null
+            ? null
+            : value.Value.Kind == DateTimeKind.Unspecified
+                ? DateTime.SpecifyKind(value.Value, DateTimeKind.Utc)
+                : value.Value.ToUniversalTime();
 
     private static bool IsRetryable(HttpStatusCode statusCode)
         => statusCode == HttpStatusCode.TooManyRequests || (int)statusCode >= 500;

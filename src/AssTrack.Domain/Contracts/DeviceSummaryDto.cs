@@ -13,4 +13,11 @@ public sealed record DeviceSummaryDto(
     double? LatestSpeedKmh,
     double? LatestHeadingDegrees,
     int UnacknowledgedSpeedAlerts,
-    int UnacknowledgedGeofenceBreaches);
+    int UnacknowledgedGeofenceBreaches,
+    string? ProviderLabel,
+    string? ProviderLongName,
+    string? ProviderShortName,
+    string? ProviderHardwareModel,
+    string? ProviderRole,
+    string? ProviderProfileJson,
+    DateTime? ProviderProfileUpdatedAt);

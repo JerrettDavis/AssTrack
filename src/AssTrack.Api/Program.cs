@@ -26,6 +26,7 @@ builder.Services.AddScoped<GeofenceRepository>();
 builder.Services.AddScoped<SpeedAlertRepository>();
 builder.Services.AddScoped<GeofenceBreachRepository>();
 builder.Services.AddScoped<IntegrationFeedRepository>();
+builder.Services.AddScoped<MessageRepository>();
 
 var corsOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
 builder.Services.AddCors(options =>
@@ -205,6 +206,7 @@ api.MapSystemEndpoints();
 api.MapSseTokenEndpoints();
 api.MapAuthEndpoints();
 api.MapIntegrationEndpoints();
+api.MapMessageEndpoints();
 api.MapGet("/alerts/summary", async (SpeedAlertRepository speedAlerts, GeofenceBreachRepository breaches, CancellationToken ct) =>
 {
     var speedCount = await speedAlerts.GetUnacknowledgedCountAsync(ct);

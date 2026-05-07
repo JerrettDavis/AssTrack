@@ -9,6 +9,7 @@ import HistoryPage from './pages/HistoryPage'
 import WebhooksPage from './pages/WebhooksPage'
 import SettingsPage from './pages/SettingsPage'
 import IntegrationsPage from './pages/IntegrationsPage'
+import MessagesPage from './pages/MessagesPage'
 import { getAlertSummary } from './api/alerts'
 import { useLiveEvents } from './hooks/useLiveEvents'
 import { IdentityProvider, useIdentityContext } from './context/IdentityContext'
@@ -72,6 +73,7 @@ function AppContent() {
               {unacknowledgedCount > 0 && <span className="nav-badge">{unacknowledgedCount}</span>}
             </NavLink>
             <NavLink to="/history">History</NavLink>
+            <NavLink to="/messages">Messages</NavLink>
             {isOperator && <NavLink to="/integrations">Bridge</NavLink>}
             {isOperator && <NavLink to="/webhooks">Webhooks</NavLink>}
             <NavLink to="/settings">Settings</NavLink>
@@ -86,6 +88,7 @@ function AppContent() {
           <Route path="/geofences" element={<GeofencesPage />} />
           <Route path="/alerts" element={<AlertsPage />} />
           <Route path="/history" element={<HistoryPage />} />
+          <Route path="/messages" element={<MessagesPage />} />
           <Route path="/integrations" element={<IntegrationsPage />} />
           <Route path="/webhooks" element={<WebhooksPage />} />
           <Route path="/settings" element={<SettingsPage />} />

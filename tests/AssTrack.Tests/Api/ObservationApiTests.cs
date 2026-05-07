@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 using AssTrack.Domain.Contracts;
 using AssTrack.Domain.Models;
 using AssTrack.Infrastructure.Data;
@@ -44,6 +45,41 @@ public class ObservationApiTests : IClassFixture<TestWebApplicationFactory>
         latest.Should().NotBeNull();
         latest!.AssetName.Should().Be("Generator A");
         latest.DeviceIdentifier.Should().Be("dev-100");
+    }
+
+    [Fact]
+    public async Task LatestObservation_Should_SerializeStoredDateTimesAsUtc()
+    {
+        await _factory.ResetDatabaseAsync();
+        Guid deviceId;
+        var observedAt = DateTime.SpecifyKind(DateTime.UtcNow.AddMinutes(-2), DateTimeKind.Unspecified);
+        var receivedAt = DateTime.SpecifyKind(DateTime.UtcNow.AddMinutes(-1), DateTimeKind.Unspecified);
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<AssTrackDbContext>();
+            var device = new Device { Identifier = "dev-utc" };
+            dbContext.Devices.Add(device);
+            await dbContext.SaveChangesAsync();
+            dbContext.Observations.Add(new Observation
+            {
+                DeviceId = device.Id,
+                ObservedAt = observedAt,
+                ReceivedAt = receivedAt,
+                Latitude = 36.0595,
+                Longitude = -95.8976
+            });
+            await dbContext.SaveChangesAsync();
+            deviceId = device.Id;
+        }
+
+        using var client = _factory.CreateAuthenticatedClient();
+        var response = await client.GetAsync($"/api/observations/latest/{deviceId}");
+        response.EnsureSuccessStatusCode();
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+
+        document.RootElement.GetProperty("observedAt").GetString().Should().EndWith("Z");
+        document.RootElement.GetProperty("receivedAt").GetString().Should().EndWith("Z");
     }
 
     [Fact]
@@ -168,6 +204,73 @@ public class ObservationApiTests : IClassFixture<TestWebApplicationFactory>
         };
         var response = await _factory.CreateAuthenticatedClient().PostAsJsonAsync("/api/observations", request);
         Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Ingest_NullIslandNoise_Returns422()
+    {
+        await _factory.ResetDatabaseAsync();
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<AssTrackDbContext>();
+            dbContext.Devices.Add(new Device { Identifier = "null-island-dev" });
+            await dbContext.SaveChangesAsync();
+        }
+
+        var request = new
+        {
+            deviceIdentifier = "null-island-dev",
+            latitude = 0.00001,
+            longitude = -0.00001,
+            observedAt = DateTime.UtcNow
+        };
+
+        var response = await _factory.CreateAuthenticatedClient().PostAsJsonAsync("/api/observations", request);
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task LatestPosition_IgnoresNullIslandNoise_AndReturnsPreviousGoodObservation()
+    {
+        await _factory.ResetDatabaseAsync();
+        Guid deviceId;
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<AssTrackDbContext>();
+            var device = new Device { Identifier = "latest-noise-dev" };
+            dbContext.Devices.Add(device);
+            await dbContext.SaveChangesAsync();
+            deviceId = device.Id;
+
+            dbContext.Observations.AddRange(
+                new Observation
+                {
+                    DeviceId = device.Id,
+                    ObservedAt = DateTime.UtcNow.AddMinutes(-5),
+                    ReceivedAt = DateTime.UtcNow.AddMinutes(-5),
+                    Latitude = 36.0595,
+                    Longitude = -95.8976
+                },
+                new Observation
+                {
+                    DeviceId = device.Id,
+                    ObservedAt = DateTime.UtcNow,
+                    ReceivedAt = DateTime.UtcNow,
+                    Latitude = 0,
+                    Longitude = 0
+                });
+            await dbContext.SaveChangesAsync();
+        }
+
+        using var client = _factory.CreateAuthenticatedClient();
+        var latest = await client.GetFromJsonAsync<ObservationDto>($"/api/observations/latest/{deviceId}");
+        var positions = await client.GetFromJsonAsync<List<ObservationDto>>("/api/observations/latest-positions");
+
+        latest.Should().NotBeNull();
+        latest!.Latitude.Should().Be(36.0595);
+        latest.Longitude.Should().Be(-95.8976);
+        positions.Should().ContainSingle(item => item.DeviceId == deviceId && item.Latitude == 36.0595);
     }
 
     [Fact]

@@ -56,6 +56,65 @@ public class DeviceRepository(AssTrackDbContext dbContext)
         return await GetByIdAsync(id, cancellationToken);
     }
 
+    public async Task<Device?> EnrichAsync(Guid id, string? label, Guid? assetId, string? tags, CancellationToken cancellationToken = default)
+    {
+        var device = await dbContext.Devices.FindAsync([id], cancellationToken);
+        if (device is null) return null;
+
+        if (!string.IsNullOrWhiteSpace(label))
+        {
+            device.Label = label.Trim();
+        }
+
+        if (assetId.HasValue)
+        {
+            device.AssetId = assetId;
+        }
+
+        if (!string.IsNullOrWhiteSpace(tags))
+        {
+            device.Tags = tags.Trim();
+        }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return await GetByIdAsync(id, cancellationToken);
+    }
+
+    public async Task<Device?> UpsertProviderProfileAsync(
+        Guid id,
+        string? providerLabel,
+        string? providerLongName,
+        string? providerShortName,
+        string? providerHardwareModel,
+        string? providerRole,
+        string? providerProfileJson,
+        DateTime? observedAt,
+        string? tags,
+        CancellationToken cancellationToken = default)
+    {
+        var device = await dbContext.Devices.FindAsync([id], cancellationToken);
+        if (device is null) return null;
+
+        device.ProviderLabel = FirstNonBlank(providerLabel, device.ProviderLabel);
+        device.ProviderLongName = FirstNonBlank(providerLongName, device.ProviderLongName);
+        device.ProviderShortName = FirstNonBlank(providerShortName, device.ProviderShortName);
+        device.ProviderHardwareModel = FirstNonBlank(providerHardwareModel, device.ProviderHardwareModel);
+        device.ProviderRole = FirstNonBlank(providerRole, device.ProviderRole);
+        device.ProviderProfileJson = FirstNonBlank(providerProfileJson, device.ProviderProfileJson);
+        device.ProviderProfileUpdatedAt = observedAt ?? DateTime.UtcNow;
+
+        if (!string.IsNullOrWhiteSpace(tags))
+        {
+            device.Tags = tags.Trim();
+        }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return await GetByIdAsync(id, cancellationToken);
+    }
+
+    private static string? FirstNonBlank(params string?[] values)
+        => values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value))?.Trim();
+
     public async Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken = default)
     {
         var device = await dbContext.Devices.FindAsync([id], cancellationToken);

@@ -7,8 +7,14 @@ function formatTimestamp(value: string) {
   return new Date(value).toLocaleString()
 }
 
-function formatRelativeTime(value: string) {
-  const diffMs = Date.now() - new Date(value).getTime()
+function ageTimestamp(observedAt: string, receivedAt?: string | null): string {
+  const observedMs = new Date(observedAt).getTime()
+  if (Number.isFinite(observedMs) && observedMs <= Date.now()) return observedAt
+  return receivedAt ?? observedAt
+}
+
+function formatRelativeTime(observedAt: string, receivedAt?: string | null) {
+  const diffMs = Math.max(0, Date.now() - new Date(ageTimestamp(observedAt, receivedAt)).getTime())
   const minutes = Math.floor(diffMs / 60000)
   if (minutes < 1) return 'Just now'
   if (minutes < 60) return `${minutes}m ago`
@@ -19,7 +25,7 @@ function formatRelativeTime(value: string) {
 
 function getObservationStatus(observation: Observation | undefined) {
   if (!observation) return { label: 'No signal', className: 'badge-danger' }
-  const ageMs = Date.now() - new Date(observation.observedAt).getTime()
+  const ageMs = Math.max(0, Date.now() - new Date(ageTimestamp(observation.observedAt, observation.receivedAt)).getTime())
   if (ageMs > 30 * 60 * 1000) return { label: 'Stale', className: 'badge-danger' }
   if (ageMs > 5 * 60 * 1000) return { label: 'Aging', className: 'badge-warning' }
   if ((observation.speedKmh ?? 0) > 0) return { label: 'Moving', className: 'badge-success' }
@@ -324,7 +330,7 @@ export function AssetsPage() {
                       </div>
                       <div className="asset-meta-row">
                         <span>Last signal</span>
-                        <strong>{latest ? formatRelativeTime(latest.observedAt) : 'Never'}</strong>
+                        <strong>{latest ? formatRelativeTime(latest.observedAt, latest.receivedAt) : 'Never'}</strong>
                       </div>
                       {latest && (
                         <div className="asset-meta-row">

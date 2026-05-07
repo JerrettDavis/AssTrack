@@ -7,8 +7,6 @@
     <SpaRoot>../../frontend/</SpaRoot>
     <BuildIntegratedFrontend Condition="'$(BuildIntegratedFrontend)' == ''">true</BuildIntegratedFrontend>
     <NpmExecutable>npm</NpmExecutable>
-    <NpmExecutable Condition="'$(OS)' == 'Windows_NT' And Exists('$(ProgramFiles)\nodejs\npm.cmd')">$(ProgramFiles)\nodejs\npm.cmd</NpmExecutable>
-    <NodePathPrefix Condition="'$(OS)' == 'Windows_NT' And Exists('$(ProgramFiles)\nodejs\node.exe')">$(ProgramFiles)\nodejs;</NodePathPrefix>
   </PropertyGroup>
 
   <ItemGroup>
@@ -28,10 +26,8 @@
   </ItemGroup>
 
   <Target Name="BuildFrontendForPublish" BeforeTargets="ComputeFilesToPublish" Condition="'$(BuildIntegratedFrontend)' == 'true'">
-    <Exec Command="set &quot;PATH=$(NodePathPrefix)%PATH%&quot; &amp;&amp; &quot;$(NpmExecutable)&quot; ci" WorkingDirectory="$(SpaRoot)" Condition="'$(OS)' == 'Windows_NT'" />
-    <Exec Command="set &quot;PATH=$(NodePathPrefix)%PATH%&quot; &amp;&amp; &quot;$(NpmExecutable)&quot; run build" WorkingDirectory="$(SpaRoot)" Condition="'$(OS)' == 'Windows_NT'" />
-    <Exec Command="&quot;$(NpmExecutable)&quot; ci" WorkingDirectory="$(SpaRoot)" Condition="'$(OS)' != 'Windows_NT'" />
-    <Exec Command="&quot;$(NpmExecutable)&quot; run build" WorkingDirectory="$(SpaRoot)" Condition="'$(OS)' != 'Windows_NT'" />
+    <Exec Command="&quot;$(NpmExecutable)&quot; ci" WorkingDirectory="$(SpaRoot)" />
+    <Exec Command="&quot;$(NpmExecutable)&quot; run build" WorkingDirectory="$(SpaRoot)" />
     <ItemGroup>
       <DistFiles Include="$(SpaRoot)dist/**/*" />
       <ResolvedFileToPublish Include="@(DistFiles->'%(FullPath)')" Exclude="@(ResolvedFileToPublish)">

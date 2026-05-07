@@ -1,4 +1,5 @@
 using AssTrack.Api.Services;
+using AssTrack.Api;
 using AssTrack.Domain.Contracts;
 using AssTrack.Domain.Models;
 using AssTrack.Infrastructure.Repositories;
@@ -32,7 +33,7 @@ public static class IntegrationEndpoints
                 feed.AutoCreateDevices,
                 feed.DefaultTags,
                 feed.ConfigurationJson,
-                feed.UpdatedAt)));
+                ApiDateTime.Utc(feed.UpdatedAt))));
         }).RequireAuthorization("Operator");
 
         integrations.MapPost(string.Empty, async ([FromBody] CreateIntegrationFeedRequest request, IntegrationFeedRepository repository, CancellationToken cancellationToken) =>
@@ -122,14 +123,17 @@ public static class IntegrationEndpoints
                 device = await deviceRepository.GetByIdentifierAsync(identifier, cancellationToken);
                 if (device is null)
                 {
+                    var normalizedLabel = NormalizeNullable(request.Label);
                     device = await deviceRepository.AddAsync(new Device
                     {
                         Identifier = identifier,
-                        Label = NormalizeNullable(request.Label) ?? externalId,
+                        Label = normalizedLabel ?? externalId,
                         Protocol = feed.Provider,
                         Provider = feed.Provider,
                         ExternalId = externalId,
                         Tags = MergeTags(feed.DefaultTags, request.Tags),
+                        ProviderLabel = normalizedLabel,
+                        ProviderProfileUpdatedAt = normalizedLabel is null ? null : DateTime.UtcNow,
                         IntegrationFeedId = feed.Id,
                         AssetId = request.AssetId,
                         CreatedAt = DateTime.UtcNow
@@ -152,20 +156,141 @@ public static class IntegrationEndpoints
                 }
             }
 
-            var metadata = BuildMetadata(feed, request);
-            var ingest = await ingestService.IngestAsync(new CreateObservationRequest(
-                device.Id,
-                request.ObservedAt.Kind == DateTimeKind.Unspecified ? DateTime.SpecifyKind(request.ObservedAt, DateTimeKind.Utc) : request.ObservedAt.ToUniversalTime(),
-                request.Latitude,
-                request.Longitude,
-                request.Altitude,
-                request.AccuracyMeters,
-                request.SpeedKmh,
-                request.HeadingDegrees,
-                metadata,
-                device.Identifier), cancellationToken);
+            var observationLabel = NormalizeNullable(request.Label);
+            if (observationLabel is not null)
+            {
+                device = await deviceRepository.UpsertProviderProfileAsync(
+                    device.Id,
+                    observationLabel,
+                    null,
+                    null,
+                    null,
+                    null,
+                    request.Metadata,
+                    request.ObservedAt,
+                    MergeTags(device.Tags, request.Tags),
+                    cancellationToken) ?? device;
+            }
 
-            return Results.Ok(new IntegrationIngestResultDto(feed.Id, device.Id, device.Identifier, createdDevice, ObservationEndpoints.Map(ingest.Created!)));
+            try
+            {
+                var metadata = BuildMetadata(feed, request);
+                var ingest = await ingestService.IngestAsync(new CreateObservationRequest(
+                    device.Id,
+                    request.ObservedAt.Kind == DateTimeKind.Unspecified ? DateTime.SpecifyKind(request.ObservedAt, DateTimeKind.Utc) : request.ObservedAt.ToUniversalTime(),
+                    request.Latitude,
+                    request.Longitude,
+                    request.Altitude,
+                    request.AccuracyMeters,
+                    request.SpeedKmh,
+                    request.HeadingDegrees,
+                    metadata,
+                    device.Identifier), cancellationToken);
+
+                return Results.Ok(new IntegrationIngestResultDto(feed.Id, device.Id, device.Identifier, createdDevice, ObservationEndpoints.Map(ingest.Created!)));
+            }
+            catch (ObservationIngestException ex)
+            {
+                return Results.ValidationProblem(ex.ValidationErrors, statusCode: StatusCodes.Status422UnprocessableEntity);
+            }
+        }).RequireAuthorization("Ingest");
+
+        integrations.MapPost("/{id:guid}/devices/profile", async (
+            Guid id,
+            [FromBody] IntegrationDeviceProfileRequest request,
+            IntegrationFeedRepository integrationRepository,
+            DeviceRepository deviceRepository,
+            CancellationToken cancellationToken) =>
+        {
+            var feed = await integrationRepository.GetByIdAsync(id, cancellationToken);
+            if (feed is null) return Results.NotFound();
+            if (!feed.IsEnabled)
+            {
+                return Results.ValidationProblem(new Dictionary<string, string[]> { ["feed"] = ["Integration feed is disabled."] });
+            }
+
+            if (string.IsNullOrWhiteSpace(request.ExternalTrackerId))
+            {
+                return Results.ValidationProblem(new Dictionary<string, string[]> { ["externalTrackerId"] = ["External tracker id is required."] });
+            }
+
+            var externalId = request.ExternalTrackerId.Trim();
+            var displayName = FirstNonBlank(request.Label, request.LongName, request.ShortName, externalId);
+            var profileTags = MergeTags(feed.DefaultTags, MergeTags(request.Tags, ProfileTags(request)));
+            var profileUpdatedAt = request.ObservedAt?.Kind == DateTimeKind.Unspecified
+                ? DateTime.SpecifyKind(request.ObservedAt.Value, DateTimeKind.Utc)
+                : request.ObservedAt?.ToUniversalTime();
+            var device = await deviceRepository.GetByIntegrationExternalIdAsync(feed.Id, externalId, cancellationToken);
+            var createdDevice = false;
+            var identifier = $"{feed.Provider}:{externalId}";
+
+            if (device is null)
+            {
+                if (!feed.AutoCreateDevices)
+                {
+                    return Results.ValidationProblem(new Dictionary<string, string[]> { ["externalTrackerId"] = ["No device is mapped to this external tracker id, and auto-create is disabled."] });
+                }
+
+                device = await deviceRepository.GetByIdentifierAsync(identifier, cancellationToken);
+                if (device is null)
+                {
+                    device = await deviceRepository.AddAsync(new Device
+                    {
+                        Identifier = identifier,
+                        Label = displayName,
+                        Protocol = feed.Provider,
+                        Provider = feed.Provider,
+                        ExternalId = externalId,
+                        Tags = profileTags,
+                        ProviderLabel = displayName,
+                        ProviderLongName = NormalizeNullable(request.LongName),
+                        ProviderShortName = NormalizeNullable(request.ShortName),
+                        ProviderHardwareModel = NormalizeNullable(request.HardwareModel),
+                        ProviderRole = NormalizeNullable(request.Role),
+                        ProviderProfileJson = NormalizeNullable(request.Metadata),
+                        ProviderProfileUpdatedAt = profileUpdatedAt ?? DateTime.UtcNow,
+                        IntegrationFeedId = feed.Id,
+                        AssetId = request.AssetId,
+                        CreatedAt = DateTime.UtcNow
+                    }, cancellationToken);
+                    createdDevice = true;
+                }
+                else if (device.IntegrationFeedId is null || string.IsNullOrWhiteSpace(device.ExternalId))
+                {
+                    device = await deviceRepository.UpdateAsync(
+                        device.Id,
+                        device.Identifier,
+                        device.Label,
+                        feed.Provider,
+                        request.AssetId ?? device.AssetId,
+                        feed.Provider,
+                        externalId,
+                        MergeTags(device.Tags, profileTags),
+                        feed.Id,
+                        cancellationToken) ?? device;
+                }
+            }
+
+            device = await deviceRepository.UpsertProviderProfileAsync(
+                device.Id,
+                displayName,
+                request.LongName,
+                request.ShortName,
+                request.HardwareModel,
+                request.Role,
+                request.Metadata,
+                profileUpdatedAt,
+                MergeTags(device.Tags, profileTags),
+                cancellationToken) ?? device;
+
+            return Results.Ok(new IntegrationDeviceProfileResultDto(
+                feed.Id,
+                device.Id,
+                device.Identifier,
+                createdDevice,
+                device.AssetId,
+                false,
+                device.Label));
         }).RequireAuthorization("Ingest");
 
         return group;
@@ -183,8 +308,8 @@ public static class IntegrationEndpoints
             feed.AutoCreateDevices,
             feed.DefaultTags,
             feed.ConfigurationJson,
-            feed.CreatedAt,
-            feed.UpdatedAt,
+            ApiDateTime.Utc(feed.CreatedAt),
+            ApiDateTime.Utc(feed.UpdatedAt),
             feed.Devices.Count);
     }
 
@@ -208,6 +333,17 @@ public static class IntegrationEndpoints
             .ToList();
         return values.Count == 0 ? null : string.Join(", ", values);
     }
+
+    private static string? ProfileTags(IntegrationDeviceProfileRequest request)
+    {
+        var tags = new List<string>();
+        if (!string.IsNullOrWhiteSpace(request.HardwareModel)) tags.Add(request.HardwareModel);
+        if (!string.IsNullOrWhiteSpace(request.Role)) tags.Add(request.Role);
+        return tags.Count == 0 ? null : string.Join(", ", tags);
+    }
+
+    private static string FirstNonBlank(params string?[] values)
+        => values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value))?.Trim() ?? string.Empty;
 
     private static string BuildMetadata(IntegrationFeed feed, IntegrationFeedObservationRequest request)
     {

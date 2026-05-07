@@ -3,6 +3,7 @@ using AssTrack.Domain.Models;
 using AssTrack.Domain.Services;
 using AssTrack.Infrastructure.Repositories;
 using Microsoft.EntityFrameworkCore;
+using AssTrack.Api;
 
 namespace AssTrack.Api.Services;
 
@@ -22,6 +23,8 @@ public sealed class ObservationIngestService(
             validationErrors["latitude"] = ["Latitude must be between -90 and 90."];
         if (request.Longitude < -180 || request.Longitude > 180)
             validationErrors["longitude"] = ["Longitude must be between -180 and 180."];
+        if (PositionSanityFilter.IsNullIslandNoise(request.Latitude, request.Longitude))
+            validationErrors["position"] = ["Position is within 10 km of 0,0 and is treated as null-island noise."];
         if (request.SpeedKmh < 0 || request.SpeedKmh > 5000)
             validationErrors["speedKmh"] = ["Speed must be between 0 and 5000 km/h."];
         if (request.ObservedAt > DateTime.UtcNow.AddMinutes(5))
@@ -90,7 +93,7 @@ public sealed class ObservationIngestService(
             latitude = created.Latitude,
             longitude = created.Longitude,
             speedKmh = created.SpeedKmh,
-            observedAt = created.ObservedAt
+            observedAt = ApiDateTime.Utc(created.ObservedAt)
         }));
 
         SpeedAlert? firedAlert = null;
@@ -111,7 +114,7 @@ public sealed class ObservationIngestService(
                     assetId = device.AssetId,
                     observedSpeedKmh = alert.ObservedSpeedKmh,
                     thresholdKmh = alert.ThresholdKmh,
-                    triggeredAt = alert.TriggeredAt
+                    triggeredAt = ApiDateTime.Utc(alert.TriggeredAt)
                 }));
             }
         }
@@ -148,7 +151,7 @@ public sealed class ObservationIngestService(
                     assetId = device.AssetId,
                     geofenceId = geofence.Id,
                     eventType = breach.EventType.ToString(),
-                    detectedAt = breach.DetectedAt
+                    detectedAt = ApiDateTime.Utc(breach.DetectedAt)
                 }));
             }
             else if (!isInside && wasInside)
@@ -174,7 +177,7 @@ public sealed class ObservationIngestService(
                     assetId = device.AssetId,
                     geofenceId = geofence.Id,
                     eventType = breach.EventType.ToString(),
-                    detectedAt = breach.DetectedAt
+                    detectedAt = ApiDateTime.Utc(breach.DetectedAt)
                 }));
             }
 

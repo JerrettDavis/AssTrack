@@ -1,5 +1,6 @@
 using AssTrack.Domain.Contracts;
 using AssTrack.Infrastructure.Repositories;
+using AssTrack.Api;
 
 namespace AssTrack.Api.Endpoints;
 
@@ -104,10 +105,10 @@ public static class SpeedAlertEndpoints
         alert.AssetId,
         alert.ObservedSpeedKmh,
         alert.ThresholdKmh,
-        alert.TriggeredAt,
+        ApiDateTime.Utc(alert.TriggeredAt),
         alert.Device?.Identifier,
         alert.Asset?.Name,
-        alert.AcknowledgedAtUtc,
+        ApiDateTime.Utc(alert.AcknowledgedAtUtc),
         alert.AcknowledgedBy);
 
     private static string BuildSpeedAlertCsv(IReadOnlyList<AssTrack.Domain.Models.SpeedAlert> alerts)
@@ -117,7 +118,7 @@ public static class SpeedAlertEndpoints
         
         foreach (var alert in alerts)
         {
-            sb.AppendLine($"{alert.Id},{alert.ObservationId},{alert.DeviceId},{CsvEscape(alert.Device?.Identifier)},{alert.AssetId},{CsvEscape(alert.Asset?.Name)},{alert.ObservedSpeedKmh},{alert.ThresholdKmh},{alert.TriggeredAt:O},{alert.AcknowledgedAtUtc?.ToString("O")},{CsvEscape(alert.AcknowledgedBy)}");
+            sb.AppendLine($"{alert.Id},{alert.ObservationId},{alert.DeviceId},{CsvEscape(alert.Device?.Identifier)},{alert.AssetId},{CsvEscape(alert.Asset?.Name)},{alert.ObservedSpeedKmh},{alert.ThresholdKmh},{ApiDateTime.Utc(alert.TriggeredAt):O},{ApiDateTime.Utc(alert.AcknowledgedAtUtc)?.ToString("O")},{CsvEscape(alert.AcknowledgedBy)}");
         }
         
         return sb.ToString();

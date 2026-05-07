@@ -241,6 +241,22 @@ For a private channel running over the public Meshtastic MQTT server:
 
 Reference: https://meshtastic.org/docs/software/integrations/mqtt/
 
+#### Meshtastic Child Nodes and T1000-E Trackers
+
+AssTrack only maps packets that contain a usable latitude and longitude for the packet originator. A gateway/base station may publish other packets to MQTT while talking to a child node:
+
+- `type=position` with `latitude_i=0` and `longitude_i=0` is treated as a request/no-fix/null-coordinate packet, not as a tracker location.
+- `type=""` packets with RSSI/SNR but no payload show that a node is reachable, but they are not position reports.
+- A child node with `lora.config_ok_to_mqtt=true` still must produce its own valid position packet before AssTrack can display it.
+
+For Seeed SenseCAP T1000-E trackers, verify the tracker itself reports coordinates before debugging AssTrack:
+
+```powershell
+meshtastic --port COM12 --get position.gps_mode --get position.gps_enabled --info
+```
+
+The local node entry should contain `position.latitudeI` and `position.longitudeI`. If it only contains `position.time`, the tracker is reachable but has not published a usable fix. On T1000-E hardware, button actions can toggle GPS/send position; if a position request still yields zero coordinates, enable GPS in the Meshtastic app or CLI, move the tracker where it can get a GNSS fix, then wait for the next position broadcast.
+
 ### Home Assistant
 
 Home Assistant can expose phone, vehicle, and tracker positions as `device_tracker` entities. The bridge gateway can poll those entity states with a long-lived access token and ingest any entity that includes latitude and longitude attributes.

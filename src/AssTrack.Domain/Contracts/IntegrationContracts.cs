@@ -55,12 +55,33 @@ public sealed record IntegrationFeedObservationRequest(
     string? Tags = null,
     string? Metadata = null);
 
+public sealed record IntegrationDeviceProfileRequest(
+    string ExternalTrackerId,
+    DateTime? ObservedAt = null,
+    string? Label = null,
+    string? LongName = null,
+    string? ShortName = null,
+    string? HardwareModel = null,
+    string? Role = null,
+    string? Tags = null,
+    Guid? AssetId = null,
+    string? Metadata = null);
+
 public sealed record IntegrationIngestResultDto(
     Guid FeedId,
     Guid DeviceId,
     string DeviceIdentifier,
     bool DeviceCreated,
     ObservationDto Observation);
+
+public sealed record IntegrationDeviceProfileResultDto(
+    Guid FeedId,
+    Guid DeviceId,
+    string DeviceIdentifier,
+    bool DeviceCreated,
+    Guid? AssetId,
+    bool AssetCreated,
+    string? Label);
 
 public sealed record BridgeIntegrationFeedConfigDto(
     Guid FeedId,

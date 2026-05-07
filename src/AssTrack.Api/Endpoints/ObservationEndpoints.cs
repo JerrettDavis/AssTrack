@@ -1,4 +1,5 @@
 using AssTrack.Api.Services;
+using AssTrack.Api;
 using AssTrack.Domain.Contracts;
 using AssTrack.Domain.Models;
 using AssTrack.Infrastructure.Repositories;
@@ -132,6 +133,54 @@ public static class ObservationEndpoints
             return Results.Ok(result);
         }).RequireAuthorization("Operator");
 
+        observations.MapGet("/timeline", async (
+            ObservationRepository observationRepository,
+            Guid? deviceId,
+            Guid? assetId,
+            DateTimeOffset? from,
+            DateTimeOffset? to,
+            int? bucketMinutes,
+            int? maxPoints,
+            CancellationToken cancellationToken) =>
+        {
+            var end = to?.UtcDateTime ?? DateTime.UtcNow;
+            var start = from?.UtcDateTime ?? end.AddHours(-24);
+            if (start >= end)
+            {
+                return Results.ValidationProblem(new Dictionary<string, string[]> { ["range"] = ["Timeline start must be before end."] });
+            }
+
+            var scoped = deviceId.HasValue || assetId.HasValue;
+            var maxWindow = scoped ? TimeSpan.FromHours(72) : TimeSpan.FromHours(24);
+            if (end - start > maxWindow)
+            {
+                start = end - maxWindow;
+            }
+
+            var requestedMaxPoints = maxPoints ?? (scoped ? 5000 : 2500);
+            var requestedBucketMinutes = bucketMinutes ?? Math.Max(5, (int)Math.Ceiling((end - start).TotalMinutes / 96d));
+            var (items, buckets, totalCount, truncated) = await observationRepository.GetTimelineAsync(
+                deviceId,
+                assetId,
+                start,
+                end,
+                requestedBucketMinutes,
+                requestedMaxPoints,
+                cancellationToken);
+
+            return Results.Ok(new ObservationTimelineDto(
+                ApiDateTime.Utc(start),
+                ApiDateTime.Utc(end),
+                requestedBucketMinutes,
+                totalCount,
+                truncated,
+                buckets.Select(bucket => new ObservationTimelineBucketDto(
+                    ApiDateTime.Utc(bucket.Start),
+                    ApiDateTime.Utc(bucket.End),
+                    bucket.Count)).ToArray(),
+                items.Select(Map).ToArray()));
+        }).RequireAuthorization("Operator");
+
         return group;
     }
 
@@ -141,8 +190,8 @@ public static class ObservationEndpoints
         observation.Device.Identifier,
         observation.Device.AssetId,
         observation.Device.Asset?.Name,
-        observation.ObservedAt,
-        observation.ReceivedAt,
+        ApiDateTime.Utc(observation.ObservedAt),
+        ApiDateTime.Utc(observation.ReceivedAt),
         observation.Latitude,
         observation.Longitude,
         observation.Altitude,
@@ -158,7 +207,7 @@ public static class ObservationEndpoints
         
         foreach (var obs in observations)
         {
-            sb.AppendLine($"{obs.Id},{obs.DeviceId},{obs.Device.AssetId},{obs.ObservedAt:O},{obs.Latitude},{obs.Longitude},{obs.Altitude},{obs.SpeedKmh},{obs.HeadingDegrees}");
+            sb.AppendLine($"{obs.Id},{obs.DeviceId},{obs.Device.AssetId},{ApiDateTime.Utc(obs.ObservedAt):O},{obs.Latitude},{obs.Longitude},{obs.Altitude},{obs.SpeedKmh},{obs.HeadingDegrees}");
         }
         
         return sb.ToString();

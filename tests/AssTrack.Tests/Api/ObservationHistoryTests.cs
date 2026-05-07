@@ -162,6 +162,40 @@ public class ObservationHistoryTests : IClassFixture<TestWebApplicationFactory>
     }
 
     [Fact]
+    public async Task GetObservationHistory_Csv_Should_SerializeStoredDateTimesAsUtc()
+    {
+        await _factory.ResetDatabaseAsync();
+        Guid deviceId;
+        var observedAt = DateTime.SpecifyKind(DateTime.UtcNow.AddMinutes(-3), DateTimeKind.Unspecified);
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<AssTrackDbContext>();
+            var device = new Device { Identifier = "dev-history-utc" };
+            dbContext.Devices.Add(device);
+            await dbContext.SaveChangesAsync();
+            deviceId = device.Id;
+
+            dbContext.Observations.Add(new Observation
+            {
+                DeviceId = deviceId,
+                ObservedAt = observedAt,
+                ReceivedAt = DateTime.UtcNow,
+                Latitude = 36.0595,
+                Longitude = -95.8976
+            });
+            await dbContext.SaveChangesAsync();
+        }
+
+        using var client = _factory.CreateAuthenticatedClient();
+        var response = await client.GetAsync($"/api/observations/history?deviceId={Uri.EscapeDataString(deviceId.ToString())}&format=csv");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var csv = await response.Content.ReadAsStringAsync();
+        csv.Should().Contain("Z,36.0595,-95.8976");
+    }
+
+    [Fact]
     public async Task GetObservationHistory_Should_Return422_WhenCsvWithoutFilters()
     {
         await _factory.ResetDatabaseAsync();
@@ -501,5 +535,33 @@ public class ObservationHistoryTests : IClassFixture<TestWebApplicationFactory>
         result!.Items.Should().HaveCount(1);
         result.Items[0].DeviceId.Should().Be(deviceId1);
         result.Items[0].AssetId.Should().Be(assetId);
+    }
+
+    [Fact]
+    public async Task GetObservationTimeline_ReturnsBucketsAndBoundedObservations()
+    {
+        await _factory.ResetDatabaseAsync();
+        using var scope = _factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<AssTrackDbContext>();
+        var device = new Device { Identifier = "timeline-dev-001" };
+        dbContext.Devices.Add(device);
+        await dbContext.SaveChangesAsync();
+
+        var start = new DateTime(2026, 5, 6, 12, 0, 0, DateTimeKind.Utc);
+        dbContext.Observations.AddRange(
+            new Observation { DeviceId = device.Id, ObservedAt = start.AddMinutes(5), ReceivedAt = start.AddMinutes(5), Latitude = 36.059, Longitude = -95.897 },
+            new Observation { DeviceId = device.Id, ObservedAt = start.AddMinutes(35), ReceivedAt = start.AddMinutes(35), Latitude = 36.060, Longitude = -95.898 },
+            new Observation { DeviceId = device.Id, ObservedAt = start.AddMinutes(65), ReceivedAt = start.AddMinutes(65), Latitude = 36.061, Longitude = -95.899 });
+        await dbContext.SaveChangesAsync();
+
+        using var client = _factory.CreateAuthenticatedClient();
+        var result = await client.GetFromJsonAsync<ObservationTimelineDto>(
+            $"/api/observations/timeline?deviceId={device.Id}&from={Uri.EscapeDataString(start.ToString("O"))}&to={Uri.EscapeDataString(start.AddHours(2).ToString("O"))}&bucketMinutes=30&maxPoints=100");
+
+        result.Should().NotBeNull();
+        result!.TotalCount.Should().Be(3);
+        result.Truncated.Should().BeFalse();
+        result.Observations.Should().HaveCount(3);
+        result.Buckets.Sum(bucket => bucket.Count).Should().Be(3);
     }
 }

@@ -15,6 +15,13 @@ export async function loadRuntimeConfig(): Promise<void> {
       loadDevFallback()
       return
     }
+
+    const contentType = res.headers.get('content-type') ?? ''
+    if (!contentType.includes('application/json')) {
+      loadDevFallback()
+      return
+    }
+
     const data = (await res.json()) as Partial<RuntimeConfig>
     _config = { apiKey: data.apiKey?.trim() ?? '' }
     if (!_config.apiKey) loadDevFallback()
@@ -29,7 +36,6 @@ export function getRuntimeApiKey(): string {
 }
 
 function loadDevFallback(): void {
-  if (!import.meta.env.DEV) return
   const devApiKey = (import.meta.env.VITE_DEV_API_KEY as string | undefined)?.trim()
   if (devApiKey) _config = { apiKey: devApiKey }
 }

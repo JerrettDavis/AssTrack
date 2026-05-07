@@ -8,7 +8,7 @@ import {
   type IntegrationFeed,
   type IntegrationProvider,
 } from '../api/integrations'
-import { getBridgeLogs, getBridgeStatus, resyncBridgeFeed, type BridgeFeedRuntimeStatus, type BridgeLogEntry, type BridgeRuntimeStatus } from '../api/bridgeGateway'
+import { getBridgeLogs, getBridgeMessages, getBridgeStatus, resyncBridgeFeed, type BridgeFeedRuntimeStatus, type BridgeLogEntry, type BridgeRawMessageEntry, type BridgeRuntimeStatus } from '../api/bridgeGateway'
 import { useIdentityContext } from '../context/IdentityContext'
 
 type FeedForm = {
@@ -258,6 +258,45 @@ function statusClass(state?: string) {
   return 'status-bad'
 }
 
+function matchesText(value: string | null | undefined, search: string): boolean {
+  return value?.toLowerCase().includes(search.toLowerCase()) === true
+}
+
+function filterBridgeMessages(
+  messages: BridgeRawMessageEntry[],
+  filters: {
+    search: string
+    trackerId: string
+    topic: string
+    messageType: string
+    payloadOnly: boolean
+  },
+): BridgeRawMessageEntry[] {
+  const search = filters.search.trim()
+  const trackerId = filters.trackerId.trim()
+  const topic = filters.topic.trim()
+  const messageType = filters.messageType.trim()
+
+  return messages.filter((entry) => {
+    if (trackerId && !matchesText(entry.trackerId, trackerId) && !matchesText(entry.payload, trackerId)) return false
+    if (topic && !matchesText(entry.topic, topic)) return false
+    if (messageType && !matchesText(entry.messageType, messageType) && !matchesText(entry.payload, messageType)) return false
+    if (search) {
+      if (filters.payloadOnly) return matchesText(entry.payload, search)
+      return (
+        matchesText(entry.feedKey, search) ||
+        matchesText(entry.provider, search) ||
+        matchesText(entry.topic, search) ||
+        matchesText(entry.trackerId, search) ||
+        matchesText(entry.messageType, search) ||
+        matchesText(entry.summary, search) ||
+        matchesText(entry.payload, search)
+      )
+    }
+    return true
+  })
+}
+
 function BridgeConfigEditor({ form, onChange }: { form: FeedForm; onChange: Dispatch<SetStateAction<FeedForm>> }) {
   const guide = getGuide(form.provider)
 
@@ -385,8 +424,15 @@ export default function IntegrationsPage() {
   const createFormRef = useRef<HTMLFormElement | null>(null)
   const [bridgeStatus, setBridgeStatus] = useState<BridgeRuntimeStatus | null>(null)
   const [bridgeLogs, setBridgeLogs] = useState<BridgeLogEntry[]>([])
+  const [bridgeMessages, setBridgeMessages] = useState<BridgeRawMessageEntry[]>([])
   const [bridgeError, setBridgeError] = useState<string | null>(null)
   const [selectedLogFeed, setSelectedLogFeed] = useState<string>('')
+  const [messageSearch, setMessageSearch] = useState('')
+  const [messageTrackerFilter, setMessageTrackerFilter] = useState('')
+  const [messageTopicFilter, setMessageTopicFilter] = useState('')
+  const [messageTypeFilter, setMessageTypeFilter] = useState('')
+  const [messagePayloadOnly, setMessagePayloadOnly] = useState(false)
+  const [expandedMessageKey, setExpandedMessageKey] = useState<string | null>(null)
 
   async function load() {
     try {
@@ -407,12 +453,28 @@ export default function IntegrationsPage() {
   async function loadBridgeRuntime() {
     try {
       setBridgeError(null)
-      const [status, logs] = await Promise.all([
+      const [status, logs, messages] = await Promise.all([
         getBridgeStatus(),
         getBridgeLogs(selectedLogFeed || undefined),
+        getBridgeMessages({
+          feedKey: selectedLogFeed || undefined,
+          search: messageSearch,
+          trackerId: messageTrackerFilter,
+          topic: messageTopicFilter,
+          messageType: messageTypeFilter,
+          payloadOnly: messagePayloadOnly,
+          limit: 300,
+        }),
       ])
       setBridgeStatus(status)
       setBridgeLogs(logs)
+      setBridgeMessages(filterBridgeMessages(messages, {
+        search: messageSearch,
+        trackerId: messageTrackerFilter,
+        topic: messageTopicFilter,
+        messageType: messageTypeFilter,
+        payloadOnly: messagePayloadOnly,
+      }))
     } catch (e: unknown) {
       setBridgeError(e instanceof Error ? e.message : String(e))
     }
@@ -430,7 +492,7 @@ export default function IntegrationsPage() {
       void loadBridgeRuntime()
     }, 5000)
     return () => window.clearInterval(timer)
-  }, [identityLoading, isOperator, selectedLogFeed])
+  }, [identityLoading, isOperator, messagePayloadOnly, messageSearch, messageTopicFilter, messageTrackerFilter, messageTypeFilter, selectedLogFeed])
 
   const providerById = useMemo(
     () => new Map(providers.map((provider) => [provider.id, provider])),
@@ -606,13 +668,21 @@ export default function IntegrationsPage() {
           </div>
           <div className="compact-actions">
             <label className="field compact-field">
-              <span>Logs</span>
+              <span>Feed</span>
               <select onChange={(event) => setSelectedLogFeed(event.target.value)} value={selectedLogFeed}>
                 <option value="">All feeds</option>
                 {bridgeStatus?.feeds.map((item) => (
                   <option key={item.feedKey} value={item.feedKey}>{item.feedKey}</option>
                 ))}
               </select>
+            </label>
+            <label className="field compact-field">
+              <span>Search MQTT</span>
+              <input
+                onChange={(event) => setMessageSearch(event.target.value)}
+                placeholder="any string"
+                value={messageSearch}
+              />
             </label>
             <button className="button button-secondary" onClick={() => void loadBridgeRuntime()} type="button">Refresh</button>
           </div>
@@ -638,6 +708,86 @@ export default function IntegrationsPage() {
               <strong>Waiting for bridge config</strong>
             </div>
           )}
+        </div>
+
+        <div className="bridge-message-viewer">
+          <div className="bridge-message-header">
+            <h3>MQTT Messages</h3>
+            <span className="muted">{bridgeMessages.length} retained messages</span>
+          </div>
+          <div className="bridge-message-filters">
+            <label className="field compact-field">
+              <span>Device / tracker</span>
+              <input
+                onChange={(event) => setMessageTrackerFilter(event.target.value)}
+                placeholder="!12f4fb74 or numeric id"
+                value={messageTrackerFilter}
+              />
+            </label>
+            <label className="field compact-field">
+              <span>Topic contains</span>
+              <input
+                onChange={(event) => setMessageTopicFilter(event.target.value)}
+                placeholder="JDH, LongFast, node id"
+                value={messageTopicFilter}
+              />
+            </label>
+            <label className="field compact-field">
+              <span>Type</span>
+              <input
+                onChange={(event) => setMessageTypeFilter(event.target.value)}
+                placeholder="position, nodeinfo, telemetry"
+                value={messageTypeFilter}
+              />
+            </label>
+            <label className="check-field bridge-message-check">
+              <input checked={messagePayloadOnly} onChange={(event) => setMessagePayloadOnly(event.target.checked)} type="checkbox" />
+              <span>Search raw payload only</span>
+            </label>
+            <button
+              className="button button-secondary"
+              onClick={() => {
+                setMessageSearch('')
+                setMessageTrackerFilter('')
+                setMessageTopicFilter('')
+                setMessageTypeFilter('')
+                setMessagePayloadOnly(false)
+              }}
+              type="button"
+            >
+              Clear Filters
+            </button>
+          </div>
+          <div className="bridge-message-list">
+            {bridgeMessages.map((entry) => {
+              const key = `${entry.timestamp}-${entry.feedKey}-${entry.topic ?? ''}-${entry.summary || entry.payload}`
+              const timestamp = Number.isNaN(new Date(entry.timestamp).getTime())
+                ? entry.timestamp
+                : new Date(entry.timestamp).toLocaleTimeString()
+              return (
+                <details
+                  className="bridge-message-row"
+                  key={key}
+                  onToggle={(event) => setExpandedMessageKey(event.currentTarget.open ? key : null)}
+                  open={expandedMessageKey === key}
+                >
+                  <summary className="bridge-message-summary">
+                    <span className="bridge-message-time">{timestamp}</span>
+                    <strong>{entry.trackerId || entry.feedKey || 'Unknown tracker'}</strong>
+                    <span className="badge">{entry.messageType || entry.provider || 'message'}</span>
+                    <span className="coords">{entry.topic || 'No topic'}</span>
+                    <span className="bridge-message-summary-text">{entry.summary || entry.payload || 'No payload captured'}</span>
+                  </summary>
+                  <div className="bridge-message-detail">
+                    <div className="bridge-raw-payload-frame">
+                      <pre className="bridge-raw-payload">{entry.payload || entry.summary || 'No payload captured.'}</pre>
+                    </div>
+                  </div>
+                </details>
+              )
+            })}
+            {bridgeMessages.length === 0 && <p className="muted">No retained MQTT messages match the current filters.</p>}
+          </div>
         </div>
 
         <div className="bridge-log-list">

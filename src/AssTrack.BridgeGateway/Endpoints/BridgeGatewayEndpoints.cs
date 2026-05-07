@@ -18,6 +18,17 @@ public static class BridgeGatewayEndpoints
         bridge.MapGet("/logs", (BridgeFeedMonitor monitor, string? feedKey, int? limit) =>
             Results.Ok(monitor.Logs(feedKey, limit ?? 100)));
 
+        bridge.MapGet("/messages", (
+            BridgeFeedMonitor monitor,
+            string? feedKey,
+            string? search,
+            string? trackerId,
+            string? topic,
+            string? messageType,
+            bool? payloadOnly,
+            int? limit) =>
+            Results.Ok(monitor.Messages(feedKey, search, trackerId, topic, messageType, payloadOnly ?? false, limit ?? 100)));
+
         bridge.MapGet("/feeds", (IOptions<BridgeGatewayOptions> options, DynamicBridgeFeedStore dynamicFeeds) =>
         {
             var feeds = dynamicFeeds.Snapshot.Concat(options.Value.Feeds)

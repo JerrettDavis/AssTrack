@@ -48,5 +48,38 @@ public class AssetRepository(AssTrackDbContext dbContext)
         await dbContext.SaveChangesAsync(cancellationToken);
         return true;
     }
+
+    public async Task<AutoCreatedAssetCleanupResult> DeleteAutoCreatedProviderAssetsAsync(bool dryRun, CancellationToken cancellationToken = default)
+    {
+        var assets = await dbContext.Assets
+            .Include(asset => asset.Devices)
+            .Where(asset =>
+                !asset.IsSeeded &&
+                asset.Category == "Mesh node" &&
+                asset.Description == null &&
+                asset.Devices.Count > 0 &&
+                asset.Devices.All(device =>
+                    device.Provider == "meshtastic" &&
+                    device.IntegrationFeedId != null &&
+                    device.ExternalId != null))
+            .ToListAsync(cancellationToken);
+
+        var detachedDevices = assets.Sum(asset => asset.Devices.Count);
+        if (dryRun || assets.Count == 0)
+        {
+            return new AutoCreatedAssetCleanupResult(assets.Count, 0, detachedDevices);
+        }
+
+        foreach (var device in assets.SelectMany(asset => asset.Devices))
+        {
+            device.AssetId = null;
+        }
+
+        dbContext.Assets.RemoveRange(assets);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return new AutoCreatedAssetCleanupResult(assets.Count, assets.Count, detachedDevices);
+    }
 }
+
+public sealed record AutoCreatedAssetCleanupResult(int MatchingAssets, int DeletedAssets, int DetachedDevices);
 

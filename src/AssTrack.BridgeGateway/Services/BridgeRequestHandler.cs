@@ -1,5 +1,6 @@
 using System.Text.Json;
 using AssTrack.BridgeGateway.Adapters;
+using AssTrack.Domain.Services;
 using Microsoft.Extensions.Options;
 
 namespace AssTrack.BridgeGateway.Services;
@@ -81,6 +82,12 @@ public sealed class BridgeRequestHandler(
         var deliveries = new List<BridgeObservationDelivery>();
         foreach (var observation in observations)
         {
+            if (PositionSanityFilter.IsNullIslandNoise(observation.Latitude, observation.Longitude))
+            {
+                monitor.Log(feedKey, "debug", $"Ignored bridge observation for {observation.ExternalTrackerId}: position is within 10 km of 0,0.");
+                continue;
+            }
+
             var delivery = await ingestClient.SendAsync(feed.FeedId, observation, cancellationToken);
             deliveries.Add(new BridgeObservationDelivery(observation.ExternalTrackerId, delivery.Success, delivery.StatusCode, delivery.Retryable, delivery.ResponseBody));
             monitor.Update(feedKey, status =>

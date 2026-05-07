@@ -1,6 +1,8 @@
 using System.Text;
 using System.Text.Json;
+using System.Buffers;
 using AssTrack.BridgeGateway.Adapters;
+using AssTrack.Domain.Services;
 using Microsoft.Extensions.Options;
 using MQTTnet;
 
@@ -78,6 +80,16 @@ public sealed class MeshtasticMqttService(
             try
             {
                 var json = Encoding.UTF8.GetString(args.ApplicationMessage.Payload);
+                var rawSummary = SummarizeMeshtasticPayload(args.ApplicationMessage.Topic, args.ApplicationMessage.Payload);
+                var rawMetadata = ExtractMeshtasticMessageMetadata(args.ApplicationMessage.Topic, args.ApplicationMessage.Payload);
+                monitor.RecordMessage(
+                    feedKey,
+                    "meshtastic",
+                    args.ApplicationMessage.Topic,
+                    rawMetadata.TrackerId,
+                    rawMetadata.MessageType,
+                    rawSummary,
+                    PrettyJson(json));
                 monitor.Update(feedKey, status =>
                 {
                     status.MessagesReceived++;
@@ -86,11 +98,38 @@ public sealed class MeshtasticMqttService(
                     status.LastError = null;
                 });
                 using var document = JsonDocument.Parse(json);
+                var profile = ExtractMeshtasticDeviceProfile(document.RootElement);
+                if (profile is not null)
+                {
+                    if (options.Value.DryRun)
+                    {
+                        monitor.Log(feedKey, "info", $"Dry run parsed profile {profile.ExternalTrackerId}; delivery skipped.");
+                    }
+                    else
+                    {
+                        var profileDelivery = await ingestClient.SendDeviceProfileAsync(feed.FeedId, profile, cancellationToken);
+                        if (!profileDelivery.Success)
+                        {
+                            monitor.Log(feedKey, "warn", $"Profile delivery failed for {profile.ExternalTrackerId}: {profileDelivery.StatusCode}. {Summarize(profileDelivery.ResponseBody)}");
+                        }
+                        else
+                        {
+                            monitor.Log(feedKey, "debug", $"Profile delivered for {profile.ExternalTrackerId}: {FirstNonBlank(profile.LongName, profile.ShortName, profile.Label, "unnamed")}.");
+                        }
+                    }
+                }
+
                 var observations = await adapter.ParseAsync(new BridgeFeedContext(feedKey, feed, "meshtastic"), document.RootElement, cancellationToken);
                 monitor.Update(feedKey, status => status.ObservationsParsed += observations.Count);
                 foreach (var observation in observations)
                 {
                     monitor.Update(feedKey, status => status.LastTrackerId = observation.ExternalTrackerId);
+                    if (PositionSanityFilter.IsNullIslandNoise(observation.Latitude, observation.Longitude))
+                    {
+                        monitor.Log(feedKey, "debug", $"Ignored MQTT payload for {observation.ExternalTrackerId}: position is within 10 km of 0,0.");
+                        continue;
+                    }
+
                     if (options.Value.DryRun)
                     {
                         monitor.Log(feedKey, "info", $"Dry run parsed tracker {observation.ExternalTrackerId}; delivery skipped.");
@@ -105,8 +144,9 @@ public sealed class MeshtasticMqttService(
                             status.DeliveryFailures++;
                             status.LastError = $"Delivery failed with {delivery.StatusCode}.";
                         });
-                        monitor.Log(feedKey, "warn", $"Delivery failed for {observation.ExternalTrackerId}: {delivery.StatusCode}.");
-                        logger.LogWarning("Meshtastic delivery failed for {TrackerId}: {StatusCode}", observation.ExternalTrackerId, delivery.StatusCode);
+                        var responseSummary = Summarize(delivery.ResponseBody);
+                        monitor.Log(feedKey, "warn", $"Delivery failed for {observation.ExternalTrackerId}: {delivery.StatusCode}. {responseSummary}");
+                        logger.LogWarning("Meshtastic delivery failed for {TrackerId}: {StatusCode}. {ResponseBody}", observation.ExternalTrackerId, delivery.StatusCode, responseSummary);
                     }
                     else
                     {
@@ -122,7 +162,7 @@ public sealed class MeshtasticMqttService(
             }
             catch (BridgePayloadException ex)
             {
-                monitor.Log(feedKey, "debug", $"Ignored MQTT payload: {ex.Message}");
+                monitor.Log(feedKey, "debug", $"Ignored MQTT payload: {ex.Message} {SummarizeMeshtasticPayload(args.ApplicationMessage.Topic, args.ApplicationMessage.Payload)}");
             }
             catch (Exception ex)
             {
@@ -183,4 +223,315 @@ public sealed class MeshtasticMqttService(
 
     private static int? Int(string? value)
         => int.TryParse(value, out var number) ? number : null;
+
+    private static string Summarize(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return "No response body.";
+        var normalized = value.ReplaceLineEndings(" ").Trim();
+        return normalized.Length <= 300 ? normalized : $"{normalized[..300]}...";
+    }
+
+    private static string SummarizeMeshtasticPayload(string? topic, ReadOnlySequence<byte> payload)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(payload);
+            var root = document.RootElement;
+            var packet = Find(root, "packet") is { ValueKind: JsonValueKind.Object } packetElement ? packetElement : root;
+            var decoded = Find(packet, "decoded") is { ValueKind: JsonValueKind.Object } decodedElement ? decodedElement : packet;
+            var envelopePayload = Find(root, "payload") is { ValueKind: JsonValueKind.Object } payloadElement ? payloadElement : decoded;
+            var position = Find(decoded, "position") is { ValueKind: JsonValueKind.Object } positionElement
+                ? positionElement
+                : Find(envelopePayload, "position") is { ValueKind: JsonValueKind.Object } payloadPositionElement
+                    ? payloadPositionElement
+                    : envelopePayload;
+
+            var from = FirstNonBlank(String(packet, "fromId", "from"), String(root, "fromId", "from"), String(envelopePayload, "fromId", "from"));
+            var to = FirstNonBlank(String(packet, "to"), String(root, "to"), String(envelopePayload, "to"));
+            var sender = FirstNonBlank(String(root, "sender"), String(packet, "sender"));
+            var type = FirstNonBlank(String(root, "type"), String(packet, "type"), String(decoded, "portnum", "portNum"));
+            var latitude = Coordinate(position, "latitude", "lat", "latitudeI", "latitude_i");
+            var longitude = Coordinate(position, "longitude", "lon", "lng", "longitudeI", "longitude_i");
+            var hasLatitude = latitude is not null;
+            var hasLongitude = longitude is not null;
+            var positionState = PositionState(type, hasLatitude, hasLongitude, latitude, longitude);
+
+            return $"topic={topic ?? "(none)"} type={DisplayType(type)} position={positionState} from={FormatNodeId(from)} to={FormatNodeId(to)} sender={FormatNodeId(sender)} hasLat={hasLatitude} hasLon={hasLongitude}.";
+        }
+        catch
+        {
+            return $"topic={topic ?? "(none)"} payloadSummaryUnavailable.";
+        }
+    }
+
+    private static (string? TrackerId, string? MessageType) ExtractMeshtasticMessageMetadata(string? topic, ReadOnlySequence<byte> payload)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(payload);
+            var root = document.RootElement;
+            var packet = Find(root, "packet") is { ValueKind: JsonValueKind.Object } packetElement ? packetElement : root;
+            var decoded = Find(packet, "decoded") is { ValueKind: JsonValueKind.Object } decodedElement ? decodedElement : packet;
+            var envelopePayload = Find(root, "payload") is { ValueKind: JsonValueKind.Object } payloadElement ? payloadElement : decoded;
+
+            var trackerId = FirstNonBlank(
+                String(packet, "fromId", "from"),
+                String(root, "fromId", "from"),
+                String(envelopePayload, "fromId", "from"),
+                String(root, "sender"));
+            var messageType = FirstNonBlank(
+                String(root, "type"),
+                String(packet, "type"),
+                String(decoded, "portnum", "portNum"),
+                topic);
+
+            return (FormatNodeId(trackerId), messageType);
+        }
+        catch
+        {
+            return (null, null);
+        }
+    }
+
+    private static ProviderDeviceProfile? ExtractMeshtasticDeviceProfile(JsonElement root)
+    {
+        var packet = Find(root, "packet") is { ValueKind: JsonValueKind.Object } packetElement ? packetElement : root;
+        var decoded = Find(packet, "decoded") is { ValueKind: JsonValueKind.Object } decodedElement ? decodedElement : packet;
+        var decodedPayload = Find(decoded, "payload") is { ValueKind: JsonValueKind.Object } decodedPayloadElement ? decodedPayloadElement : default(JsonElement?);
+        var envelopePayload = Find(root, "payload") is { ValueKind: JsonValueKind.Object } payloadElement
+            ? payloadElement
+            : decodedPayload ?? decoded;
+        var nodeInfo = FirstObject(
+            Find(envelopePayload, "nodeInfo", "node_info", "node"),
+            Find(decoded, "nodeInfo", "node_info", "node"));
+        var user = Find(envelopePayload, "user") is { ValueKind: JsonValueKind.Object } userElement ? userElement : envelopePayload;
+        if (nodeInfo is { } nodeInfoElement && Find(nodeInfoElement, "user") is { ValueKind: JsonValueKind.Object } nodeInfoUser)
+        {
+            user = nodeInfoUser;
+        }
+        var metrics = FirstObject(
+            Find(envelopePayload, "deviceMetrics", "device_metrics", "telemetry"),
+            Find(envelopePayload, "environmentMetrics", "environment_metrics"),
+            nodeInfo is null ? null : Find(nodeInfo.Value, "deviceMetrics", "device_metrics", "telemetry"),
+            Find(decoded, "telemetry"));
+
+        var type = FirstNonBlank(String(root, "type"), String(packet, "type"), String(decoded, "portnum", "portNum"));
+        var longName = FirstNonBlank(
+            String(user, "longName", "long_name", "longname", "name"),
+            nodeInfo is null ? null : String(nodeInfo.Value, "longName", "long_name", "longname", "name"),
+            String(root, "longName", "long_name", "longname"));
+        var shortName = FirstNonBlank(
+            String(user, "shortName", "short_name", "shortname"),
+            nodeInfo is null ? null : String(nodeInfo.Value, "shortName", "short_name", "shortname"),
+            String(root, "shortName", "short_name", "shortname"));
+        var hardwareModel = FirstNonBlank(
+            String(user, "hwModel", "hw_model", "hardwareModel"),
+            nodeInfo is null ? null : String(nodeInfo.Value, "hwModel", "hw_model", "hardwareModel"),
+            String(envelopePayload, "hwModel", "hw_model", "hardwareModel"));
+        var role = FirstNonBlank(
+            String(user, "role"),
+            nodeInfo is null ? null : String(nodeInfo.Value, "role"),
+            String(envelopePayload, "role"));
+
+        var hasProfileData =
+            !string.IsNullOrWhiteSpace(longName) ||
+            !string.IsNullOrWhiteSpace(shortName) ||
+            !string.IsNullOrWhiteSpace(hardwareModel) ||
+            !string.IsNullOrWhiteSpace(role) ||
+            metrics is not null ||
+            IsProfileMessageType(type);
+        if (!hasProfileData) return null;
+
+        var externalId = FirstNonBlank(
+            NodeId(String(user, "id", "nodeId", "num")),
+            nodeInfo is null ? null : NodeId(String(nodeInfo.Value, "id", "nodeId", "num")),
+            NodeId(String(envelopePayload, "id", "nodeId", "from")),
+            NodeId(String(decoded, "fromId", "from")),
+            NodeId(String(packet, "fromId", "from")),
+            NodeId(String(root, "fromId", "from")),
+            NodeId(String(root, "sender")));
+        if (string.IsNullOrWhiteSpace(externalId)) return null;
+
+        var label = FirstNonBlank(longName, shortName);
+        var metadata = new Dictionary<string, object?>
+        {
+            ["adapter"] = "meshtastic",
+            ["messageType"] = type,
+            ["sender"] = String(root, "sender"),
+            ["channel"] = String(root, "channel"),
+            ["nodeInfo"] = JsonObjectOrNull(user),
+            ["envelopeNodeInfo"] = nodeInfo is null ? null : JsonObjectOrNull(nodeInfo.Value),
+            ["metrics"] = metrics is null ? null : JsonObjectOrNull(metrics.Value)
+        };
+
+        var tags = string.Join(", ", new[] { "meshtastic", type, hardwareModel, role }
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.OrdinalIgnoreCase));
+
+        return new ProviderDeviceProfile(
+            externalId,
+            ObservedAt(root, envelopePayload),
+            label,
+            longName,
+            shortName,
+            hardwareModel,
+            role,
+            string.IsNullOrWhiteSpace(tags) ? null : tags,
+            Metadata: JsonSerializer.Serialize(metadata));
+    }
+
+    private static string PrettyJson(string payload)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(payload);
+            return JsonSerializer.Serialize(document.RootElement, new JsonSerializerOptions { WriteIndented = true });
+        }
+        catch
+        {
+            return payload;
+        }
+    }
+
+    private static JsonElement? Find(JsonElement element, params string[] names)
+    {
+        if (element.ValueKind != JsonValueKind.Object) return null;
+
+        foreach (var name in names)
+        {
+            foreach (var property in element.EnumerateObject())
+            {
+                if (string.Equals(name, property.Name, StringComparison.OrdinalIgnoreCase))
+                {
+                    return property.Value;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static JsonElement? FirstObject(params JsonElement?[] values)
+        => values.FirstOrDefault(value => value is { ValueKind: JsonValueKind.Object });
+
+    private static string? String(JsonElement element, params string[] names)
+    {
+        var value = Find(element, names);
+        if (value is null) return null;
+        return value.Value.ValueKind switch
+        {
+            JsonValueKind.String => value.Value.GetString(),
+            JsonValueKind.Number => value.Value.GetRawText(),
+            JsonValueKind.True => "true",
+            JsonValueKind.False => "false",
+            _ => null
+        };
+    }
+
+    private static double? Coordinate(JsonElement element, params string[] names)
+    {
+        foreach (var name in names)
+        {
+            var value = Find(element, name);
+            if (value is null) continue;
+
+            if (value.Value.ValueKind == JsonValueKind.Number && value.Value.TryGetDouble(out var number))
+            {
+                return name.Contains("_i", StringComparison.OrdinalIgnoreCase) ||
+                       name.Contains("I", StringComparison.Ordinal)
+                    ? number / 10_000_000d
+                    : number;
+            }
+
+            if (value.Value.ValueKind == JsonValueKind.String &&
+                double.TryParse(value.Value.GetString(), out var parsed))
+            {
+                return name.Contains("_i", StringComparison.OrdinalIgnoreCase) ||
+                       name.Contains("I", StringComparison.Ordinal)
+                    ? parsed / 10_000_000d
+                    : parsed;
+            }
+        }
+
+        return null;
+    }
+
+    private static string DisplayType(string? type)
+        => string.IsNullOrWhiteSpace(type) ? "(empty/control)" : type;
+
+    private static bool IsProfileMessageType(string? type)
+        => string.Equals(type, "nodeinfo", StringComparison.OrdinalIgnoreCase) ||
+           string.Equals(type, "node_info", StringComparison.OrdinalIgnoreCase) ||
+           string.Equals(type, "user", StringComparison.OrdinalIgnoreCase) ||
+           string.Equals(type, "telemetry", StringComparison.OrdinalIgnoreCase);
+
+    private static object? JsonObjectOrNull(JsonElement element)
+    {
+        try
+        {
+            return JsonSerializer.Deserialize<object?>(element.GetRawText());
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static DateTime? ObservedAt(JsonElement root, JsonElement envelopePayload)
+    {
+        foreach (var value in new[] { String(envelopePayload, "time", "timestamp"), String(root, "rxTime", "timestamp") })
+        {
+            if (long.TryParse(value, out var unixSeconds))
+            {
+                var utc = DateTimeOffset.FromUnixTimeSeconds(unixSeconds).UtcDateTime;
+                return utc <= DateTime.UtcNow.AddMinutes(1) ? utc : DateTime.UtcNow;
+            }
+        }
+
+        return null;
+    }
+
+    private static string? NodeId(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        var trimmed = value.Trim();
+        if (trimmed.StartsWith('!')) return trimmed;
+        return ulong.TryParse(trimmed, out var nodeNumber) ? $"!{unchecked((uint)nodeNumber):x8}" : trimmed;
+    }
+
+    private static string PositionState(string? type, bool hasLatitude, bool hasLongitude, double? latitude, double? longitude)
+    {
+        if (!hasLatitude && !hasLongitude)
+        {
+            return string.IsNullOrWhiteSpace(type) ? "no-position-control" : "no-position";
+        }
+
+        if (!hasLatitude || !hasLongitude)
+        {
+            return "partial-position";
+        }
+
+        if (latitude is null || longitude is null)
+        {
+            return "unreadable-position";
+        }
+
+        if (PositionSanityFilter.IsNullIslandNoise(latitude.Value, longitude.Value))
+        {
+            return "null-island-request-or-no-fix";
+        }
+
+        return "usable-position";
+    }
+
+    private static string? FirstNonBlank(params string?[] values)
+        => values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value))?.Trim();
+
+    private static string FormatNodeId(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return "(none)";
+        var trimmed = value.Trim();
+        if (trimmed.StartsWith('!')) return trimmed;
+        return ulong.TryParse(trimmed, out var nodeNumber) ? $"{trimmed}/!{unchecked((uint)nodeNumber):x8}" : trimmed;
+    }
 }

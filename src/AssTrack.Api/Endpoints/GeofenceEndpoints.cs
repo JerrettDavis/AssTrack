@@ -2,6 +2,7 @@ using AssTrack.Domain.Contracts;
 using AssTrack.Domain.Models;
 using AssTrack.Domain.Services;
 using AssTrack.Infrastructure.Repositories;
+using AssTrack.Api;
 using Microsoft.AspNetCore.Mvc;
 using System.Text.Json;
 
@@ -190,7 +191,7 @@ public static class GeofenceEndpoints
             .Select(point => new GeofencePointDto(point.Latitude, point.Longitude))
             .ToList(),
         geofence.IsActive,
-        geofence.CreatedAt,
+        ApiDateTime.Utc(geofence.CreatedAt),
         geofence.IsSeeded);
 
     private static string NormalizeShapeType(string? shapeType)
@@ -255,8 +256,8 @@ public static class GeofenceEndpoints
         breach.Asset?.Name,
         breach.AssetId,
         breach.EventType.ToString(),
-        breach.DetectedAt,
-        breach.AcknowledgedAtUtc,
+        ApiDateTime.Utc(breach.DetectedAt),
+        ApiDateTime.Utc(breach.AcknowledgedAtUtc),
         breach.AcknowledgedBy);
 
     private static string BuildGeofenceBreachCsv(IReadOnlyList<GeofenceBreach> breaches)
@@ -266,7 +267,7 @@ public static class GeofenceEndpoints
         
         foreach (var breach in breaches)
         {
-            sb.AppendLine($"{breach.Id},{breach.ObservationId},{breach.GeofenceId},{CsvEscape(breach.Geofence?.Name)},{breach.DeviceId},{CsvEscape(breach.Device?.Identifier)},{breach.AssetId},{CsvEscape(breach.Asset?.Name)},{CsvEscape(breach.EventType.ToString())},{breach.DetectedAt:O},{breach.AcknowledgedAtUtc?.ToString("O")},{CsvEscape(breach.AcknowledgedBy)}");
+            sb.AppendLine($"{breach.Id},{breach.ObservationId},{breach.GeofenceId},{CsvEscape(breach.Geofence?.Name)},{breach.DeviceId},{CsvEscape(breach.Device?.Identifier)},{breach.AssetId},{CsvEscape(breach.Asset?.Name)},{CsvEscape(breach.EventType.ToString())},{ApiDateTime.Utc(breach.DetectedAt):O},{ApiDateTime.Utc(breach.AcknowledgedAtUtc)?.ToString("O")},{CsvEscape(breach.AcknowledgedBy)}");
         }
         
         return sb.ToString();

@@ -12,7 +12,7 @@ public class FrontendProcess : IDisposable
     {
         var repoRoot = E2ESettings.GetRepoRoot();
         var frontendPath = Path.Combine(repoRoot, "frontend");
-        var vitePath = Path.Combine(frontendPath, "node_modules", "vite", "bin", "vite.js");
+        var frontendLauncher = Path.Combine(frontendPath, "start-vite.mjs");
 
         // Write runtime config to public/config.json so the Vite dev server serves it at /config.json
         var publicDir = Path.Combine(frontendPath, "public");
@@ -25,7 +25,7 @@ public class FrontendProcess : IDisposable
             StartInfo = new ProcessStartInfo
             {
                 FileName = ResolveNodeCommand(),
-                Arguments = $@"""{vitePath}"" --port {E2ESettings.FrontendPort} --host 127.0.0.1",
+                Arguments = $@"""{frontendLauncher}"" --port {E2ESettings.FrontendPort} --host 127.0.0.1",
                 WorkingDirectory = frontendPath,
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
@@ -90,14 +90,33 @@ public class FrontendProcess : IDisposable
 
     private static string ResolveNodeCommand()
     {
-        // On Windows, check the standard install location; on other platforms just use "node"
-        if (OperatingSystem.IsWindows())
+        return ResolveCommandOnPath(OperatingSystem.IsWindows() ? "node.exe" : "node") ?? "node";
+    }
+
+    private static string? ResolveCommandOnPath(string command)
+    {
+        if (Path.IsPathRooted(command) && File.Exists(command))
         {
-            var knownPath = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
-                "nodejs", "node.exe");
-            if (File.Exists(knownPath)) return knownPath;
+            return command;
         }
-        return "node";
+
+        var path = Environment.GetEnvironmentVariable("PATH") ?? Environment.GetEnvironmentVariable("Path") ?? string.Empty;
+        var extensions = OperatingSystem.IsWindows()
+            ? (Environment.GetEnvironmentVariable("PATHEXT") ?? ".COM;.EXE;.BAT;.CMD").Split(';', StringSplitOptions.RemoveEmptyEntries)
+            : [""];
+
+        foreach (var directory in path.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
+        {
+            foreach (var extension in extensions)
+            {
+                var candidate = Path.Combine(directory, Path.HasExtension(command) ? command : command + extension.ToLowerInvariant());
+                if (File.Exists(candidate))
+                {
+                    return candidate;
+                }
+            }
+        }
+
+        return null;
     }
 }

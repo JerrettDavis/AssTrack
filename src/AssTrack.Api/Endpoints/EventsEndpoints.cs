@@ -46,6 +46,7 @@ public static class EventsEndpoints
                 LiveEventType.Observation => "observation",
                 LiveEventType.SpeedAlert => "speed_alert",
                 LiveEventType.GeofenceBreach => "geofence_breach",
+                LiveEventType.Message => "message",
                 _ => "unknown"
             };
             var data = JsonSerializer.Serialize(evt.Payload, _jsonOptions);

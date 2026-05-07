@@ -19,6 +19,13 @@ export type DeviceSummary = {
   latestHeadingDegrees?: number | null
   unacknowledgedSpeedAlerts: number
   unacknowledgedGeofenceBreaches: number
+  providerLabel?: string | null
+  providerLongName?: string | null
+  providerShortName?: string | null
+  providerHardwareModel?: string | null
+  providerRole?: string | null
+  providerProfileJson?: string | null
+  providerProfileUpdatedAt?: string | null
 }
 
 export function getDevices(): Promise<Device[]> {

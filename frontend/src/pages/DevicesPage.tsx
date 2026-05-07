@@ -5,6 +5,10 @@ import { getIntegrationFeeds, type IntegrationFeed } from '../api/integrations'
 import { getLatestPositions, type Observation } from '../api/observations'
 import { useIdentityContext } from '../context/IdentityContext'
 
+function providerDisplayName(device: DeviceListItem): string {
+  return device.providerLongName || device.providerLabel || device.providerShortName || device.label || device.identifier
+}
+
 export default function DevicesPage() {
   const [devices, setDevices] = useState<DeviceListItem[]>([])
   const [assets, setAssets] = useState<Asset[]>([])
@@ -145,7 +149,7 @@ export default function DevicesPage() {
   }
 
   async function createAssetFromDevice(device: DeviceListItem) {
-    const proposedName = newAssetByDevice[device.id]?.trim() || device.label || device.identifier
+    const proposedName = newAssetByDevice[device.id]?.trim() || providerDisplayName(device)
     setSubmitting(true)
     try {
       const asset = await createAsset({
@@ -173,7 +177,11 @@ export default function DevicesPage() {
         (device.assetName ?? '').toLowerCase().includes(normalizedSearch) ||
         (device.provider ?? '').toLowerCase().includes(normalizedSearch) ||
         (device.externalId ?? '').toLowerCase().includes(normalizedSearch) ||
-        (device.tags ?? '').toLowerCase().includes(normalizedSearch)
+        (device.tags ?? '').toLowerCase().includes(normalizedSearch) ||
+        (device.providerLongName ?? '').toLowerCase().includes(normalizedSearch) ||
+        (device.providerShortName ?? '').toLowerCase().includes(normalizedSearch) ||
+        (device.providerHardwareModel ?? '').toLowerCase().includes(normalizedSearch) ||
+        (device.providerRole ?? '').toLowerCase().includes(normalizedSearch)
 
       const assignmentMatches =
         assignmentFilter === 'all' ||
@@ -252,7 +260,7 @@ export default function DevicesPage() {
               return (
                 <article className="list-card signal-card" key={device.id}>
                   <header>
-                    <h3>{device.label || device.identifier}</h3>
+                    <h3>{providerDisplayName(device)}</h3>
                     <span className="badge">{device.provider || 'manual'}</span>
                     {device.integrationFeedName && <span className="badge badge-inline">{device.integrationFeedName}</span>}
                   </header>
@@ -261,6 +269,12 @@ export default function DevicesPage() {
                       <span>Tracker ID</span>
                       <strong>{device.externalId || device.identifier}</strong>
                     </div>
+                    {(device.providerShortName || device.providerHardwareModel || device.providerRole) && (
+                      <div className="asset-meta-row">
+                        <span>Provider profile</span>
+                        <strong>{[device.providerShortName, device.providerHardwareModel, device.providerRole].filter(Boolean).join(' / ')}</strong>
+                      </div>
+                    )}
                     <div className="asset-meta-row">
                       <span>Last signal</span>
                       <strong>{latest ? new Date(latest.observedAt).toLocaleString() : 'No observation yet'}</strong>
@@ -298,7 +312,7 @@ export default function DevicesPage() {
                         <span>New asset name</span>
                         <input
                           onChange={(event) => setNewAssetByDevice((current) => ({ ...current, [device.id]: event.target.value }))}
-                          placeholder={device.label || device.identifier}
+                          placeholder={providerDisplayName(device)}
                           value={newAssetByDevice[device.id] ?? ''}
                         />
                       </label>
@@ -410,12 +424,20 @@ export default function DevicesPage() {
               <Fragment key={device.id}>
                 <tr>
                   <td>{device.identifier}{device.isSeeded && <span className="badge badge-demo badge-inline">Demo</span>}</td>
-                  <td>{device.label ?? '—'}</td>
+                  <td>
+                    {device.label ?? '—'}
+                    {(device.providerLongName || device.providerShortName) && (
+                      <div className="muted">Provider: {device.providerLongName ?? device.providerShortName}</div>
+                    )}
+                  </td>
                   <td><span className="badge">{device.protocol || 'Unspecified'}</span></td>
                   <td>
                     <span className="badge">{device.provider || 'manual'}</span>
                     {device.integrationFeedName && <span className="badge badge-inline">{device.integrationFeedName}</span>}
                     {device.externalId && <div className="muted">{device.externalId}</div>}
+                    {(device.providerHardwareModel || device.providerRole) && (
+                      <div className="muted">{[device.providerHardwareModel, device.providerRole].filter(Boolean).join(' / ')}</div>
+                    )}
                   </td>
                   <td>{device.tags ?? '—'}</td>
                   <td>{device.assetName ?? <span className="badge badge-warning">Unassigned</span>}</td>

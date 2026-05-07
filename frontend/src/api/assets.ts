@@ -10,6 +10,13 @@ export type Device = {
   tags?: string | null
   integrationFeedId?: string | null
   integrationFeedName?: string | null
+  providerLabel?: string | null
+  providerLongName?: string | null
+  providerShortName?: string | null
+  providerHardwareModel?: string | null
+  providerRole?: string | null
+  providerProfileJson?: string | null
+  providerProfileUpdatedAt?: string | null
   isSeeded: boolean
   createdAt: string
   assetId?: string | null

@@ -6,6 +6,8 @@ namespace AssTrack.Infrastructure.Repositories;
 
 public class ObservationRepository(AssTrackDbContext dbContext)
 {
+    private const double NullIslandDegrees = 0.09009009d;
+
     public async Task<Observation> AddAsync(Observation observation, CancellationToken cancellationToken = default)
     {
         dbContext.Observations.Add(observation);
@@ -41,7 +43,7 @@ public class ObservationRepository(AssTrackDbContext dbContext)
             .ToListAsync(cancellationToken);
 
     public Task<Observation?> GetLatestForDeviceAsync(Guid deviceId, CancellationToken cancellationToken = default)
-        => dbContext.Observations
+        => PlausibleObservations()
             .Include(x => x.Device)
             .ThenInclude(x => x.Asset)
             .Where(x => x.DeviceId == deviceId)
@@ -51,7 +53,7 @@ public class ObservationRepository(AssTrackDbContext dbContext)
 
     public async Task<IReadOnlyList<Observation>> GetLatestPerDeviceAsync(CancellationToken cancellationToken = default)
     {
-        var latestIds = dbContext.Observations
+        var latestIds = PlausibleObservations()
             .GroupBy(o => o.DeviceId)
             .Select(g => g.OrderByDescending(o => o.ObservedAt).ThenByDescending(o => o.ReceivedAt).Select(o => o.Id).First());
 
@@ -98,4 +100,106 @@ public class ObservationRepository(AssTrackDbContext dbContext)
 
         return (items, totalCount);
     }
+
+    public async Task<(IReadOnlyList<Observation> Items, IReadOnlyList<ObservationTimelineBucket> Buckets, int TotalCount, bool Truncated)> GetTimelineAsync(
+        Guid? deviceId,
+        Guid? assetId,
+        DateTime from,
+        DateTime to,
+        int bucketMinutes,
+        int maxPoints,
+        CancellationToken cancellationToken = default)
+    {
+        from = DateTime.SpecifyKind(from, DateTimeKind.Utc);
+        to = DateTime.SpecifyKind(to, DateTimeKind.Utc);
+        var boundedBucketMinutes = Math.Clamp(bucketMinutes, 1, 24 * 60);
+        var boundedMaxPoints = Math.Clamp(maxPoints, 100, 10_000);
+
+        var query = PlausibleObservations()
+            .Include(x => x.Device)
+            .ThenInclude(x => x.Asset)
+            .Where(x => x.ObservedAt >= from && x.ObservedAt <= to);
+
+        if (deviceId.HasValue)
+            query = query.Where(x => x.DeviceId == deviceId.Value);
+
+        if (assetId.HasValue)
+            query = query.Where(x => x.Device.AssetId == assetId.Value);
+
+        var totalCount = await query.CountAsync(cancellationToken);
+        var bucketSizeTicks = TimeSpan.FromMinutes(boundedBucketMinutes).Ticks;
+        var bucketSeed = from.Ticks;
+
+        var buckets = await query
+            .GroupBy(x => (x.ObservedAt.Ticks - bucketSeed) / bucketSizeTicks)
+            .Select(group => new
+            {
+                Index = group.Key,
+                Count = group.Count()
+            })
+            .OrderBy(x => x.Index)
+            .ToListAsync(cancellationToken);
+
+        var items = await query
+            .OrderBy(x => x.ObservedAt)
+            .ThenBy(x => x.ReceivedAt)
+            .Take(boundedMaxPoints)
+            .ToListAsync(cancellationToken);
+
+        return (
+            items,
+            buckets.Select(bucket =>
+            {
+                var start = new DateTime(bucketSeed + bucket.Index * bucketSizeTicks, DateTimeKind.Utc);
+                var end = start.AddMinutes(boundedBucketMinutes);
+                return new ObservationTimelineBucket(start, end > to ? to : end, bucket.Count);
+            }).ToList(),
+            totalCount,
+            totalCount > boundedMaxPoints);
+    }
+
+    private IQueryable<Observation> PlausibleObservations()
+        => dbContext.Observations.Where(o => !(
+            o.Latitude >= -NullIslandDegrees &&
+            o.Latitude <= NullIslandDegrees &&
+            o.Longitude >= -NullIslandDegrees &&
+            o.Longitude <= NullIslandDegrees));
+
+    public async Task<(int MatchingObservations, int DeletedObservations, int AffectedDevices, int ResetGeofenceStates)> DeleteNullIslandNoiseAsync(
+        bool dryRun,
+        CancellationToken cancellationToken = default)
+    {
+        var noiseQuery = NullIslandNoiseQuery();
+        var matchingObservations = await noiseQuery.CountAsync(cancellationToken);
+        var affectedDeviceIds = await noiseQuery
+            .Select(o => o.DeviceId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        var resetStateCount = await dbContext.DeviceGeofenceStates
+            .Where(x => affectedDeviceIds.Contains(x.DeviceId))
+            .CountAsync(cancellationToken);
+
+        if (dryRun || matchingObservations == 0)
+        {
+            return (matchingObservations, 0, affectedDeviceIds.Count, dryRun ? resetStateCount : 0);
+        }
+
+        var resetStates = await dbContext.DeviceGeofenceStates
+            .Where(x => affectedDeviceIds.Contains(x.DeviceId))
+            .ExecuteDeleteAsync(cancellationToken);
+
+        var deleted = await NullIslandNoiseQuery().ExecuteDeleteAsync(cancellationToken);
+
+        return (matchingObservations, deleted, affectedDeviceIds.Count, resetStates);
+    }
+
+    private IQueryable<Observation> NullIslandNoiseQuery()
+        => dbContext.Observations.Where(o =>
+            o.Latitude >= -NullIslandDegrees &&
+            o.Latitude <= NullIslandDegrees &&
+            o.Longitude >= -NullIslandDegrees &&
+            o.Longitude <= NullIslandDegrees);
 }
+
+public sealed record ObservationTimelineBucket(DateTime Start, DateTime End, int Count);

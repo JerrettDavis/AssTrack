@@ -2,7 +2,13 @@ $ErrorActionPreference = "Stop"
 
 Write-Host "Ensuring frontend dependencies..." -ForegroundColor Cyan
 if (-not (Test-Path "frontend\node_modules")) {
-    & "C:\Program Files\nodejs\npm.cmd" install --prefix frontend
+    $npm = Get-Command npm -ErrorAction SilentlyContinue
+    if (-not $npm) {
+        Write-Host "npm was not found on PATH. Install Node.js 20.19+ and ensure npm is available." -ForegroundColor Red
+        exit 1
+    }
+
+    & $npm.Source install --prefix frontend
     if ($LASTEXITCODE -ne 0) {
         Write-Host "Frontend npm install failed" -ForegroundColor Red
         exit 1

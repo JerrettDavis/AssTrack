@@ -34,6 +34,31 @@ export type PagedResult<T> = {
   totalCount: number
 }
 
+export type ObservationTimelineBucket = {
+  start: string
+  end: string
+  count: number
+}
+
+export type ObservationTimeline = {
+  from: string
+  to: string
+  bucketMinutes: number
+  totalCount: number
+  truncated: boolean
+  buckets: ObservationTimelineBucket[]
+  observations: Observation[]
+}
+
+export type ObservationTimelineParams = {
+  deviceId?: string
+  assetId?: string
+  fromDate?: string
+  toDate?: string
+  bucketMinutes?: number
+  maxPoints?: number
+}
+
 export function getObservations() {
   return apiGet<Observation[]>('/api/observations')
 }
@@ -52,6 +77,18 @@ export async function getObservationHistory(params: ObservationHistoryParams): P
   if (params.pageSize) query.append('pageSize', params.pageSize.toString())
 
   return apiGet<PagedResult<Observation>>(`/api/observations/history?${query}`)
+}
+
+export async function getObservationTimeline(params: ObservationTimelineParams): Promise<ObservationTimeline> {
+  const query = new URLSearchParams()
+  if (params.deviceId) query.append('deviceId', params.deviceId)
+  if (params.assetId) query.append('assetId', params.assetId)
+  if (params.fromDate) query.append('from', params.fromDate)
+  if (params.toDate) query.append('to', params.toDate)
+  if (params.bucketMinutes) query.append('bucketMinutes', params.bucketMinutes.toString())
+  if (params.maxPoints) query.append('maxPoints', params.maxPoints.toString())
+
+  return apiGet<ObservationTimeline>(`/api/observations/timeline?${query}`)
 }
 
 export async function exportObservationsCsv(params: ObservationHistoryParams): Promise<Blob> {

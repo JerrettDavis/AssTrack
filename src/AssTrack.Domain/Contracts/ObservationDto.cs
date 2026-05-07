@@ -27,3 +27,17 @@ public sealed record CreateObservationRequest(
     double? HeadingDegrees,
     string? Metadata,
     string? DeviceIdentifier = null);
+
+public sealed record ObservationTimelineDto(
+    DateTime From,
+    DateTime To,
+    int BucketMinutes,
+    int TotalCount,
+    bool Truncated,
+    IReadOnlyList<ObservationTimelineBucketDto> Buckets,
+    IReadOnlyList<ObservationDto> Observations);
+
+public sealed record ObservationTimelineBucketDto(
+    DateTime Start,
+    DateTime End,
+    int Count);

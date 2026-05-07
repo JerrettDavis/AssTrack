@@ -1,4 +1,5 @@
 using AssTrack.Api.Services;
+using AssTrack.Api;
 using AssTrack.Domain.Contracts;
 using AssTrack.Domain.Models;
 using AssTrack.Infrastructure.Data;
@@ -43,7 +44,7 @@ public static class WebhookEndpoints
                 .Take(pageSize)
                 .Select(x => new WebhookDeliveryLogDto(
                     x.Id,
-                    x.AttemptedAt,
+                    ApiDateTime.Utc(x.AttemptedAt),
                     x.EventType,
                     x.TargetUrl,
                     x.Success,
@@ -89,7 +90,7 @@ public static class WebhookEndpoints
                 Configured: !string.IsNullOrWhiteSpace(webhookOptions.Value.Url),
                 Last24hDeliveries: last24h.Count,
                 Last24hFailures: last24h.Count(x => !x.Success),
-                LastDeliveredAt: lastDeliveredAt,
+                LastDeliveredAt: ApiDateTime.Utc(lastDeliveredAt),
                 AvgDurationMs: avgDurationMs,
                 RetryQueueDepth: retryReader.Count,
                 SigningEnabled: !string.IsNullOrWhiteSpace(webhookOptions.Value.SigningSecret)));

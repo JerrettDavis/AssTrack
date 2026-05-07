@@ -114,6 +114,9 @@ public sealed class BridgeGatewayTests
             "latitude_i": 418781000,
             "longitude_i": -876298000,
             "altitude": 184,
+            "precision_bits": 32,
+            "PDOP": 169,
+            "sats_in_view": 10,
             "time": 1778039200
           },
           "sender": "!7efeee00",
@@ -130,6 +133,131 @@ public sealed class BridgeGatewayTests
         observations[0].Latitude.Should().BeApproximately(41.8781, 0.00001);
         observations[0].Longitude.Should().BeApproximately(-87.6298, 0.00001);
         observations[0].Altitude.Should().Be(184);
+        observations[0].AccuracyMeters.Should().Be(1.6);
+        observations[0].Metadata.Should().Contain("precisionBits");
+        observations[0].Metadata.Should().Contain("satsInView");
+    }
+
+    [Fact]
+    public async Task Meshtastic_adapter_estimates_accuracy_from_lower_precision_bits()
+    {
+        var adapter = new MeshtasticAdapter();
+        using var document = JsonDocument.Parse("""
+        {
+          "from": "!privacy-node",
+          "payload": {
+            "latitude_i": 418781000,
+            "longitude_i": -876298000,
+            "precision_bits": 24
+          },
+          "type": "position"
+        }
+        """);
+
+        var observations = await adapter.ParseAsync(Context("meshtastic"), document.RootElement, CancellationToken.None);
+
+        observations.Should().ContainSingle();
+        observations[0].AccuracyMeters.Should().BeGreaterThan(2.5);
+    }
+
+    [Fact]
+    public async Task Meshtastic_adapter_uses_packet_originator_before_mqtt_gateway_sender()
+    {
+        var adapter = new MeshtasticAdapter();
+        using var document = JsonDocument.Parse("""
+        {
+          "from": "!child-node",
+          "sender": "!base-station",
+          "payload": {
+            "latitude_i": 418781000,
+            "longitude_i": -876298000,
+            "altitude": 184,
+            "time": 1778039200
+          },
+          "type": "position"
+        }
+        """);
+
+        var observations = await adapter.ParseAsync(Context("meshtastic"), document.RootElement, CancellationToken.None);
+
+        observations.Should().ContainSingle();
+        observations[0].ExternalTrackerId.Should().Be("!child-node");
+        observations[0].Metadata.Should().Contain("!base-station");
+    }
+
+    [Fact]
+    public async Task Meshtastic_adapter_normalizes_numeric_originator_to_node_id()
+    {
+        var adapter = new MeshtasticAdapter();
+        using var document = JsonDocument.Parse("""
+        {
+          "from": 2130636288,
+          "sender": "!base-station",
+          "payload": {
+            "latitude_i": 418781000,
+            "longitude_i": -876298000
+          },
+          "type": "position"
+        }
+        """);
+
+        var observations = await adapter.ParseAsync(Context("meshtastic"), document.RootElement, CancellationToken.None);
+
+        observations.Should().ContainSingle();
+        observations[0].ExternalTrackerId.Should().Be("!7efeee00");
+    }
+
+    [Fact]
+    public async Task Meshtastic_adapter_clamps_future_device_time_to_gateway_time()
+    {
+        var adapter = new MeshtasticAdapter();
+        var gatewayTime = DateTime.UtcNow.AddSeconds(-30);
+        var gatewayTimestamp = new DateTimeOffset(gatewayTime).ToUnixTimeSeconds();
+        var futureDeviceTime = DateTimeOffset.UtcNow.AddHours(6).ToUnixTimeSeconds();
+        using var document = JsonDocument.Parse($$"""
+        {
+          "from": "!child-node",
+          "timestamp": {{gatewayTimestamp}},
+          "payload": {
+            "latitude_i": 418781000,
+            "longitude_i": -876298000,
+            "time": {{futureDeviceTime}}
+          },
+          "type": "position"
+        }
+        """);
+
+        var observations = await adapter.ParseAsync(Context("meshtastic"), document.RootElement, CancellationToken.None);
+
+        observations.Should().ContainSingle();
+        observations[0].ObservedAt.Should().BeCloseTo(gatewayTime, TimeSpan.FromSeconds(1));
+    }
+
+    [Fact]
+    public async Task Meshtastic_adapter_parses_null_island_position_requests_as_observations_for_gateway_filtering()
+    {
+        var adapter = new MeshtasticAdapter();
+        using var document = JsonDocument.Parse("""
+        {
+          "channel": 0,
+          "from": 4134541604,
+          "payload": {
+            "latitude_i": 0,
+            "longitude_i": 0
+          },
+          "sender": "!f6701924",
+          "timestamp": 1778123347,
+          "to": 318045044,
+          "type": "position"
+        }
+        """);
+
+        var observations = await adapter.ParseAsync(Context("meshtastic"), document.RootElement, CancellationToken.None);
+
+        observations.Should().ContainSingle();
+        observations[0].ExternalTrackerId.Should().Be("!f6701924");
+        observations[0].Latitude.Should().Be(0);
+        observations[0].Longitude.Should().Be(0);
     }
 
     [Fact]
@@ -195,6 +323,38 @@ public sealed class BridgeGatewayTests
     }
 
     [Fact]
+    public async Task Bridge_handler_ignores_null_island_observations_before_delivery()
+    {
+        var ingestClient = new FakeIngestClient();
+        var handler = new BridgeRequestHandler(
+            Options.Create(new BridgeGatewayOptions
+            {
+                Feeds =
+                {
+                    ["generic"] = new BridgeFeedOptions
+                    {
+                        Enabled = true,
+                        FeedId = FeedId,
+                        Provider = "generic-webhook",
+                        SharedSecret = "secret"
+                    }
+                }
+            }),
+            new DynamicBridgeFeedStore(),
+            new ProviderAdapterRegistry([new NormalizedJsonAdapter()]),
+            ingestClient,
+            new BridgeFeedMonitor());
+
+        using var document = JsonDocument.Parse("""{"externalTrackerId":"x1","observedAt":"2026-05-06T01:30:00Z","latitude":0.00001,"longitude":0.00001}""");
+
+        var result = await handler.HandleAsync("generic", "secret", document.RootElement, CancellationToken.None);
+
+        result.ObservationsReceived.Should().Be(1);
+        result.Deliveries.Should().BeEmpty();
+        ingestClient.SendCount.Should().Be(0);
+    }
+
+    [Fact]
     public async Task AssTrack_ingest_client_posts_gateway_payload_to_real_api_contract()
     {
         await using var factory = new TestWebApplicationFactory();
@@ -247,7 +407,15 @@ public sealed class BridgeGatewayTests
 
     private sealed class FakeIngestClient : IAssTrackIngestClient
     {
+        public int SendCount { get; private set; }
+
         public Task<BridgeDeliveryResult> SendAsync(Guid feedId, ProviderObservation observation, CancellationToken cancellationToken)
+        {
+            SendCount++;
+            return Task.FromResult(new BridgeDeliveryResult(true, (int)HttpStatusCode.OK, "{}", false));
+        }
+
+        public Task<BridgeDeliveryResult> SendDeviceProfileAsync(Guid feedId, ProviderDeviceProfile profile, CancellationToken cancellationToken)
             => Task.FromResult(new BridgeDeliveryResult(true, (int)HttpStatusCode.OK, "{}", false));
     }
 }

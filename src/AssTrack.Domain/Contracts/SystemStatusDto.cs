@@ -12,3 +12,18 @@ public record SystemStatusDto(
     string DatabaseProvider,
     bool HasData
 );
+
+public record ObservationCleanupResultDto(
+    int MatchingObservations,
+    int DeletedObservations,
+    int AffectedDevices,
+    int ResetGeofenceStates,
+    bool DryRun
+);
+
+public record AutoCreatedAssetCleanupResultDto(
+    int MatchingAssets,
+    int DeletedAssets,
+    int DetachedDevices,
+    bool DryRun
+);

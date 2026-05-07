@@ -3,6 +3,7 @@ using System;
 using AssTrack.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace AssTrack.Infrastructure.Migrations
 {
     [DbContext(typeof(AssTrackDbContext))]
-    partial class AssTrackDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260507011604_AddMessaging")]
+    partial class AddMessaging
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.7");
@@ -99,32 +102,6 @@ namespace AssTrack.Infrastructure.Migrations
                         .HasMaxLength(80)
                         .HasColumnType("TEXT")
                         .HasDefaultValue("manual");
-
-                    b.Property<string>("ProviderHardwareModel")
-                        .HasMaxLength(120)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("ProviderLabel")
-                        .HasMaxLength(200)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("ProviderLongName")
-                        .HasMaxLength(200)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("ProviderProfileJson")
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime?>("ProviderProfileUpdatedAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("ProviderRole")
-                        .HasMaxLength(80)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("ProviderShortName")
-                        .HasMaxLength(80)
-                        .HasColumnType("TEXT");
 
                     b.Property<string>("Tags")
                         .HasMaxLength(500)

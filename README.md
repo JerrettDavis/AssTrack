@@ -657,16 +657,16 @@ dotnet restore
 dotnet run --project src\AssTrack.AppHost\AssTrack.AppHost.csproj
 ```
 
-The AppHost starts the API, bridge gateway, and Vite frontend. On a clean clone, the frontend launcher runs `npm ci` automatically before Vite starts.
+The AppHost starts the API, bridge gateway, and Vite frontend. On a clean clone, it creates a local `.env` from `.env.example` when needed, loads it, and lets Aspire's JavaScript/Vite integration install frontend packages before Vite starts.
 
 Default endpoints:
 
 | Service | URL |
 |---|---|
-| Aspire dashboard | `http://localhost:15231` |
+| Aspire dashboard | `https://localhost:17231` |
 | API | `http://localhost:5019` |
 | Bridge gateway | `http://localhost:5056` |
-| Frontend | `http://localhost:5174` |
+| Frontend | Aspire-assigned Vite endpoint shown in the dashboard |
 | Swagger | `http://localhost:5019/swagger` |
 
 Useful AppHost overrides:
@@ -676,8 +676,6 @@ Useful AppHost overrides:
 | `ASSTRACK_API_KEY` | Operator API key also passed to the dev frontend | `local-dev-key-asstrack` |
 | `ASSTRACK_INGEST_API_KEY` | Ingest-only key for devices and bridge gateway posts | Same as `ASSTRACK_API_KEY` |
 | `ASSTRACK_CONNECTION_STRING` | SQLite connection string for local API storage | `Data Source=<repo>\asstrack-dev.db` |
-| `NODE_EXECUTABLE` | Explicit Node executable path if Node is not on the standard install path | Windows: `C:\Program Files\nodejs\node.exe`; otherwise `node` |
-
 The frontend still loads `/config.json` in hosted/containerized deployments. Under the Vite dev server, the AppHost also supplies `VITE_DEV_API_KEY` so the local UI can call the API without a separate config file.
 
 ### Integrated production publish
