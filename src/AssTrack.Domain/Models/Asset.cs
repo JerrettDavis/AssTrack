@@ -8,6 +8,10 @@ public class Asset
     public string AssetClass { get; set; } = AssetClasses.Property;
     public string? Category { get; set; }
     public string Criticality { get; set; } = AssetCriticality.Normal;
+    public string CustodyStatus { get; set; } = AssetCustodyStatus.Available;
+    public string? CustodianName { get; set; }
+    public string? CustodianContact { get; set; }
+    public DateTime? CustodySince { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
     public double? SpeedThresholdKmh { get; set; }
@@ -16,6 +20,7 @@ public class Asset
     public ICollection<SensorReading> SensorReadings { get; set; } = new List<SensorReading>();
     public ICollection<MaintenanceSchedule> MaintenanceSchedules { get; set; } = new List<MaintenanceSchedule>();
     public ICollection<MaintenanceServiceRecord> MaintenanceServiceRecords { get; set; } = new List<MaintenanceServiceRecord>();
+    public ICollection<CustodyEvent> CustodyEvents { get; set; } = new List<CustodyEvent>();
 }
 
 public static class AssetClasses
@@ -53,5 +58,54 @@ public static class AssetCriticality
         Normal,
         High,
         Critical
+    };
+}
+
+public class CustodyEvent
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid AssetId { get; set; }
+    public Asset Asset { get; set; } = null!;
+    public string EventType { get; set; } = CustodyEventTypes.CheckOut;
+    public string? FromCustodianName { get; set; }
+    public string? ToCustodianName { get; set; }
+    public string? ToCustodianContact { get; set; }
+    public string? Location { get; set; }
+    public string? Notes { get; set; }
+    public DateTime OccurredAt { get; set; } = DateTime.UtcNow;
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
+
+public static class AssetCustodyStatus
+{
+    public const string Available = "available";
+    public const string CheckedOut = "checked_out";
+    public const string InTransit = "in_transit";
+    public const string Maintenance = "maintenance";
+    public const string Missing = "missing";
+
+    public static readonly IReadOnlySet<string> All = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        Available,
+        CheckedOut,
+        InTransit,
+        Maintenance,
+        Missing
+    };
+}
+
+public static class CustodyEventTypes
+{
+    public const string CheckOut = "check_out";
+    public const string CheckIn = "check_in";
+    public const string Transfer = "transfer";
+    public const string StatusChange = "status_change";
+
+    public static readonly IReadOnlySet<string> All = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        CheckOut,
+        CheckIn,
+        Transfer,
+        StatusChange
     };
 }

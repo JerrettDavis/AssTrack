@@ -19,6 +19,7 @@ public class AssTrackDbContext(DbContextOptions<AssTrackDbContext> options) : Db
     public DbSet<SensorReading> SensorReadings => Set<SensorReading>();
     public DbSet<MaintenanceSchedule> MaintenanceSchedules => Set<MaintenanceSchedule>();
     public DbSet<MaintenanceServiceRecord> MaintenanceServiceRecords => Set<MaintenanceServiceRecord>();
+    public DbSet<CustodyEvent> CustodyEvents => Set<CustodyEvent>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -30,6 +31,9 @@ public class AssTrackDbContext(DbContextOptions<AssTrackDbContext> options) : Db
             entity.Property(x => x.AssetClass).IsRequired().HasMaxLength(40).HasDefaultValue(AssetClasses.Property);
             entity.Property(x => x.Category).HasMaxLength(100);
             entity.Property(x => x.Criticality).IsRequired().HasMaxLength(40).HasDefaultValue(AssetCriticality.Normal);
+            entity.Property(x => x.CustodyStatus).IsRequired().HasMaxLength(40).HasDefaultValue(AssetCustodyStatus.Available);
+            entity.Property(x => x.CustodianName).HasMaxLength(200);
+            entity.Property(x => x.CustodianContact).HasMaxLength(300);
             entity.Property(x => x.SpeedThresholdKmh);
             entity.Property(x => x.IsSeeded).HasDefaultValue(false);
         });
@@ -258,6 +262,23 @@ public class AssTrackDbContext(DbContextOptions<AssTrackDbContext> options) : Db
                 .OnDelete(DeleteBehavior.Cascade);
             entity.HasOne(x => x.Asset)
                 .WithMany(x => x.MaintenanceServiceRecords)
+                .HasForeignKey(x => x.AssetId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<CustodyEvent>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.EventType).IsRequired().HasMaxLength(40);
+            entity.Property(x => x.FromCustodianName).HasMaxLength(200);
+            entity.Property(x => x.ToCustodianName).HasMaxLength(200);
+            entity.Property(x => x.ToCustodianContact).HasMaxLength(300);
+            entity.Property(x => x.Location).HasMaxLength(300);
+            entity.Property(x => x.Notes).HasMaxLength(2000);
+            entity.HasIndex(x => new { x.AssetId, x.OccurredAt });
+            entity.HasIndex(x => x.EventType);
+            entity.HasOne(x => x.Asset)
+                .WithMany(x => x.CustodyEvents)
                 .HasForeignKey(x => x.AssetId)
                 .OnDelete(DeleteBehavior.Cascade);
         });

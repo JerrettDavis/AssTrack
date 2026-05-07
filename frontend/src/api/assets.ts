@@ -30,6 +30,10 @@ export type Asset = {
   assetClass: string
   category?: string | null
   criticality: string
+  custodyStatus: string
+  custodianName?: string | null
+  custodianContact?: string | null
+  custodySince?: string | null
   createdAt: string
   updatedAt: string
   devices: Device[]
@@ -80,6 +84,9 @@ export type UpdateAssetRequest = {
   assetClass?: string | null
   category?: string | null
   criticality?: string | null
+  custodyStatus?: string | null
+  custodianName?: string | null
+  custodianContact?: string | null
   speedThresholdKmh?: number | null
 }
 

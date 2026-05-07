@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react'
 import { createAsset, deleteAsset, getAssetClasses, getAssets, type Asset, type AssetClass, type SensorReading, updateAsset, type UpdateAssetRequest } from '../api/assets'
+import { createCustodyEvent, getCustodyEvents, type CustodyEvent } from '../api/custody'
 import { completeMaintenanceSchedule, createMaintenanceSchedule, deleteMaintenanceSchedule, getMaintenanceSchedules, getMaintenanceServiceRecords, type MaintenanceSchedule, type MaintenanceServiceRecord, type MaintenanceStatus } from '../api/maintenance'
 import { getLatestPositions, getObservations, type Observation } from '../api/observations'
 import { getSensorReadings } from '../api/sensors'
@@ -41,6 +42,14 @@ const criticalityOptions = [
   { value: 'normal', label: 'Normal' },
   { value: 'high', label: 'High' },
   { value: 'critical', label: 'Critical' },
+]
+
+const custodyStatusOptions = [
+  { value: 'available', label: 'Available' },
+  { value: 'checked_out', label: 'Checked out' },
+  { value: 'in_transit', label: 'In transit' },
+  { value: 'maintenance', label: 'Maintenance' },
+  { value: 'missing', label: 'Missing' },
 ]
 
 function classLabel(value: string, classes: AssetClass[]) {
@@ -219,6 +228,56 @@ function MaintenancePanel({
   )
 }
 
+function custodyLabel(value: string) {
+  return custodyStatusOptions.find((option) => option.value === value)?.label ?? value.replaceAll('_', ' ')
+}
+
+function custodyStatusClass(status: string) {
+  if (status === 'missing') return 'badge-danger'
+  if (status === 'checked_out' || status === 'in_transit' || status === 'maintenance') return 'badge-warning'
+  return 'badge-success'
+}
+
+function CustodyPanel({ asset, events }: { asset: Asset, events: CustodyEvent[] }) {
+  return (
+    <div className="custody-panel">
+      <div className="custody-header">
+        <strong>Custody</strong>
+        <span className={`badge ${custodyStatusClass(asset.custodyStatus)}`}>{custodyLabel(asset.custodyStatus)}</span>
+      </div>
+      <div className="asset-meta">
+        <div className="asset-meta-row">
+          <span>Custodian</span>
+          <strong>{asset.custodianName ?? 'Unassigned'}</strong>
+        </div>
+        {asset.custodianContact && (
+          <div className="asset-meta-row">
+            <span>Contact</span>
+            <strong>{asset.custodianContact}</strong>
+          </div>
+        )}
+        {asset.custodySince && (
+          <div className="asset-meta-row">
+            <span>Since</span>
+            <strong>{formatTimestamp(asset.custodySince)}</strong>
+          </div>
+        )}
+      </div>
+      {events.length > 0 && (
+        <div className="custody-events">
+          <strong>Recent custody</strong>
+          {events.slice(0, 3).map((event) => (
+            <div className="custody-event-row" key={event.id}>
+              <span>{event.toCustodianName ? `${event.eventType.replaceAll('_', ' ')}: ${event.toCustodianName}` : event.eventType.replaceAll('_', ' ')}</span>
+              <span className="muted">{formatTimestamp(event.occurredAt)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function AssetsPage() {
   const [assets, setAssets] = useState<Asset[]>([])
   const [assetClasses, setAssetClasses] = useState<AssetClass[]>([])
@@ -227,6 +286,7 @@ export function AssetsPage() {
   const [sensorReadings, setSensorReadings] = useState<SensorReading[]>([])
   const [maintenanceSchedules, setMaintenanceSchedules] = useState<MaintenanceSchedule[]>([])
   const [maintenanceRecords, setMaintenanceRecords] = useState<MaintenanceServiceRecord[]>([])
+  const [custodyEvents, setCustodyEvents] = useState<CustodyEvent[]>([])
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [showAddForm, setShowAddForm] = useState(false)
@@ -242,12 +302,13 @@ export function AssetsPage() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editForm, setEditForm] = useState<UpdateAssetRequest>({ name: '', description: null, assetClass: 'property', category: null, criticality: 'normal', speedThresholdKmh: null })
   const [maintenanceForm, setMaintenanceForm] = useState({ assetId: '', title: '', serviceType: 'general', intervalDays: '', intervalOdometerKm: '', intervalRuntimeHours: '', lastServiceAt: '', lastOdometerKm: '', lastRuntimeHours: '' })
+  const [custodyForm, setCustodyForm] = useState({ assetId: '', eventType: 'check_out', custodianName: '', custodianContact: '', custodyStatus: '', location: '', notes: '' })
   const { isOperator } = useIdentityContext()
 
   async function load() {
     try {
       setError(null)
-      const [assetItems, classItems, observationItems, latestPositionItems, sensorItems, maintenanceItems, maintenanceRecordItems] = await Promise.all([
+      const [assetItems, classItems, observationItems, latestPositionItems, sensorItems, maintenanceItems, maintenanceRecordItems, custodyEventItems] = await Promise.all([
         getAssets(),
         getAssetClasses(),
         getObservations(),
@@ -255,6 +316,7 @@ export function AssetsPage() {
         getSensorReadings({ limit: 500 }),
         getMaintenanceSchedules(),
         getMaintenanceServiceRecords({ limit: 200 }),
+        getCustodyEvents({ limit: 200 }),
       ])
       setAssets(assetItems)
       setAssetClasses(classItems)
@@ -263,6 +325,7 @@ export function AssetsPage() {
       setSensorReadings(sensorItems)
       setMaintenanceSchedules(maintenanceItems)
       setMaintenanceRecords(maintenanceRecordItems)
+      setCustodyEvents(custodyEventItems)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to load API data.')
     } finally {
@@ -328,6 +391,9 @@ export function AssetsPage() {
       assetClass: asset.assetClass,
       category: asset.category ?? null,
       criticality: asset.criticality,
+      custodyStatus: asset.custodyStatus,
+      custodianName: asset.custodianName ?? null,
+      custodianContact: asset.custodianContact ?? null,
       speedThresholdKmh: asset.speedThresholdKmh ?? null,
     })
   }
@@ -365,6 +431,29 @@ export function AssetsPage() {
       await load()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to create maintenance schedule.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  async function handleCreateCustodyEvent(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setSubmitting(true)
+    try {
+      await createCustodyEvent({
+        assetId: custodyForm.assetId,
+        eventType: custodyForm.eventType,
+        toCustodianName: custodyForm.custodianName.trim() || null,
+        toCustodianContact: custodyForm.custodianContact.trim() || null,
+        custodyStatus: custodyForm.custodyStatus || null,
+        location: custodyForm.location.trim() || null,
+        notes: custodyForm.notes.trim() || null,
+        occurredAt: new Date().toISOString(),
+      })
+      setCustodyForm({ assetId: '', eventType: 'check_out', custodianName: '', custodianContact: '', custodyStatus: '', location: '', notes: '' })
+      await load()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to record custody event.')
     } finally {
       setSubmitting(false)
     }
@@ -411,6 +500,7 @@ export function AssetsPage() {
     }).length
     const staleSensorCount = sensorReadings.filter((reading) => getSensorStatus(reading).label === 'Stale').length
     const maintenanceAttentionCount = maintenanceSchedules.filter((schedule) => schedule.status === 'due' || schedule.status === 'overdue').length
+    const custodyAttentionCount = assets.filter((asset) => asset.custodyStatus === 'missing' || asset.custodyStatus === 'in_transit').length
 
     return [
       { label: 'Assets', value: assets.length },
@@ -423,6 +513,7 @@ export function AssetsPage() {
       { label: 'Needs attention', value: staleCount },
       { label: 'Stale sensors', value: staleSensorCount },
       { label: 'Maintenance due', value: maintenanceAttentionCount },
+      { label: 'Custody attention', value: custodyAttentionCount },
     ]
   }, [assets, observations, latestPositions, sensorReadings, maintenanceSchedules])
 
@@ -450,6 +541,14 @@ export function AssetsPage() {
     })
     return grouped
   }, [maintenanceRecords])
+
+  const custodyEventsByAssetId = useMemo(() => {
+    const grouped = new Map<string, CustodyEvent[]>()
+    custodyEvents.forEach((event) => {
+      grouped.set(event.assetId, [...(grouped.get(event.assetId) ?? []), event])
+    })
+    return grouped
+  }, [custodyEvents])
 
   const filteredAssets = useMemo(() => {
     const normalizedSearch = searchTerm.trim().toLowerCase()
@@ -646,6 +745,64 @@ export function AssetsPage() {
               </div>
             </form>
           )}
+          {isOperator && assets.length > 0 && (
+            <form className="card inline-form" onSubmit={handleCreateCustodyEvent}>
+              <div className="page-header">
+                <h2>Custody event</h2>
+                <span className="muted">Checkout, check-in, transfer, and status history</span>
+              </div>
+              <div className="field-grid">
+                <label className="field">
+                  <span>Asset</span>
+                  <select required onChange={(event) => setCustodyForm((f) => ({ ...f, assetId: event.target.value }))} value={custodyForm.assetId}>
+                    <option value="">Select asset</option>
+                    {assets.map((asset) => (
+                      <option key={asset.id} value={asset.id}>{asset.name}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="field">
+                  <span>Event</span>
+                  <select onChange={(event) => setCustodyForm((f) => ({ ...f, eventType: event.target.value }))} value={custodyForm.eventType}>
+                    <option value="check_out">Check out</option>
+                    <option value="check_in">Check in</option>
+                    <option value="transfer">Transfer</option>
+                    <option value="status_change">Status change</option>
+                  </select>
+                </label>
+                <label className="field">
+                  <span>Status override</span>
+                  <select onChange={(event) => setCustodyForm((f) => ({ ...f, custodyStatus: event.target.value }))} value={custodyForm.custodyStatus}>
+                    <option value="">Derived from event</option>
+                    {custodyStatusOptions.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="field">
+                  <span>Custodian</span>
+                  <input disabled={custodyForm.eventType === 'check_in'} onChange={(event) => setCustodyForm((f) => ({ ...f, custodianName: event.target.value }))} required={custodyForm.eventType === 'check_out' || custodyForm.eventType === 'transfer'} value={custodyForm.custodianName} />
+                </label>
+                <label className="field">
+                  <span>Contact</span>
+                  <input disabled={custodyForm.eventType === 'check_in'} onChange={(event) => setCustodyForm((f) => ({ ...f, custodianContact: event.target.value }))} value={custodyForm.custodianContact} />
+                </label>
+                <label className="field">
+                  <span>Location</span>
+                  <input onChange={(event) => setCustodyForm((f) => ({ ...f, location: event.target.value }))} value={custodyForm.location} />
+                </label>
+                <label className="field field-wide">
+                  <span>Notes</span>
+                  <input onChange={(event) => setCustodyForm((f) => ({ ...f, notes: event.target.value }))} value={custodyForm.notes} />
+                </label>
+              </div>
+              <div className="button-row">
+                <button className="button" disabled={submitting} type="submit">
+                  {submitting ? 'Saving…' : 'Record custody event'}
+                </button>
+              </div>
+            </form>
+          )}
           {assets.length === 0 && (
             <div className="notice notice-info">
               <strong>No assets yet</strong>
@@ -687,6 +844,22 @@ export function AssetsPage() {
                         </select>
                       </label>
                       <label className="field">
+                        <span>Custody status</span>
+                        <select onChange={(e) => setEditForm(f => ({ ...f, custodyStatus: e.target.value }))} value={editForm.custodyStatus ?? 'available'}>
+                          {custodyStatusOptions.map((option) => (
+                            <option key={option.value} value={option.value}>{option.label}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="field">
+                        <span>Custodian</span>
+                        <input onChange={(e) => setEditForm(f => ({ ...f, custodianName: e.target.value || null }))} value={editForm.custodianName ?? ''} />
+                      </label>
+                      <label className="field">
+                        <span>Custodian contact</span>
+                        <input onChange={(e) => setEditForm(f => ({ ...f, custodianContact: e.target.value || null }))} value={editForm.custodianContact ?? ''} />
+                      </label>
+                      <label className="field">
                         <span>Category</span>
                         <input onChange={(e) => setEditForm(f => ({ ...f, category: e.target.value || null }))} value={editForm.category ?? ''} />
                       </label>
@@ -718,6 +891,7 @@ export function AssetsPage() {
                       <span className="badge">{classLabel(asset.assetClass, assetClasses)}</span>
                       <span className={`badge ${asset.criticality === 'critical' || asset.criticality === 'high' ? 'badge-warning' : ''}`}>{asset.criticality}</span>
                       <span className="badge">{asset.category ?? 'Uncategorized'}</span>
+                      <span className={`badge ${custodyStatusClass(asset.custodyStatus)}`}>{custodyLabel(asset.custodyStatus)}</span>
                       <span className={`badge ${status.className}`}>{status.label}</span>
                     </header>
                     <p className="muted">{asset.description ?? 'No description provided.'}</p>
@@ -752,6 +926,7 @@ export function AssetsPage() {
                       </div>
                     </div>
                     <TelemetryPanel latestReadings={asset.latestSensorReadings} recentReadings={readingsByAssetId.get(asset.id) ?? []} />
+                    <CustodyPanel asset={asset} events={custodyEventsByAssetId.get(asset.id) ?? []} />
                     <MaintenancePanel
                       isOperator={isOperator}
                       onComplete={(schedule) => void handleCompleteMaintenance(schedule)}

@@ -40,6 +40,7 @@ public static class AssetEndpoints
 
             var assetClass = NormalizeAssetClass(request.AssetClass);
             var criticality = NormalizeCriticality(request.Criticality);
+            var custodyStatus = NormalizeCustodyStatus(request.CustodyStatus);
             if (assetClass is null)
             {
                 return Results.ValidationProblem(new Dictionary<string, string[]> { ["assetClass"] = ["Asset class is not supported."] });
@@ -50,6 +51,16 @@ public static class AssetEndpoints
                 return Results.ValidationProblem(new Dictionary<string, string[]> { ["criticality"] = ["Criticality is not supported."] });
             }
 
+            if (!string.IsNullOrWhiteSpace(request.CustodyStatus) && custodyStatus is null)
+            {
+                return Results.ValidationProblem(new Dictionary<string, string[]> { ["custodyStatus"] = ["Custody status is not supported."] });
+            }
+
+            var now = DateTime.UtcNow;
+            var effectiveCustodyStatus = custodyStatus ?? AssetCustodyStatus.Available;
+            var custodianName = Clean(request.CustodianName);
+            var custodianContact = Clean(request.CustodianContact);
+
             var asset = new Asset
             {
                 Name = request.Name.Trim(),
@@ -57,9 +68,13 @@ public static class AssetEndpoints
                 AssetClass = assetClass,
                 Category = request.Category,
                 Criticality = criticality,
+                CustodyStatus = effectiveCustodyStatus,
+                CustodianName = custodianName,
+                CustodianContact = custodianContact,
+                CustodySince = custodianName is not null || custodianContact is not null || effectiveCustodyStatus != AssetCustodyStatus.Available ? now : null,
                 SpeedThresholdKmh = request.SpeedThresholdKmh,
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow
+                CreatedAt = now,
+                UpdatedAt = now
             };
 
             await repository.AddAsync(asset, cancellationToken);
@@ -80,6 +95,7 @@ public static class AssetEndpoints
 
             var assetClass = NormalizeAssetClass(request.AssetClass);
             var criticality = NormalizeCriticality(request.Criticality);
+            var custodyStatus = NormalizeCustodyStatus(request.CustodyStatus);
             if (assetClass is null)
             {
                 return Results.ValidationProblem(new Dictionary<string, string[]> { ["assetClass"] = ["Asset class is not supported."] });
@@ -90,7 +106,12 @@ public static class AssetEndpoints
                 return Results.ValidationProblem(new Dictionary<string, string[]> { ["criticality"] = ["Criticality is not supported."] });
             }
 
-            var updated = await repository.UpdateAsync(id, request.Name.Trim(), request.Description, assetClass, request.Category, criticality, request.SpeedThresholdKmh, cancellationToken);
+            if (!string.IsNullOrWhiteSpace(request.CustodyStatus) && custodyStatus is null)
+            {
+                return Results.ValidationProblem(new Dictionary<string, string[]> { ["custodyStatus"] = ["Custody status is not supported."] });
+            }
+
+            var updated = await repository.UpdateAsync(id, request.Name.Trim(), request.Description, assetClass, request.Category, criticality, custodyStatus, Clean(request.CustodianName), Clean(request.CustodianContact), request.SpeedThresholdKmh, cancellationToken);
             return updated is null ? Results.NotFound() : Results.Ok(Map(updated));
         }).RequireAuthorization("Operator");
 
@@ -110,6 +131,10 @@ public static class AssetEndpoints
         asset.AssetClass,
         asset.Category,
         asset.Criticality,
+        asset.CustodyStatus,
+        asset.CustodianName,
+        asset.CustodianContact,
+        ApiDateTime.Utc(asset.CustodySince),
         ApiDateTime.Utc(asset.CreatedAt),
         ApiDateTime.Utc(asset.UpdatedAt),
         asset.Devices.Select(DeviceEndpoints.Map).ToArray(),
@@ -134,6 +159,16 @@ public static class AssetEndpoints
         var normalized = value.Trim().ToLowerInvariant();
         return AssetCriticality.All.Contains(normalized) ? normalized : null;
     }
+
+    private static string? NormalizeCustodyStatus(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        var normalized = value.Trim().ToLowerInvariant().Replace('-', '_').Replace(' ', '_');
+        return AssetCustodyStatus.All.Contains(normalized) ? normalized : null;
+    }
+
+    private static string? Clean(string? value)
+        => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }
 
 public sealed record AssetClassDto(string Id, string Name, string Description, IReadOnlyList<string> RecommendedSensors);

@@ -7,6 +7,10 @@ public sealed record AssetDto(
     string AssetClass,
     string? Category,
     string Criticality,
+    string CustodyStatus,
+    string? CustodianName,
+    string? CustodianContact,
+    DateTime? CustodySince,
     DateTime CreatedAt,
     DateTime UpdatedAt,
     IReadOnlyCollection<DeviceDto> Devices,
@@ -20,7 +24,10 @@ public sealed record CreateAssetRequest(
     string? Category,
     double? SpeedThresholdKmh = null,
     string? AssetClass = null,
-    string? Criticality = null);
+    string? Criticality = null,
+    string? CustodyStatus = null,
+    string? CustodianName = null,
+    string? CustodianContact = null);
 
 public sealed record UpdateAssetRequest(
     string Name,
@@ -28,4 +35,7 @@ public sealed record UpdateAssetRequest(
     string? Category,
     double? SpeedThresholdKmh = null,
     string? AssetClass = null,
-    string? Criticality = null);
+    string? Criticality = null,
+    string? CustodyStatus = null,
+    string? CustodianName = null,
+    string? CustodianContact = null);

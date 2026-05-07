@@ -33,6 +33,8 @@ public class AssetApiTests : IClassFixture<TestWebApplicationFactory>
         created!.Name.Should().Be("Fleet Van 7");
         created.AssetClass.Should().Be("vehicle");
         created.Criticality.Should().Be("high");
+        created.CustodyStatus.Should().Be("available");
+        created.CustodySince.Should().BeNull();
 
         var list = await client.GetFromJsonAsync<List<AssetDto>>("/api/assets");
         list.Should().ContainSingle(x => x.Id == created.Id && x.Name == "Fleet Van 7");
@@ -92,6 +94,17 @@ public class AssetApiTests : IClassFixture<TestWebApplicationFactory>
         using var client = _factory.CreateAuthenticatedClient();
 
         var response = await client.PostAsJsonAsync("/api/assets", new CreateAssetRequest("Unknown", null, null, AssetClass: "spaceship"));
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task PostAsset_WithUnsupportedCustodyStatus_Returns400()
+    {
+        await _factory.ResetDatabaseAsync();
+        using var client = _factory.CreateAuthenticatedClient();
+
+        var response = await client.PostAsJsonAsync("/api/assets", new CreateAssetRequest("Unknown", null, null, CustodyStatus: "borrowed"));
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
