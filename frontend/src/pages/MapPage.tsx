@@ -38,6 +38,8 @@ type SelectedMapNode =
   | { type: 'device'; deviceId: string; observation: Observation }
   | { type: 'geofence'; geofenceId: string }
 
+const unclusteredZoomLevelCount = 3
+
 const timeFilterOptions: Array<{ value: TimeFilterMinutes; label: string }> = [
   { value: 'all', label: 'Any time' },
   { value: '5', label: 'Last 5 minutes' },
@@ -358,7 +360,8 @@ function groupPositionsByAsset(positions: Observation[], deviceById: Map<string,
 function clusterMapPositions(map: L.Map, positions: DisplayPosition[], pixelRange = 46): MarkerCluster[] {
   const zoom = map.getZoom()
   const maxZoom = map.getMaxZoom() === Infinity ? 19 : map.getMaxZoom()
-  if (zoom >= maxZoom) {
+  const unclusterAtZoom = Math.max(0, maxZoom - unclusteredZoomLevelCount + 1)
+  if (zoom >= unclusterAtZoom) {
     return positions.map((position) => ({
       center: [position.latitude, position.longitude],
       id: displayPositionKey(position),
