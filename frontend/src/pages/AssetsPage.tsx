@@ -706,11 +706,15 @@ export function AssetsPage() {
             </form>
           )}
           {isOperator && assets.length > 0 && (
-            <form className="card inline-form" onSubmit={handleCreateMaintenance}>
-              <div className="page-header">
-                <h2>Maintenance schedule</h2>
-                <span className="muted">Date, odometer, and runtime intervals</span>
-              </div>
+            <details className="card disclosure-panel">
+              <summary>
+                <span>
+                  <strong>Maintenance schedule</strong>
+                  <small>Date, odometer, runtime, and diagnostic intervals</small>
+                </span>
+                <span className="badge">Advanced</span>
+              </summary>
+              <form className="inline-form" onSubmit={handleCreateMaintenance}>
               <div className="field-grid">
                 <label className="field">
                   <span>Asset</span>
@@ -774,14 +778,19 @@ export function AssetsPage() {
                   {submitting ? 'Saving…' : 'Create maintenance schedule'}
                 </button>
               </div>
-            </form>
+              </form>
+            </details>
           )}
           {isOperator && assets.length > 0 && (
-            <form className="card inline-form" onSubmit={handleCreateCustodyEvent}>
-              <div className="page-header">
-                <h2>Custody event</h2>
-                <span className="muted">Checkout, check-in, transfer, and status history</span>
-              </div>
+            <details className="card disclosure-panel">
+              <summary>
+                <span>
+                  <strong>Custody event</strong>
+                  <small>Checkout, check-in, transfer, and status history</small>
+                </span>
+                <span className="badge">Advanced</span>
+              </summary>
+              <form className="inline-form" onSubmit={handleCreateCustodyEvent}>
               <div className="field-grid">
                 <label className="field">
                   <span>Asset</span>
@@ -832,7 +841,8 @@ export function AssetsPage() {
                   {submitting ? 'Saving…' : 'Record custody event'}
                 </button>
               </div>
-            </form>
+              </form>
+            </details>
           )}
           {assets.length === 0 && (
             <div className="notice notice-info">
