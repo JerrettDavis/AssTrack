@@ -1463,8 +1463,11 @@ p {
 }
 
 .segmented-control {
-  display: inline-flex;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
   gap: 0.25rem;
+  width: 100%;
   padding: 0.25rem;
   margin-top: 1rem;
   border: 1px solid var(--border);
@@ -1475,12 +1478,16 @@ p {
 .segmented-control button {
   min-height: 36px;
   padding: 0.45rem 0.8rem;
+  overflow: hidden;
   color: var(--text-muted);
   background: transparent;
   border: 0;
   border-radius: 6px;
   cursor: pointer;
   font-weight: 750;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .segmented-control button.active {
