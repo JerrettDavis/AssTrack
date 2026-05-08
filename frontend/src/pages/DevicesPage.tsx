@@ -501,7 +501,6 @@ export default function DevicesPage() {
               <th>Asset</th>
               <th>Telemetry</th>
               <th>Created</th>
-              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -528,98 +527,19 @@ export default function DevicesPage() {
                   <td>{device.assetName ?? <span className="badge badge-warning">Unassigned</span>}</td>
                   <td><DeviceTelemetrySummary readings={readingsByDeviceId.get(device.id) ?? []} /></td>
                   <td>{new Date(device.createdAt).toLocaleString()}</td>
-                  <td>
-                    <div className="button-row">
-                      {isOperator && (
-                        <button className="button button-secondary" disabled={submitting} onClick={() => startEdit(device)} type="button">
-                          Edit
-                        </button>
-                      )}
-                      {isOperator && (
-                        <button
-                          className="button button-danger"
-                          disabled={submitting}
-                          onClick={() => void handleDeleteDevice(device.id, device.identifier)}
-                          type="button"
-                        >
-                          Delete
-                        </button>
-                      )}
-                    </div>
-                  </td>
                 </tr>
-                {editingId === device.id && (
-                  <tr key={`${device.id}-edit`}>
-                    <td colSpan={9}>
-                      <div className="inline-form">
-                        <div className="field-grid">
-                          <label className="field">
-                            <span>Identifier</span>
-                            <input onChange={(e) => setEditForm(f => ({ ...f, identifier: e.target.value }))} required value={editForm.identifier} />
-                          </label>
-                          <label className="field">
-                            <span>Label</span>
-                            <input onChange={(e) => setEditForm(f => ({ ...f, label: e.target.value || null }))} value={editForm.label ?? ''} />
-                          </label>
-                          <label className="field">
-                            <span>Protocol</span>
-                            <input onChange={(e) => setEditForm(f => ({ ...f, protocol: e.target.value || null }))} placeholder="e.g. https, mqtt, tcp" value={editForm.protocol ?? ''} />
-                          </label>
-                          <label className="field">
-                            <span>Provider</span>
-                            <input onChange={(e) => setEditForm(f => ({ ...f, provider: e.target.value || null }))} value={editForm.provider ?? ''} />
-                          </label>
-                          <label className="field">
-                            <span>External tracker ID</span>
-                            <input onChange={(e) => setEditForm(f => ({ ...f, externalId: e.target.value || null }))} value={editForm.externalId ?? ''} />
-                          </label>
-                          <label className="field">
-                            <span>Tags</span>
-                            <input onChange={(e) => setEditForm(f => ({ ...f, tags: e.target.value || null }))} value={editForm.tags ?? ''} />
-                          </label>
-                          <label className="field">
-                            <span>Integration feed</span>
-                            <select onChange={(e) => setEditForm(f => ({ ...f, integrationFeedId: e.target.value || null }))} value={editForm.integrationFeedId ?? ''}>
-                              <option value="">None</option>
-                              {feeds.map((feed) => (
-                                <option key={feed.id} value={feed.id}>{feed.name}</option>
-                              ))}
-                            </select>
-                          </label>
-                          <label className="field">
-                            <span>Asset</span>
-                            <select onChange={(e) => setEditForm(f => ({ ...f, assetId: e.target.value || null }))} value={editForm.assetId ?? ''}>
-                              <option value="">— Unassigned —</option>
-                              {assets.map((a) => (
-                                <option key={a.id} value={a.id}>{a.name}</option>
-                              ))}
-                            </select>
-                          </label>
-                        </div>
-                        <div className="button-row">
-                          <button className="button" disabled={submitting} onClick={() => void saveEdit()} type="button">
-                            {submitting ? 'Saving…' : 'Save'}
-                          </button>
-                          <button className="button button-secondary" onClick={() => setEditingId(null)} type="button">
-                            Cancel
-                          </button>
-                        </div>
-                      </div>
-                    </td>
-                  </tr>
-                )}
               </Fragment>
             ))}
             {devices.length === 0 && (
               <tr>
-                <td className="muted" colSpan={9}>
+                <td className="muted" colSpan={8}>
                   No devices available yet.
                 </td>
               </tr>
             )}
             {devices.length > 0 && filteredDevices.length === 0 && (
               <tr>
-                <td className="muted" colSpan={9}>
+                <td className="muted" colSpan={8}>
                   No devices match the current filters.
                 </td>
               </tr>
@@ -627,6 +547,121 @@ export default function DevicesPage() {
           </tbody>
         </table>
       </div>
+
+      {isOperator && (
+        <details className="quiet-disclosure">
+          <summary>
+            Admin device management
+            <span className="badge">{filteredDevices.length} devices</span>
+          </summary>
+          <div className="table-scroll">
+            <table className="data-table admin-table">
+              <thead>
+                <tr>
+                  <th>Device</th>
+                  <th>Provider</th>
+                  <th>Asset</th>
+                  <th>Created</th>
+                  <th>Manage</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredDevices.map((device) => (
+                  <Fragment key={`admin-${device.id}`}>
+                    <tr>
+                      <td>
+                        <strong>{device.identifier}</strong>
+                        <div className="muted">{device.label ?? providerDisplayName(device)}</div>
+                      </td>
+                      <td>
+                        <span className="badge">{device.provider || 'manual'}</span>
+                        {device.integrationFeedName && <span className="badge badge-inline">{device.integrationFeedName}</span>}
+                      </td>
+                      <td>{device.assetName ?? <span className="badge badge-warning">Unassigned</span>}</td>
+                      <td>{new Date(device.createdAt).toLocaleString()}</td>
+                      <td>
+                        <div className="compact-actions">
+                          <button className="button button-secondary button-compact" disabled={submitting} onClick={() => startEdit(device)} type="button">
+                            Edit
+                          </button>
+                          <button
+                            className="button button-danger button-compact"
+                            disabled={submitting}
+                            onClick={() => void handleDeleteDevice(device.id, device.identifier)}
+                            type="button"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                    {editingId === device.id && (
+                      <tr key={`admin-${device.id}-edit`}>
+                        <td colSpan={5}>
+                          <div className="inline-form">
+                            <div className="field-grid">
+                              <label className="field">
+                                <span>Identifier</span>
+                                <input onChange={(e) => setEditForm(f => ({ ...f, identifier: e.target.value }))} required value={editForm.identifier} />
+                              </label>
+                              <label className="field">
+                                <span>Label</span>
+                                <input onChange={(e) => setEditForm(f => ({ ...f, label: e.target.value || null }))} value={editForm.label ?? ''} />
+                              </label>
+                              <label className="field">
+                                <span>Protocol</span>
+                                <input onChange={(e) => setEditForm(f => ({ ...f, protocol: e.target.value || null }))} placeholder="e.g. https, mqtt, tcp" value={editForm.protocol ?? ''} />
+                              </label>
+                              <label className="field">
+                                <span>Provider</span>
+                                <input onChange={(e) => setEditForm(f => ({ ...f, provider: e.target.value || null }))} value={editForm.provider ?? ''} />
+                              </label>
+                              <label className="field">
+                                <span>External tracker ID</span>
+                                <input onChange={(e) => setEditForm(f => ({ ...f, externalId: e.target.value || null }))} value={editForm.externalId ?? ''} />
+                              </label>
+                              <label className="field">
+                                <span>Tags</span>
+                                <input onChange={(e) => setEditForm(f => ({ ...f, tags: e.target.value || null }))} value={editForm.tags ?? ''} />
+                              </label>
+                              <label className="field">
+                                <span>Integration feed</span>
+                                <select onChange={(e) => setEditForm(f => ({ ...f, integrationFeedId: e.target.value || null }))} value={editForm.integrationFeedId ?? ''}>
+                                  <option value="">None</option>
+                                  {feeds.map((feed) => (
+                                    <option key={feed.id} value={feed.id}>{feed.name}</option>
+                                  ))}
+                                </select>
+                              </label>
+                              <label className="field">
+                                <span>Asset</span>
+                                <select onChange={(e) => setEditForm(f => ({ ...f, assetId: e.target.value || null }))} value={editForm.assetId ?? ''}>
+                                  <option value="">Unassigned</option>
+                                  {assets.map((a) => (
+                                    <option key={a.id} value={a.id}>{a.name}</option>
+                                  ))}
+                                </select>
+                              </label>
+                            </div>
+                            <div className="button-row">
+                              <button className="button" disabled={submitting} onClick={() => void saveEdit()} type="button">
+                                {submitting ? 'Saving…' : 'Save changes'}
+                              </button>
+                              <button className="button button-secondary" onClick={() => setEditingId(null)} type="button">
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </details>
+      )}
     </div>
   )
 }
