@@ -4,6 +4,7 @@ import { apiPost } from '../api/client'
 import { getSystemStatus, seedDemoData, type SeedResult, type SystemStatus } from '../api/system'
 import { useIdentityContext } from '../context/IdentityContext'
 import { useAppearance, type ColorMode, type ThemeStyle } from '../context/AppearanceContext'
+import DisplayControls from '../components/DisplayControls'
 import { useLiveDataRefresh } from '../hooks/useLiveDataRefresh'
 
 interface SimulateResult {
@@ -179,6 +180,14 @@ export default function SettingsPage() {
               {option.label}
             </button>
           ))}
+        </div>
+
+        <div className="page-header">
+          <div>
+            <h3>List display</h3>
+            <p className="muted">Choose how list-heavy pages render by default.</p>
+          </div>
+          <DisplayControls />
         </div>
       </div>
 

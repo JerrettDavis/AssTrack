@@ -8,8 +8,10 @@ import {
   type PagedResult,
 } from '../api/observations'
 import { useLiveDataRefresh } from '../hooks/useLiveDataRefresh'
+import DisplayControls from '../components/DisplayControls'
 
 export default function HistoryPage() {
+  const [historyViewMode, setHistoryViewMode] = useState<'cards' | 'table'>('table')
   const [assets, setAssets] = useState<Asset[]>([])
   const [devices, setDevices] = useState<{ id: string; identifier: string; name?: string }[]>([])
   const [result, setResult] = useState<PagedResult<Observation> | null>(null)
@@ -136,6 +138,7 @@ export default function HistoryPage() {
           <h1>Observation History</h1>
           <p>Search, review, and export tracker observations</p>
         </div>
+        <DisplayControls mode={historyViewMode} onModeChange={setHistoryViewMode} />
       </div>
 
       <div className="card control-bar history-control-bar">
@@ -231,6 +234,25 @@ export default function HistoryPage() {
             </p>
           </div>
 
+          {historyViewMode === 'cards' ? (
+          <div className="asset-grid">
+            {result.items.map((obs) => (
+              <article className="list-card" key={obs.id}>
+                <header>
+                  <h3>{obs.assetName ?? obs.deviceIdentifier}</h3>
+                  <span className="badge">{new Date(obs.observedAt).toLocaleString()}</span>
+                </header>
+                <div className="asset-meta">
+                  <div className="asset-meta-row"><span>Device</span><strong>{obs.deviceIdentifier}</strong></div>
+                  <div className="asset-meta-row"><span>Position</span><strong className="coords">{obs.latitude.toFixed(6)}, {obs.longitude.toFixed(6)}</strong></div>
+                  <div className="asset-meta-row"><span>Speed</span><strong>{obs.speedKmh?.toFixed(1) ?? 'N/A'} km/h</strong></div>
+                  <div className="asset-meta-row"><span>Heading</span><strong>{obs.headingDegrees?.toFixed(1) ?? 'N/A'}</strong></div>
+                </div>
+              </article>
+            ))}
+            {result.items.length === 0 && <div className="card">No observations match the current filters.</div>}
+          </div>
+          ) : (
           <table className="data-table">
             <thead>
               <tr>
@@ -264,6 +286,7 @@ export default function HistoryPage() {
               )}
             </tbody>
           </table>
+          )}
 
           {result && result.pageSize > 0 && Math.ceil(result.totalCount / result.pageSize) > 1 && (
             <div className="table-actions">

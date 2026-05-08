@@ -374,6 +374,23 @@ p {
   flex-wrap: wrap;
 }
 
+.display-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.compact-segmented {
+  width: auto;
+}
+
+.compact-segmented button {
+  min-height: 32px;
+  padding: 0.36rem 0.58rem;
+  font-size: 0.78rem;
+}
+
 .kpi-strip {
   grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
   gap: 0.55rem;
@@ -2419,6 +2436,44 @@ summary {
 :root[data-theme-style="condensed"] .data-table th,
 :root[data-theme-style="condensed"] .data-table td {
   padding: 0.54rem 0.58rem;
+}
+
+:root[data-display-density="condensed"] .card,
+:root[data-display-density="condensed"] .list-card,
+:root[data-display-density="condensed"] .status-tile,
+:root[data-display-density="condensed"] .metric {
+  padding: 0.7rem;
+}
+
+:root[data-display-density="condensed"] .section,
+:root[data-display-density="condensed"] .list,
+:root[data-display-density="condensed"] .asset-grid,
+:root[data-display-density="condensed"] .field-grid {
+  gap: 0.6rem;
+}
+
+:root[data-display-density="condensed"] .data-table th,
+:root[data-display-density="condensed"] .data-table td {
+  padding: 0.52rem 0.58rem;
+}
+
+:root[data-display-density="roomy"] .card,
+:root[data-display-density="roomy"] .list-card,
+:root[data-display-density="roomy"] .status-tile,
+:root[data-display-density="roomy"] .metric {
+  padding: 1.25rem;
+}
+
+:root[data-display-density="roomy"] .section,
+:root[data-display-density="roomy"] .list,
+:root[data-display-density="roomy"] .asset-grid,
+:root[data-display-density="roomy"] .field-grid {
+  gap: 1.25rem;
+}
+
+:root[data-display-density="roomy"] .data-table th,
+:root[data-display-density="roomy"] .data-table td {
+  padding: 0.95rem 1.05rem;
 }
 
 :root[data-theme-style="condensed"] .field input,

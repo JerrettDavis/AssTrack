@@ -5,6 +5,7 @@ import { createGeofence, deleteGeofence, getGeofences, updateGeofence, type Geof
 import { useIdentityContext } from '../context/IdentityContext'
 import { useAppearance, type ThemeStyle } from '../context/AppearanceContext'
 import { useLiveDataRefresh } from '../hooks/useLiveDataRefresh'
+import DisplayControls from '../components/DisplayControls'
 
 function MapViewportUpdater({ center }: { center: [number, number] }) {
   const map = useMap()
@@ -66,6 +67,7 @@ function getMapTheme(colorMode: 'light' | 'dark', themeStyle: ThemeStyle) {
 
 export default function GeofencesPage() {
   const { effectiveColorMode, themeStyle } = useAppearance()
+  const [geofenceViewMode, setGeofenceViewMode] = useState<'cards' | 'table'>('table')
   const [geofences, setGeofences] = useState<Geofence[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -232,7 +234,10 @@ export default function GeofencesPage() {
         <div className="card">
           <div className="page-header">
             <h1>Geofences</h1>
-            <span className="muted">{geofences.length} configured</span>
+            <div className="ops-actions">
+              <span className="muted">{geofences.length} configured</span>
+              <DisplayControls mode={geofenceViewMode} onModeChange={setGeofenceViewMode} />
+            </div>
           </div>
 
           {isOperator ? (
@@ -309,6 +314,26 @@ export default function GeofencesPage() {
           )}
         </div>
 
+        {geofenceViewMode === 'cards' ? (
+        <div className="asset-grid">
+          {pagedGeofences.map((geofence) => (
+            <article className="list-card" key={geofence.id}>
+              <header>
+                <h3>{geofence.name}</h3>
+                <span className={geofence.isActive ? 'badge badge-success' : 'badge badge-warning'}>{geofence.isActive ? 'Active' : 'Inactive'}</span>
+              </header>
+              <p className="muted">{geofence.description ?? 'No description provided.'}</p>
+              <div className="asset-meta">
+                <div className="asset-meta-row"><span>Shape</span><strong>{geofence.shapeType === 'polygon' ? 'Freeform' : 'Circle'}</strong></div>
+                <div className="asset-meta-row"><span>Center</span><strong className="coords">{geofence.centerLatitude.toFixed(4)}, {geofence.centerLongitude.toFixed(4)}</strong></div>
+                <div className="asset-meta-row"><span>Size</span><strong>{geofence.shapeType === 'polygon' ? `${geofence.polygonCoordinates?.length ?? 0} points` : `${geofence.radiusMeters} m`}</strong></div>
+                <div className="asset-meta-row"><span>Created</span><strong>{new Date(geofence.createdAt).toLocaleString()}</strong></div>
+              </div>
+            </article>
+          ))}
+          {geofences.length === 0 && <div className="card">No geofences configured yet.</div>}
+        </div>
+        ) : (
         <div className="card table-card">
           <div className="asset-list-header">
             <div className="compact-actions">
@@ -474,6 +499,7 @@ export default function GeofencesPage() {
             </div>
           )}
         </div>
+        )}
       </section>
 
       <aside className="section">

@@ -11,6 +11,7 @@ import {
 import { getBridgeLogs, getBridgeMessages, getBridgeStatus, resyncBridgeFeed, type BridgeFeedRuntimeStatus, type BridgeLogEntry, type BridgeRawMessageEntry, type BridgeRuntimeStatus } from '../api/bridgeGateway'
 import { useIdentityContext } from '../context/IdentityContext'
 import { useLiveDataRefresh } from '../hooks/useLiveDataRefresh'
+import DisplayControls from '../components/DisplayControls'
 
 type FeedForm = {
   name: string
@@ -413,6 +414,7 @@ function BridgeConfigEditor({ form, onChange }: { form: FeedForm; onChange: Disp
 
 export default function IntegrationsPage() {
   const { isOperator, loading: identityLoading } = useIdentityContext()
+  const [integrationViewMode, setIntegrationViewMode] = useState<'cards' | 'table'>('cards')
   const [providers, setProviders] = useState<IntegrationProvider[]>([])
   const [feeds, setFeeds] = useState<IntegrationFeed[]>([])
   const [loading, setLoading] = useState(true)
@@ -621,9 +623,12 @@ export default function IntegrationsPage() {
           <h1>Bridge Gateway</h1>
           <p className="muted">Configure location providers, bridge endpoints, API keys, polling, MQTT subscriptions, and provider-specific handoffs.</p>
         </div>
-        <button className="button button-secondary" onClick={() => showCreate ? setShowCreate(false) : openCreate()} type="button">
-          {showCreate ? 'Cancel' : 'Add Bridge Feed'}
-        </button>
+        <div className="ops-actions">
+          <DisplayControls mode={integrationViewMode} onModeChange={setIntegrationViewMode} />
+          <button className="button button-secondary" onClick={() => showCreate ? setShowCreate(false) : openCreate()} type="button">
+            {showCreate ? 'Cancel' : 'Add Bridge Feed'}
+          </button>
+        </div>
       </div>
 
       <div className="guide-grid">
@@ -808,6 +813,7 @@ export default function IntegrationsPage() {
         </div>
       </div>
 
+      {integrationViewMode === 'cards' ? (
       <div className="asset-grid">
         {providers.map((provider) => (
           <article className="list-card" key={provider.id}>
@@ -828,6 +834,38 @@ export default function IntegrationsPage() {
           </article>
         ))}
       </div>
+      ) : (
+      <div className="card table-card">
+        <h2>Providers</h2>
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>Provider</th>
+              <th>Category</th>
+              <th>Mode</th>
+              <th>Status</th>
+              <th>Direct API</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {providers.map((provider) => (
+              <tr key={provider.id}>
+                <td>
+                  <strong>{provider.name}</strong>
+                  <div className="muted">{provider.description}</div>
+                </td>
+                <td>{provider.category}</td>
+                <td>{provider.connectionMode}</td>
+                <td><span className={`badge ${provider.status === 'ready' ? 'badge-success' : 'badge-warning'}`}>{provider.status}</span></td>
+                <td>{provider.supportsDirectApi ? 'Yes' : 'No'}</td>
+                <td><button className="button button-secondary button-compact" onClick={() => openCreate(provider.id)} type="button">Configure</button></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      )}
 
       {showCreate && (
         <form className="card inline-form" data-testid="bridge-feed-form" onSubmit={handleCreate} ref={createFormRef}>
@@ -872,6 +910,74 @@ export default function IntegrationsPage() {
 
       <div className="section">
         <h2>Configured Feeds</h2>
+        {integrationViewMode === 'table' && feeds.length > 0 && (
+          <div className="card table-card">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Feed</th>
+                  <th>Provider</th>
+                  <th>Status</th>
+                  <th>Runtime</th>
+                  <th>Trackers</th>
+                  <th>Manage</th>
+                </tr>
+              </thead>
+              <tbody>
+                {feeds.map((feed) => (
+                  <tr key={feed.id}>
+                    <td>
+                      <strong>{feed.name}</strong>
+                      <div className="muted">{bridgeUrl(feed)}</div>
+                    </td>
+                    <td>{feed.providerName}</td>
+                    <td><span className={`badge ${feed.isEnabled ? 'badge-success' : 'badge-danger'}`}>{feed.isEnabled ? 'Enabled' : 'Disabled'}</span></td>
+                    <td>{runtimeForFeed(feed, bridgeStatus)?.state ?? 'Not connected'}</td>
+                    <td>{feed.deviceCount}</td>
+                    <td>
+                      <div className="compact-actions">
+                        <button className="button button-secondary button-compact" onClick={() => startEdit(feed)} type="button">Edit</button>
+                        <button className="button button-secondary button-compact" onClick={() => void navigator.clipboard.writeText(bridgeUrl(feed))} type="button">Copy</button>
+                        <button className="button button-danger button-compact" disabled={submitting} onClick={() => void handleDelete(feed)} type="button">Delete</button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {integrationViewMode === 'table' && editingId && (
+          <div className="card inline-form">
+            <div className="field-grid">
+              <label className="field">
+                <span>Name</span>
+                <input onChange={(event) => setEditForm((value) => ({ ...value, name: event.target.value }))} required value={editForm.name} />
+              </label>
+              <label className="field">
+                <span>Default tags</span>
+                <input onChange={(event) => setEditForm((value) => ({ ...value, defaultTags: event.target.value }))} value={editForm.defaultTags} />
+              </label>
+              <BridgeConfigEditor form={editForm} onChange={setEditForm} />
+            </div>
+            <div className="compact-actions">
+              <label className="check-field">
+                <input checked={editForm.isEnabled} onChange={(event) => setEditForm((value) => ({ ...value, isEnabled: event.target.checked }))} type="checkbox" />
+                <span>Enabled</span>
+              </label>
+              <label className="check-field">
+                <input checked={editForm.autoCreateDevices} onChange={(event) => setEditForm((value) => ({ ...value, autoCreateDevices: event.target.checked }))} type="checkbox" />
+                <span>Auto-create trackers</span>
+              </label>
+            </div>
+            <div className="button-row">
+              <button className="button" disabled={submitting} onClick={() => void saveEdit()} type="button">Save</button>
+              <button className="button button-secondary" onClick={() => setEditingId(null)} type="button">Cancel</button>
+            </div>
+          </div>
+        )}
+        {integrationViewMode === 'cards' && (
+        <>
         {feeds.map((feed) => (
           <article className="list-card" key={feed.id}>
             {editingId === feed.id ? (
@@ -946,6 +1052,8 @@ export default function IntegrationsPage() {
               <button className="button button-secondary" onClick={() => openCreate('generic-webhook')} type="button">Add Webhook</button>
             </div>
           </div>
+        )}
+        </>
         )}
       </div>
     </div>

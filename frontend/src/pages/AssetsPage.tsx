@@ -6,6 +6,7 @@ import { getLatestPositions, getObservations, type Observation } from '../api/ob
 import { getSensorReadings } from '../api/sensors'
 import { useIdentityContext } from '../context/IdentityContext'
 import { useLiveDataRefresh } from '../hooks/useLiveDataRefresh'
+import DisplayControls from '../components/DisplayControls'
 
 function formatTimestamp(value: string) {
   return new Date(value).toLocaleString()
@@ -314,6 +315,7 @@ export function AssetsPage() {
   const [assetPage, setAssetPage] = useState(1)
   const [assetPageSize, setAssetPageSize] = useState(24)
   const [activeAssetTabs, setActiveAssetTabs] = useState<Record<string, AssetCardTab>>({})
+  const [assetViewMode, setAssetViewMode] = useState<'cards' | 'table'>('cards')
   const [submitting, setSubmitting] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editForm, setEditForm] = useState<UpdateAssetRequest>({ name: '', description: null, assetClass: 'property', category: null, criticality: 'normal', speedThresholdKmh: null })
@@ -730,6 +732,7 @@ export function AssetsPage() {
             </label>
             <div className="compact-actions">
               <span className="control-bar-result"><strong>{filteredAssets.length}</strong> matched</span>
+              <DisplayControls mode={assetViewMode} onModeChange={setAssetViewMode} />
               {(searchTerm || statusFilter !== 'all' || assetClassFilter !== 'all' || criticalityFilter !== 'all') && (
                 <button
                   className="button button-secondary button-compact"
@@ -978,6 +981,7 @@ export function AssetsPage() {
               <button className="button button-secondary button-compact" disabled={visibleAssetPage >= assetTotalPages} onClick={() => setAssetPage(assetTotalPages)} type="button">Last</button>
             </div>
           </div>
+          {assetViewMode === 'cards' ? (
           <div className="asset-grid">
             {pagedAssets.map((asset) => {
               const latest = latestPositions.find((position) => asset.devices.some((device) => device.id === position.deviceId))
@@ -1102,6 +1106,49 @@ export function AssetsPage() {
               <div className="card">No assets match the current filters.</div>
             )}
           </div>
+          ) : (
+          <div className="card table-card">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Asset</th>
+                  <th>Status</th>
+                  <th>Class</th>
+                  <th>Custody</th>
+                  <th>Trackers</th>
+                  <th>Last signal</th>
+                  <th>Maintenance</th>
+                  <th>Updated</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pagedAssets.map((asset) => {
+                  const latest = latestPositions.find((position) => asset.devices.some((device) => device.id === position.deviceId))
+                  const status = getObservationStatus(latest)
+                  const dueMaintenance = (maintenanceByAssetId.get(asset.id) ?? []).filter((schedule) => schedule.status === 'due' || schedule.status === 'overdue').length
+                  return (
+                    <tr key={asset.id}>
+                      <td>
+                        <strong>{asset.name}</strong>
+                        <div className="muted">{asset.description ?? asset.category ?? 'No description'}</div>
+                      </td>
+                      <td><span className={`badge ${status.className}`}>{status.label}</span></td>
+                      <td><span className="badge">{classLabel(asset.assetClass, assetClasses)}</span></td>
+                      <td><span className={`badge ${custodyStatusClass(asset.custodyStatus)}`}>{custodyLabel(asset.custodyStatus)}</span></td>
+                      <td>{asset.devices.length}</td>
+                      <td>{latest ? formatRelativeTime(latest.observedAt, latest.receivedAt) : 'Never'}</td>
+                      <td>{dueMaintenance > 0 ? <span className="badge badge-warning">{dueMaintenance} due</span> : <span className="badge badge-success">Current</span>}</td>
+                      <td>{formatTimestamp(asset.updatedAt)}</td>
+                    </tr>
+                  )
+                })}
+                {assets.length > 0 && filteredAssets.length === 0 && (
+                  <tr><td className="muted" colSpan={8}>No assets match the current filters.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+          )}
           {isOperator && (
             <details className="quiet-disclosure">
               <summary>

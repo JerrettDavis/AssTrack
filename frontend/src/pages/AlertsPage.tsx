@@ -14,12 +14,14 @@ import {
 import { acknowledgeBreach, bulkAcknowledgeBreaches, getGeofenceBreaches, type GeofenceBreach } from '../api/geofenceBreaches'
 import { useLiveEvents } from '../hooks/useLiveEvents'
 import { useLiveDataRefresh } from '../hooks/useLiveDataRefresh'
+import DisplayControls from '../components/DisplayControls'
 import AcknowledgeModal from '../components/AcknowledgeModal'
 import { getIntegrationFeeds, type IntegrationFeed } from '../api/integrations'
 
 type FilterTab = 'all' | 'unacknowledged'
 
 export default function AlertsPage() {
+  const [alertViewMode, setAlertViewMode] = useState<'cards' | 'table'>('table')
   const [alerts, setAlerts] = useState<SpeedAlert[]>([])
   const [breaches, setBreaches] = useState<GeofenceBreach[]>([])
   const [routes, setRoutes] = useState<AlertRoutingRule[]>([])
@@ -240,6 +242,7 @@ export default function AlertsPage() {
         </div>
         <div className="ops-actions">
           <span className="muted">Last updated: {lastUpdated ?? '—'}</span>
+          <DisplayControls mode={alertViewMode} onModeChange={setAlertViewMode} />
         </div>
       </div>
 
@@ -390,6 +393,27 @@ export default function AlertsPage() {
             Unacknowledged ({alerts.filter(a => !a.acknowledgedAtUtc).length})
           </button>
         </div>
+        {alertViewMode === 'cards' ? (
+        <div className="asset-grid">
+          {alerts.map((alert) => (
+            <article className="list-card" key={alert.id}>
+              <header>
+                <h3>{alert.assetName ?? alert.deviceIdentifier ?? alert.deviceId}</h3>
+                <span className={alert.acknowledgedAtUtc ? 'badge badge-success' : 'badge badge-warning'}>{alert.acknowledgedAtUtc ? 'Acknowledged' : 'Open'}</span>
+              </header>
+              <div className="asset-meta">
+                <div className="asset-meta-row"><span>Speed</span><strong>{alert.observedSpeedKmh.toFixed(1)} km/h</strong></div>
+                <div className="asset-meta-row"><span>Threshold</span><strong>{alert.thresholdKmh.toFixed(1)} km/h</strong></div>
+                <div className="asset-meta-row"><span>Triggered</span><strong>{new Date(alert.triggeredAt).toLocaleString()}</strong></div>
+              </div>
+              {!alert.acknowledgedAtUtc && (
+                <button className="button button-secondary" onClick={() => void handleAcknowledgeAlert(alert.id)} type="button">Acknowledge</button>
+              )}
+            </article>
+          ))}
+          {alerts.length === 0 && <div className="card">No speed alerts available.</div>}
+        </div>
+        ) : (
         <table className="data-table">
           <thead>
             <tr>
@@ -454,6 +478,7 @@ export default function AlertsPage() {
             )}
           </tbody>
         </table>
+        )}
         <div className="table-actions">
           <span className="muted">
             Page {alertsPage} of {Math.ceil(alertsTotal / 50) || 1} (Total: {alertsTotal})
@@ -510,6 +535,27 @@ export default function AlertsPage() {
             Unacknowledged ({breaches.filter(b => !b.acknowledgedAtUtc).length})
           </button>
         </div>
+        {alertViewMode === 'cards' ? (
+        <div className="asset-grid">
+          {breaches.map((breach) => (
+            <article className="list-card" key={breach.id}>
+              <header>
+                <h3>{breach.assetName ?? breach.deviceIdentifier ?? breach.deviceId}</h3>
+                <span className={breach.acknowledgedAtUtc ? 'badge badge-success' : 'badge badge-warning'}>{breach.acknowledgedAtUtc ? 'Acknowledged' : 'Open'}</span>
+              </header>
+              <div className="asset-meta">
+                <div className="asset-meta-row"><span>Geofence</span><strong>{breach.geofenceName}</strong></div>
+                <div className="asset-meta-row"><span>Event</span><strong>{breach.eventType}</strong></div>
+                <div className="asset-meta-row"><span>Detected</span><strong>{new Date(breach.detectedAt).toLocaleString()}</strong></div>
+              </div>
+              {!breach.acknowledgedAtUtc && (
+                <button className="button button-secondary" onClick={() => void handleAcknowledgeBreach(breach.id)} type="button">Acknowledge</button>
+              )}
+            </article>
+          ))}
+          {breaches.length === 0 && <div className="card">No geofence breaches available.</div>}
+        </div>
+        ) : (
         <table className="data-table">
           <thead>
             <tr>
@@ -574,6 +620,7 @@ export default function AlertsPage() {
             )}
           </tbody>
         </table>
+        )}
         <div className="table-actions">
           <span className="muted">
             Page {breachesPage} of {Math.ceil(breachesTotal / 50) || 1} (Total: {breachesTotal})

@@ -7,6 +7,7 @@ import { getLatestPositions, type Observation } from '../api/observations'
 import { getSensorReadings } from '../api/sensors'
 import { useIdentityContext } from '../context/IdentityContext'
 import { useLiveDataRefresh } from '../hooks/useLiveDataRefresh'
+import DisplayControls from '../components/DisplayControls'
 
 function providerDisplayName(device: DeviceListItem): string {
   return device.providerLongName || device.providerLabel || device.providerShortName || device.label || device.identifier
@@ -78,6 +79,7 @@ export default function DevicesPage() {
   const [assetId, setAssetId] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
   const [assignmentFilter, setAssignmentFilter] = useState<'all' | 'assigned' | 'unassigned'>('all')
+  const [deviceViewMode, setDeviceViewMode] = useState<'cards' | 'table'>('table')
   const [devicePage, setDevicePage] = useState(1)
   const [devicePageSize, setDevicePageSize] = useState(24)
   const [submitting, setSubmitting] = useState(false)
@@ -446,6 +448,7 @@ export default function DevicesPage() {
         </label>
         <div className="compact-actions">
           <span className="control-bar-result"><strong>{filteredDevices.length}</strong> shown</span>
+          <DisplayControls mode={deviceViewMode} onModeChange={setDeviceViewMode} />
           {(searchTerm || assignmentFilter !== 'all') && (
             <button
               className="button button-secondary button-compact"
@@ -517,6 +520,29 @@ export default function DevicesPage() {
         </form>
       )}
 
+      {deviceViewMode === 'cards' ? (
+      <div className="asset-grid">
+        {pagedDevices.map((device) => {
+          const latest = latestByDeviceId.get(device.id)
+          return (
+            <article className="list-card" key={device.id}>
+              <header>
+                <h3>{providerDisplayName(device)}</h3>
+                <span className={device.assetId ? 'badge badge-success' : 'badge badge-warning'}>{device.assetId ? 'Assigned' : 'Unassigned'}</span>
+              </header>
+              <div className="asset-meta">
+                <div className="asset-meta-row"><span>Identifier</span><strong>{device.identifier}</strong></div>
+                <div className="asset-meta-row"><span>Provider</span><strong>{device.integrationFeedName ?? device.provider ?? 'manual'}</strong></div>
+                <div className="asset-meta-row"><span>Asset</span><strong>{device.assetName ?? 'Unassigned'}</strong></div>
+                <div className="asset-meta-row"><span>Last signal</span><strong>{latest ? new Date(latest.observedAt).toLocaleString() : 'No observation yet'}</strong></div>
+              </div>
+              <DeviceTelemetrySummary readings={readingsByDeviceId.get(device.id) ?? []} />
+            </article>
+          )
+        })}
+        {devices.length > 0 && filteredDevices.length === 0 && <div className="card">No devices match the current filters.</div>}
+      </div>
+      ) : (
       <div className="card table-card">
         <div className="asset-list-header">
           <span className="muted">
@@ -625,6 +651,7 @@ export default function DevicesPage() {
           </div>
         )}
       </div>
+      )}
 
       {isOperator && (
         <details className="quiet-disclosure">

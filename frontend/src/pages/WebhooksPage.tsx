@@ -2,9 +2,11 @@ import { useEffect, useRef, useState } from 'react'
 import { getWebhookStatus, fireWebhookTest, getWebhookDeliveries, type WebhookStatus, type WebhookDeliveryLog } from '../api/webhooks'
 import { useIdentityContext } from '../context/IdentityContext'
 import { useLiveDataRefresh } from '../hooks/useLiveDataRefresh'
+import DisplayControls from '../components/DisplayControls'
 
 export default function WebhooksPage() {
   const { isOperator, loading: identityLoading } = useIdentityContext()
+  const [webhookViewMode, setWebhookViewMode] = useState<'cards' | 'table'>('table')
   const [status, setStatus] = useState<WebhookStatus | null>(null)
   const [deliveries, setDeliveries] = useState<WebhookDeliveryLog[]>([])
   const [deliveriesTotal, setDeliveriesTotal] = useState(0)
@@ -83,7 +85,10 @@ export default function WebhooksPage() {
     <div className="section">
       <div className="page-header">
         <h1>Webhooks</h1>
-        <span className="muted">Last updated: {lastUpdated ?? '—'}</span>
+        <div className="ops-actions">
+          <span className="muted">Last updated: {lastUpdated ?? '—'}</span>
+          <DisplayControls mode={webhookViewMode} onModeChange={setWebhookViewMode} />
+        </div>
       </div>
 
       <div className="card">
@@ -175,6 +180,25 @@ export default function WebhooksPage() {
       {!notConfigured && (
         <div className="card table-card">
           <h2>Recent Delivery Log</h2>
+          {webhookViewMode === 'cards' ? (
+          <div className="asset-grid">
+            {deliveries.map((delivery) => (
+              <article className="list-card" key={delivery.id}>
+                <header>
+                  <h3>{delivery.eventType}</h3>
+                  <span className={delivery.success ? 'badge badge-success' : 'badge badge-danger'}>{delivery.success ? 'Delivered' : 'Failed'}</span>
+                </header>
+                <div className="asset-meta">
+                  <div className="asset-meta-row"><span>Attempted</span><strong>{new Date(delivery.attemptedAt).toLocaleString()}</strong></div>
+                  <div className="asset-meta-row"><span>Status</span><strong>{delivery.httpStatusCode ?? 'N/A'}</strong></div>
+                  <div className="asset-meta-row"><span>Duration</span><strong>{delivery.durationMs}ms</strong></div>
+                  <div className="asset-meta-row"><span>Attempt</span><strong>{delivery.attemptNumber}</strong></div>
+                </div>
+              </article>
+            ))}
+            {deliveries.length === 0 && <div className="card">No webhook delivery logs yet.</div>}
+          </div>
+          ) : (
           <table className="data-table">
             <thead>
               <tr>
@@ -220,6 +244,7 @@ export default function WebhooksPage() {
               )}
             </tbody>
           </table>
+          )}
           <div className="table-actions">
             <span className="muted">
               Page {deliveriesPage} of {Math.ceil(deliveriesTotal / 20) || 1} (Total: {deliveriesTotal})
