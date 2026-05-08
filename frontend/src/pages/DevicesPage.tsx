@@ -78,6 +78,8 @@ export default function DevicesPage() {
   const [assetId, setAssetId] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
   const [assignmentFilter, setAssignmentFilter] = useState<'all' | 'assigned' | 'unassigned'>('all')
+  const [devicePage, setDevicePage] = useState(1)
+  const [devicePageSize, setDevicePageSize] = useState(24)
   const [submitting, setSubmitting] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editForm, setEditForm] = useState<UpdateDeviceRequest>({ identifier: '', label: null, protocol: null, assetId: null, provider: null, externalId: null, tags: null, integrationFeedId: null })
@@ -252,6 +254,23 @@ export default function DevicesPage() {
     })
   }, [assignmentFilter, devices, searchTerm])
 
+  const deviceTotalPages = Math.max(1, Math.ceil(filteredDevices.length / devicePageSize))
+  const visibleDevicePage = Math.min(devicePage, deviceTotalPages)
+  const pagedDevices = useMemo(() => {
+    const start = (visibleDevicePage - 1) * devicePageSize
+    return filteredDevices.slice(start, start + devicePageSize)
+  }, [devicePageSize, filteredDevices, visibleDevicePage])
+  const deviceStart = filteredDevices.length === 0 ? 0 : (visibleDevicePage - 1) * devicePageSize + 1
+  const deviceEnd = Math.min(filteredDevices.length, visibleDevicePage * devicePageSize)
+
+  useEffect(() => {
+    setDevicePage(1)
+  }, [assignmentFilter, devicePageSize, searchTerm])
+
+  useEffect(() => {
+    setDevicePage((current) => Math.min(current, deviceTotalPages))
+  }, [deviceTotalPages])
+
   const protocols = useMemo(() => new Set(devices.map((device) => device.protocol || 'Unspecified')).size, [devices])
   const providers = useMemo(() => new Set(devices.map((device) => device.provider || 'manual')).size, [devices])
   const latestByDeviceId = useMemo(() => new Map(latestPositions.map((position) => [position.deviceId, position])), [latestPositions])
@@ -398,7 +417,7 @@ export default function DevicesPage() {
         )}
       </details>
 
-      <div className="card control-bar control-bar-compact">
+      <div className="card control-bar">
         <label className="field">
           <span>Search</span>
           <input
@@ -414,6 +433,15 @@ export default function DevicesPage() {
             <option value="all">All devices</option>
             <option value="assigned">Assigned</option>
             <option value="unassigned">Unassigned</option>
+          </select>
+        </label>
+        <label className="field compact-field">
+          <span>Page size</span>
+          <select onChange={(event) => setDevicePageSize(Number(event.target.value))} value={devicePageSize}>
+            <option value={12}>12</option>
+            <option value={24}>24</option>
+            <option value={48}>48</option>
+            <option value={96}>96</option>
           </select>
         </label>
         <div className="compact-actions">
@@ -490,6 +518,30 @@ export default function DevicesPage() {
       )}
 
       <div className="card table-card">
+        <div className="asset-list-header">
+          <span className="muted">
+            Showing {deviceStart}-{deviceEnd} of {filteredDevices.length}
+          </span>
+          <div className="pagination-controls" aria-label="Device pagination">
+            <button
+              className="button button-secondary button-compact"
+              disabled={visibleDevicePage <= 1}
+              onClick={() => setDevicePage((page) => Math.max(1, page - 1))}
+              type="button"
+            >
+              Previous
+            </button>
+            <span className="muted">Page {visibleDevicePage} of {deviceTotalPages}</span>
+            <button
+              className="button button-secondary button-compact"
+              disabled={visibleDevicePage >= deviceTotalPages}
+              onClick={() => setDevicePage((page) => Math.min(deviceTotalPages, page + 1))}
+              type="button"
+            >
+              Next
+            </button>
+          </div>
+        </div>
         <table className="data-table">
           <thead>
             <tr>
@@ -504,7 +556,7 @@ export default function DevicesPage() {
             </tr>
           </thead>
           <tbody>
-            {filteredDevices.map((device) => (
+            {pagedDevices.map((device) => (
               <Fragment key={device.id}>
                 <tr>
                   <td>{device.identifier}{device.isSeeded && <span className="badge badge-demo badge-inline">Demo</span>}</td>
@@ -546,13 +598,39 @@ export default function DevicesPage() {
             )}
           </tbody>
         </table>
+        {filteredDevices.length > devicePageSize && (
+          <div className="asset-list-header asset-list-footer">
+            <span className="muted">
+              Showing {deviceStart}-{deviceEnd} of {filteredDevices.length}
+            </span>
+            <div className="pagination-controls" aria-label="Device pagination bottom">
+              <button
+                className="button button-secondary button-compact"
+                disabled={visibleDevicePage <= 1}
+                onClick={() => setDevicePage((page) => Math.max(1, page - 1))}
+                type="button"
+              >
+                Previous
+              </button>
+              <span className="muted">Page {visibleDevicePage} of {deviceTotalPages}</span>
+              <button
+                className="button button-secondary button-compact"
+                disabled={visibleDevicePage >= deviceTotalPages}
+                onClick={() => setDevicePage((page) => Math.min(deviceTotalPages, page + 1))}
+                type="button"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {isOperator && (
         <details className="quiet-disclosure">
           <summary>
             Admin device management
-            <span className="badge">{filteredDevices.length} devices</span>
+            <span className="badge">{deviceStart}-{deviceEnd} of {filteredDevices.length}</span>
           </summary>
           <div className="table-scroll">
             <table className="data-table admin-table">
@@ -566,7 +644,7 @@ export default function DevicesPage() {
                 </tr>
               </thead>
               <tbody>
-                {filteredDevices.map((device) => (
+                {pagedDevices.map((device) => (
                   <Fragment key={`admin-${device.id}`}>
                     <tr>
                       <td>

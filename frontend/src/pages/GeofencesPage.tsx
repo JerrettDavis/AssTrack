@@ -78,6 +78,8 @@ export default function GeofencesPage() {
   const [radiusMeters, setRadiusMeters] = useState('')
   const [polygonPoints, setPolygonPoints] = useState<GeofencePoint[]>([])
   const [isActive, setIsActive] = useState(true)
+  const [geofencePage, setGeofencePage] = useState(1)
+  const [geofencePageSize, setGeofencePageSize] = useState(24)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editForm, setEditForm] = useState<UpdateGeofenceRequest>({ name: '', centerLatitude: 0, centerLongitude: 0, radiusMeters: 0, isActive: true })
   const { isOperator } = useIdentityContext()
@@ -176,6 +178,19 @@ export default function GeofencesPage() {
   )
 
   const mapTheme = useMemo(() => getMapTheme(effectiveColorMode, themeStyle), [effectiveColorMode, themeStyle])
+  const geofenceTotalPages = Math.max(1, Math.ceil(geofences.length / geofencePageSize))
+  const visibleGeofencePage = Math.min(geofencePage, geofenceTotalPages)
+  const pagedGeofences = useMemo(() => {
+    const start = (visibleGeofencePage - 1) * geofencePageSize
+    return geofences.slice(start, start + geofencePageSize)
+  }, [geofencePageSize, geofences, visibleGeofencePage])
+  const geofenceStart = geofences.length === 0 ? 0 : (visibleGeofencePage - 1) * geofencePageSize + 1
+  const geofenceEnd = Math.min(geofences.length, visibleGeofencePage * geofencePageSize)
+
+  useEffect(() => {
+    setGeofencePage((current) => Math.min(current, geofenceTotalPages))
+  }, [geofenceTotalPages])
+
   const previewCenter = useMemo<[number, number] | null>(() => {
     const lat = Number(centerLatitude)
     const lng = Number(centerLongitude)
@@ -295,6 +310,41 @@ export default function GeofencesPage() {
         </div>
 
         <div className="card table-card">
+          <div className="asset-list-header">
+            <div className="compact-actions">
+              <span className="muted">
+                Showing {geofenceStart}-{geofenceEnd} of {geofences.length}
+              </span>
+              <label className="field compact-field">
+                <span>Page size</span>
+                <select onChange={(event) => setGeofencePageSize(Number(event.target.value))} value={geofencePageSize}>
+                  <option value={12}>12</option>
+                  <option value={24}>24</option>
+                  <option value={48}>48</option>
+                  <option value={96}>96</option>
+                </select>
+              </label>
+            </div>
+            <div className="pagination-controls" aria-label="Geofence pagination">
+              <button
+                className="button button-secondary button-compact"
+                disabled={visibleGeofencePage <= 1}
+                onClick={() => setGeofencePage((page) => Math.max(1, page - 1))}
+                type="button"
+              >
+                Previous
+              </button>
+              <span className="muted">Page {visibleGeofencePage} of {geofenceTotalPages}</span>
+              <button
+                className="button button-secondary button-compact"
+                disabled={visibleGeofencePage >= geofenceTotalPages}
+                onClick={() => setGeofencePage((page) => Math.min(geofenceTotalPages, page + 1))}
+                type="button"
+              >
+                Next
+              </button>
+            </div>
+          </div>
           <table className="data-table">
             <thead>
               <tr>
@@ -307,7 +357,7 @@ export default function GeofencesPage() {
               </tr>
             </thead>
             <tbody>
-              {geofences.map((geofence) => (
+              {pagedGeofences.map((geofence) => (
                 <Fragment key={geofence.id}>
                   <tr>
                     <td>{geofence.name}{geofence.isSeeded && <span className="badge badge-demo badge-inline">Demo</span>}</td>
@@ -397,6 +447,32 @@ export default function GeofencesPage() {
               )}
             </tbody>
           </table>
+          {geofences.length > geofencePageSize && (
+            <div className="asset-list-header asset-list-footer">
+              <span className="muted">
+                Showing {geofenceStart}-{geofenceEnd} of {geofences.length}
+              </span>
+              <div className="pagination-controls" aria-label="Geofence pagination bottom">
+                <button
+                  className="button button-secondary button-compact"
+                  disabled={visibleGeofencePage <= 1}
+                  onClick={() => setGeofencePage((page) => Math.max(1, page - 1))}
+                  type="button"
+                >
+                  Previous
+                </button>
+                <span className="muted">Page {visibleGeofencePage} of {geofenceTotalPages}</span>
+                <button
+                  className="button button-secondary button-compact"
+                  disabled={visibleGeofencePage >= geofenceTotalPages}
+                  onClick={() => setGeofencePage((page) => Math.min(geofenceTotalPages, page + 1))}
+                  type="button"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </section>
 
