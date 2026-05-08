@@ -225,6 +225,9 @@ public sealed class WebhookNotificationService : IWebhookNotificationService
             var db = scope.ServiceProvider.GetRequiredService<AssTrackDbContext>();
             db.WebhookDeliveryLogs.Add(log);
             await db.SaveChangesAsync();
+
+            var broadcaster = scope.ServiceProvider.GetService<ILiveEventBroadcaster>();
+            broadcaster?.PublishDataChanged("webhook_delivery", "created", metadata: new { log.Id, log.EventType, log.Success });
         }
         catch (Exception ex)
         {

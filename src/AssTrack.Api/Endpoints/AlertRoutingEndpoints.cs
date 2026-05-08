@@ -1,5 +1,6 @@
 using AssTrack.Domain.Contracts;
 using AssTrack.Domain.Models;
+using AssTrack.Api.Services;
 using AssTrack.Infrastructure.Repositories;
 using Microsoft.AspNetCore.Mvc;
 
@@ -21,6 +22,7 @@ public static class AlertRoutingEndpoints
             [FromBody] CreateAlertRoutingRuleRequest request,
             AlertRoutingRuleRepository repository,
             IntegrationFeedRepository integrationFeeds,
+            ILiveEventBroadcaster broadcaster,
             CancellationToken cancellationToken) =>
         {
             var validation = await ValidateAsync(request.Name, request.EventType, request.Channel, request.Provider, request.IntegrationFeedId, integrationFeeds, cancellationToken);
@@ -43,6 +45,7 @@ public static class AlertRoutingEndpoints
                 UpdatedAt = now
             }, cancellationToken);
 
+            broadcaster.PublishDataChanged("alert_route", "created", rule.Id);
             return Results.Created($"/api/alert-routes/{rule.Id}", Map(rule));
         });
 
@@ -51,6 +54,7 @@ public static class AlertRoutingEndpoints
             [FromBody] UpdateAlertRoutingRuleRequest request,
             AlertRoutingRuleRepository repository,
             IntegrationFeedRepository integrationFeeds,
+            ILiveEventBroadcaster broadcaster,
             CancellationToken cancellationToken) =>
         {
             var validation = await ValidateAsync(request.Name, request.EventType, request.Channel, request.Provider, request.IntegrationFeedId, integrationFeeds, cancellationToken);
@@ -70,11 +74,16 @@ public static class AlertRoutingEndpoints
                 NormalizeNullable(request.MessageTemplate),
                 cancellationToken);
 
+            if (updated is not null) broadcaster.PublishDataChanged("alert_route", "updated", updated.Id);
             return updated is null ? Results.NotFound() : Results.Ok(Map(updated));
         });
 
-        routes.MapDelete("/{id:guid}", async (Guid id, AlertRoutingRuleRepository repository, CancellationToken cancellationToken) =>
-            await repository.DeleteAsync(id, cancellationToken) ? Results.NoContent() : Results.NotFound());
+        routes.MapDelete("/{id:guid}", async (Guid id, AlertRoutingRuleRepository repository, ILiveEventBroadcaster broadcaster, CancellationToken cancellationToken) =>
+        {
+            var deleted = await repository.DeleteAsync(id, cancellationToken);
+            if (deleted) broadcaster.PublishDataChanged("alert_route", "deleted", id);
+            return deleted ? Results.NoContent() : Results.NotFound();
+        });
 
         return group;
     }

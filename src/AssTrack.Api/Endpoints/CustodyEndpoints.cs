@@ -2,6 +2,7 @@ using AssTrack.Domain.Contracts;
 using AssTrack.Domain.Models;
 using AssTrack.Infrastructure.Repositories;
 using AssTrack.Api;
+using AssTrack.Api.Services;
 
 namespace AssTrack.Api.Endpoints;
 
@@ -24,6 +25,7 @@ public static class CustodyEndpoints
         custody.MapPost("/events", async (
             CreateCustodyEventRequest request,
             CustodyRepository repository,
+            ILiveEventBroadcaster broadcaster,
             CancellationToken cancellationToken) =>
         {
             var eventType = NormalizeEventType(request.EventType);
@@ -44,7 +46,7 @@ public static class CustodyEndpoints
 
             return custodyEvent is null
                 ? Results.ValidationProblem(new Dictionary<string, string[]> { ["assetId"] = ["Asset is required."] })
-                : Results.Created($"/api/custody/events/{custodyEvent.Id}", Map(custodyEvent));
+                : CreatedCustodyEvent(custodyEvent, broadcaster);
         }).RequireAuthorization("Operator");
 
         return group;
@@ -62,6 +64,12 @@ public static class CustodyEndpoints
         custodyEvent.Notes,
         ApiDateTime.Utc(custodyEvent.OccurredAt),
         ApiDateTime.Utc(custodyEvent.CreatedAt));
+
+    private static IResult CreatedCustodyEvent(CustodyEvent custodyEvent, ILiveEventBroadcaster broadcaster)
+    {
+        broadcaster.PublishDataChanged("custody_event", "created", custodyEvent.Id, new { custodyEvent.AssetId });
+        return Results.Created($"/api/custody/events/{custodyEvent.Id}", Map(custodyEvent));
+    }
 
     private static Dictionary<string, string[]> Validate(CreateCustodyEventRequest request, string? eventType, string? custodyStatus)
     {

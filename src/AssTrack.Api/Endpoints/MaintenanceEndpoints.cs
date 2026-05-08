@@ -2,6 +2,7 @@ using AssTrack.Domain.Contracts;
 using AssTrack.Domain.Models;
 using AssTrack.Infrastructure.Repositories;
 using AssTrack.Api;
+using AssTrack.Api.Services;
 
 namespace AssTrack.Api.Endpoints;
 
@@ -65,6 +66,7 @@ public static class MaintenanceEndpoints
             MaintenanceScheduleRepository repository,
             AssetRepository assetRepository,
             SensorReadingRepository sensorRepository,
+            ILiveEventBroadcaster broadcaster,
             CancellationToken cancellationToken) =>
         {
             var validation = await ValidateAsync(request.AssetId, request.Title, request.ServiceType, request.IntervalDays, request.IntervalOdometerKm, request.IntervalRuntimeHours, request.DiagnosticSensorType, request.LastOdometerKm, request.LastRuntimeHours, assetRepository, cancellationToken);
@@ -92,6 +94,7 @@ public static class MaintenanceEndpoints
 
             var created = await repository.AddAsync(schedule, cancellationToken);
             var latestReadings = await GetLatestReadingsAsync([created], sensorRepository, cancellationToken);
+            broadcaster.PublishDataChanged("maintenance_schedule", "created", created.Id, new { created.AssetId });
             return Results.Created($"/api/maintenance/schedules/{created.Id}", Map(created, latestReadings));
         }).RequireAuthorization("Operator");
 
@@ -101,6 +104,7 @@ public static class MaintenanceEndpoints
             MaintenanceScheduleRepository repository,
             AssetRepository assetRepository,
             SensorReadingRepository sensorRepository,
+            ILiveEventBroadcaster broadcaster,
             CancellationToken cancellationToken) =>
         {
             var validation = await ValidateAsync(request.AssetId, request.Title, request.ServiceType, request.IntervalDays, request.IntervalOdometerKm, request.IntervalRuntimeHours, request.DiagnosticSensorType, request.LastOdometerKm, request.LastRuntimeHours, assetRepository, cancellationToken);
@@ -126,12 +130,14 @@ public static class MaintenanceEndpoints
             if (updated is null) return Results.NotFound();
 
             var latestReadings = await GetLatestReadingsAsync([updated], sensorRepository, cancellationToken);
+            broadcaster.PublishDataChanged("maintenance_schedule", "updated", updated.Id, new { updated.AssetId });
             return Results.Ok(Map(updated, latestReadings));
         }).RequireAuthorization("Operator");
 
-        maintenance.MapDelete("/schedules/{id:guid}", async (Guid id, MaintenanceScheduleRepository repository, CancellationToken cancellationToken) =>
+        maintenance.MapDelete("/schedules/{id:guid}", async (Guid id, MaintenanceScheduleRepository repository, ILiveEventBroadcaster broadcaster, CancellationToken cancellationToken) =>
         {
             var deleted = await repository.DeleteAsync(id, cancellationToken);
+            if (deleted) broadcaster.PublishDataChanged("maintenance_schedule", "deleted", id);
             return deleted ? Results.NoContent() : Results.NotFound();
         }).RequireAuthorization("Operator");
 
@@ -140,6 +146,7 @@ public static class MaintenanceEndpoints
             CompleteMaintenanceScheduleRequest request,
             MaintenanceScheduleRepository repository,
             SensorReadingRepository sensorRepository,
+            ILiveEventBroadcaster broadcaster,
             CancellationToken cancellationToken) =>
         {
             var schedule = await repository.GetByIdAsync(id, cancellationToken);
@@ -162,6 +169,7 @@ public static class MaintenanceEndpoints
                 string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim(),
                 cancellationToken);
 
+            if (record is not null) broadcaster.PublishDataChanged("maintenance_service_record", "created", record.Id, new { record.AssetId, record.MaintenanceScheduleId });
             return record is null ? Results.NotFound() : Results.Created($"/api/maintenance/records/{record.Id}", MapRecord(record));
         }).RequireAuthorization("Operator");
 

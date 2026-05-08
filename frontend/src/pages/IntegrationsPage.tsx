@@ -10,6 +10,7 @@ import {
 } from '../api/integrations'
 import { getBridgeLogs, getBridgeMessages, getBridgeStatus, resyncBridgeFeed, type BridgeFeedRuntimeStatus, type BridgeLogEntry, type BridgeRawMessageEntry, type BridgeRuntimeStatus } from '../api/bridgeGateway'
 import { useIdentityContext } from '../context/IdentityContext'
+import { useLiveDataRefresh } from '../hooks/useLiveDataRefresh'
 
 type FeedForm = {
   name: string
@@ -484,6 +485,10 @@ export default function IntegrationsPage() {
     if (identityLoading || !isOperator) return
     void load()
   }, [identityLoading, isOperator])
+
+  useLiveDataRefresh(async () => {
+    await Promise.all([load(), loadBridgeRuntime()])
+  }, { eventTypes: ['data_changed'], debounceMs: 1200, enabled: !identityLoading && isOperator })
 
   useEffect(() => {
     if (identityLoading || !isOperator) return

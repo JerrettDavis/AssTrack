@@ -36,7 +36,7 @@ public static class IntegrationEndpoints
                 ApiDateTime.Utc(feed.UpdatedAt))));
         }).RequireAuthorization("Operator");
 
-        integrations.MapPost(string.Empty, async ([FromBody] CreateIntegrationFeedRequest request, IntegrationFeedRepository repository, CancellationToken cancellationToken) =>
+        integrations.MapPost(string.Empty, async ([FromBody] CreateIntegrationFeedRequest request, IntegrationFeedRepository repository, ILiveEventBroadcaster broadcaster, CancellationToken cancellationToken) =>
         {
             var validation = ValidateFeed(request.Name, request.Provider);
             if (validation is not null) return validation;
@@ -60,10 +60,11 @@ public static class IntegrationEndpoints
             };
 
             var created = await repository.AddAsync(feed, cancellationToken);
+            broadcaster.PublishDataChanged("integration_feed", "created", created.Id);
             return Results.Created($"/api/integrations/{created.Id}", Map(created));
         }).RequireAuthorization("Operator");
 
-        integrations.MapPut("/{id:guid}", async (Guid id, [FromBody] UpdateIntegrationFeedRequest request, IntegrationFeedRepository repository, CancellationToken cancellationToken) =>
+        integrations.MapPut("/{id:guid}", async (Guid id, [FromBody] UpdateIntegrationFeedRequest request, IntegrationFeedRepository repository, ILiveEventBroadcaster broadcaster, CancellationToken cancellationToken) =>
         {
             if (string.IsNullOrWhiteSpace(request.Name))
             {
@@ -79,12 +80,14 @@ public static class IntegrationEndpoints
                 request.ConfigurationJson,
                 cancellationToken);
 
+            if (updated is not null) broadcaster.PublishDataChanged("integration_feed", "updated", updated.Id);
             return updated is null ? Results.NotFound() : Results.Ok(Map(updated));
         }).RequireAuthorization("Operator");
 
-        integrations.MapDelete("/{id:guid}", async (Guid id, IntegrationFeedRepository repository, CancellationToken cancellationToken) =>
+        integrations.MapDelete("/{id:guid}", async (Guid id, IntegrationFeedRepository repository, ILiveEventBroadcaster broadcaster, CancellationToken cancellationToken) =>
         {
             var deleted = await repository.DeleteAsync(id, cancellationToken);
+            if (deleted) broadcaster.PublishDataChanged("integration_feed", "deleted", id);
             return deleted ? Results.NoContent() : Results.NotFound();
         }).RequireAuthorization("Operator");
 
@@ -94,6 +97,7 @@ public static class IntegrationEndpoints
             IntegrationFeedRepository integrationRepository,
             DeviceRepository deviceRepository,
             IObservationIngestService ingestService,
+            ILiveEventBroadcaster broadcaster,
             CancellationToken cancellationToken) =>
         {
             var feed = await integrationRepository.GetByIdAsync(id, cancellationToken);
@@ -187,6 +191,7 @@ public static class IntegrationEndpoints
                     metadata,
                     device.Identifier), cancellationToken);
 
+                if (createdDevice) broadcaster.PublishDataChanged("device", "created", device.Id, new { device.AssetId, feed.Id });
                 return Results.Ok(new IntegrationIngestResultDto(feed.Id, device.Id, device.Identifier, createdDevice, ObservationEndpoints.Map(ingest.Created!)));
             }
             catch (ObservationIngestException ex)
@@ -200,6 +205,7 @@ public static class IntegrationEndpoints
             [FromBody] IntegrationDeviceProfileRequest request,
             IntegrationFeedRepository integrationRepository,
             DeviceRepository deviceRepository,
+            ILiveEventBroadcaster broadcaster,
             CancellationToken cancellationToken) =>
         {
             var feed = await integrationRepository.GetByIdAsync(id, cancellationToken);
@@ -283,6 +289,7 @@ public static class IntegrationEndpoints
                 MergeTags(device.Tags, profileTags),
                 cancellationToken) ?? device;
 
+            broadcaster.PublishDataChanged("device", createdDevice ? "created" : "updated", device.Id, new { device.AssetId, feed.Id });
             return Results.Ok(new IntegrationDeviceProfileResultDto(
                 feed.Id,
                 device.Id,

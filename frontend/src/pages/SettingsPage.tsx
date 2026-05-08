@@ -4,6 +4,7 @@ import { apiPost } from '../api/client'
 import { getSystemStatus, seedDemoData, type SeedResult, type SystemStatus } from '../api/system'
 import { useIdentityContext } from '../context/IdentityContext'
 import { useAppearance, type ColorMode, type ThemeStyle } from '../context/AppearanceContext'
+import { useLiveDataRefresh } from '../hooks/useLiveDataRefresh'
 
 interface SimulateResult {
   observationsCreated: number
@@ -64,6 +65,8 @@ export default function SettingsPage() {
     if (identityLoading || !isOperator) return
     void loadStatus()
   }, [identityLoading, isOperator])
+
+  useLiveDataRefresh(loadStatus, { eventTypes: ['data_changed'], debounceMs: 1500, enabled: !identityLoading && isOperator })
 
   async function handleRunSimulation() {
     try {

@@ -1,6 +1,6 @@
 namespace AssTrack.Api.Services;
 
-public enum LiveEventType { Observation, SpeedAlert, GeofenceBreach, Message }
+public enum LiveEventType { Observation, SpeedAlert, GeofenceBreach, Message, DataChanged }
 
 public record LiveEvent(LiveEventType EventType, object Payload);
 

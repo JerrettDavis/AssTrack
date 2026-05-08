@@ -3,6 +3,7 @@ using AssTrack.Domain.Models;
 using AssTrack.Domain.Services;
 using AssTrack.Infrastructure.Repositories;
 using AssTrack.Api;
+using AssTrack.Api.Services;
 using Microsoft.AspNetCore.Mvc;
 using System.Text.Json;
 
@@ -20,7 +21,7 @@ public static class GeofenceEndpoints
             return Results.Ok(items.Select(Map));
         }).RequireAuthorization("Operator");
 
-        geofences.MapPost(string.Empty, async ([FromBody] CreateGeofenceRequest request, GeofenceRepository repository, CancellationToken cancellationToken) =>
+        geofences.MapPost(string.Empty, async ([FromBody] CreateGeofenceRequest request, GeofenceRepository repository, ILiveEventBroadcaster broadcaster, CancellationToken cancellationToken) =>
         {
             if (string.IsNullOrWhiteSpace(request.Name))
             {
@@ -49,10 +50,11 @@ public static class GeofenceEndpoints
             };
 
             await repository.AddAsync(geofence, cancellationToken);
+            broadcaster.PublishDataChanged("geofence", "created", geofence.Id);
             return Results.Created($"/api/geofences/{geofence.Id}", Map(geofence));
         }).RequireAuthorization("Operator");
 
-        geofences.MapPut("/{id:guid}", async (Guid id, [FromBody] UpdateGeofenceRequest request, GeofenceRepository repository, CancellationToken cancellationToken) =>
+        geofences.MapPut("/{id:guid}", async (Guid id, [FromBody] UpdateGeofenceRequest request, GeofenceRepository repository, ILiveEventBroadcaster broadcaster, CancellationToken cancellationToken) =>
         {
             if (string.IsNullOrWhiteSpace(request.Name))
             {
@@ -78,12 +80,14 @@ public static class GeofenceEndpoints
                 shapeType == "polygon" ? SerializePolygon(request.PolygonCoordinates) : null,
                 request.IsActive,
                 cancellationToken);
+            if (updated is not null) broadcaster.PublishDataChanged("geofence", "updated", updated.Id);
             return updated is null ? Results.NotFound() : Results.Ok(Map(updated));
         }).RequireAuthorization("Operator");
 
-        geofences.MapDelete("/{id:guid}", async (Guid id, GeofenceRepository repository, CancellationToken cancellationToken) =>
+        geofences.MapDelete("/{id:guid}", async (Guid id, GeofenceRepository repository, ILiveEventBroadcaster broadcaster, CancellationToken cancellationToken) =>
         {
             var deleted = await repository.DeleteAsync(id, cancellationToken);
+            if (deleted) broadcaster.PublishDataChanged("geofence", "deleted", id);
             return deleted ? Results.NoContent() : Results.NotFound();
         }).RequireAuthorization("Operator");
 
@@ -164,15 +168,17 @@ public static class GeofenceEndpoints
             return Results.Ok(defaultItems.Select(MapBreach));
         }).RequireAuthorization("Operator");
 
-        geofences.MapPost("/breaches/bulk-acknowledge", async (BulkAcknowledgeBreachesRequest request, GeofenceBreachRepository breachRepository, CancellationToken cancellationToken) =>
+        geofences.MapPost("/breaches/bulk-acknowledge", async (BulkAcknowledgeBreachesRequest request, GeofenceBreachRepository breachRepository, ILiveEventBroadcaster broadcaster, CancellationToken cancellationToken) =>
         {
             var count = await breachRepository.BulkAcknowledgeAsync(request.Ids, DateTime.UtcNow, request.AcknowledgedBy, cancellationToken);
+            if (count > 0) broadcaster.PublishDataChanged("geofence_breach", "bulk_acknowledged", metadata: new { count });
             return Results.Ok(new { count });
         }).RequireAuthorization("Operator");
 
-        geofences.MapPost("/breaches/{id:guid}/acknowledge", async (Guid id, AcknowledgeBreachRequest request, GeofenceBreachRepository breachRepository, CancellationToken cancellationToken) =>
+        geofences.MapPost("/breaches/{id:guid}/acknowledge", async (Guid id, AcknowledgeBreachRequest request, GeofenceBreachRepository breachRepository, ILiveEventBroadcaster broadcaster, CancellationToken cancellationToken) =>
         {
             var updated = await breachRepository.AcknowledgeAsync(id, DateTime.UtcNow, request.AcknowledgedBy, cancellationToken);
+            if (updated is not null) broadcaster.PublishDataChanged("geofence_breach", "acknowledged", updated.Id);
             return updated is null ? Results.NotFound() : Results.Ok(MapBreach(updated));
         }).RequireAuthorization("Operator");
 

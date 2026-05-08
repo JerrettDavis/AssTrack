@@ -1,6 +1,7 @@
 using AssTrack.Domain.Contracts;
 using AssTrack.Domain.Models;
 using AssTrack.Infrastructure.Repositories;
+using AssTrack.Api.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 
@@ -38,6 +39,7 @@ public static class SensorEndpoints
             SensorReadingRepository sensorRepository,
             AssetRepository assetRepository,
             DeviceRepository deviceRepository,
+            ILiveEventBroadcaster broadcaster,
             CancellationToken cancellationToken) =>
         {
             var validation = await ValidateAsync(request, assetRepository, deviceRepository, cancellationToken);
@@ -61,6 +63,7 @@ public static class SensorEndpoints
                 Metadata = NormalizeNullable(request.Metadata)
             }, cancellationToken);
 
+            broadcaster.PublishDataChanged("sensor_reading", "created", reading.Id, new { reading.AssetId, reading.DeviceId });
             return Results.Created($"/api/sensors/readings/{reading.Id}", Map(reading));
         }).RequireRateLimiting("ingest").RequireAuthorization("Ingest");
 

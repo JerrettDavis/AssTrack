@@ -1,6 +1,7 @@
 using AssTrack.Domain.Contracts;
 using AssTrack.Infrastructure.Repositories;
 using AssTrack.Api;
+using AssTrack.Api.Services;
 
 namespace AssTrack.Api.Endpoints;
 
@@ -83,15 +84,17 @@ public static class SpeedAlertEndpoints
             return Results.Ok(defaultItems.Select(Map));
         }).RequireAuthorization("Operator");
 
-        alerts.MapPost("/{id:guid}/acknowledge", async (Guid id, AcknowledgeSpeedAlertRequest request, SpeedAlertRepository repository, CancellationToken cancellationToken) =>
+        alerts.MapPost("/{id:guid}/acknowledge", async (Guid id, AcknowledgeSpeedAlertRequest request, SpeedAlertRepository repository, ILiveEventBroadcaster broadcaster, CancellationToken cancellationToken) =>
         {
             var updated = await repository.AcknowledgeAsync(id, DateTime.UtcNow, request.AcknowledgedBy, cancellationToken);
+            if (updated is not null) broadcaster.PublishDataChanged("speed_alert", "acknowledged", updated.Id);
             return updated is null ? Results.NotFound() : Results.Ok(Map(updated));
         }).RequireAuthorization("Operator");
 
-        alerts.MapPost("/bulk-acknowledge", async (BulkAcknowledgeSpeedAlertsRequest request, SpeedAlertRepository repository, CancellationToken cancellationToken) =>
+        alerts.MapPost("/bulk-acknowledge", async (BulkAcknowledgeSpeedAlertsRequest request, SpeedAlertRepository repository, ILiveEventBroadcaster broadcaster, CancellationToken cancellationToken) =>
         {
             var count = await repository.BulkAcknowledgeAsync(request.Ids, DateTime.UtcNow, request.AcknowledgedBy, cancellationToken);
+            if (count > 0) broadcaster.PublishDataChanged("speed_alert", "bulk_acknowledged", metadata: new { count });
             return Results.Ok(new { count });
         }).RequireAuthorization("Operator");
 

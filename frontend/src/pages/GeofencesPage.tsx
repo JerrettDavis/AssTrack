@@ -4,6 +4,7 @@ import 'leaflet/dist/leaflet.css'
 import { createGeofence, deleteGeofence, getGeofences, updateGeofence, type Geofence, type GeofencePoint, type UpdateGeofenceRequest } from '../api/geofences'
 import { useIdentityContext } from '../context/IdentityContext'
 import { useAppearance, type ThemeStyle } from '../context/AppearanceContext'
+import { useLiveDataRefresh } from '../hooks/useLiveDataRefresh'
 
 function MapViewportUpdater({ center }: { center: [number, number] }) {
   const map = useMap()
@@ -95,6 +96,8 @@ export default function GeofencesPage() {
   useEffect(() => {
     void load()
   }, [])
+
+  useLiveDataRefresh(load, { eventTypes: ['data_changed', 'geofence_breach'], debounceMs: 1000 })
 
   async function handleCreateGeofence(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()

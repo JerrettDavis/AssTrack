@@ -5,6 +5,7 @@ import { completeMaintenanceSchedule, createMaintenanceSchedule, deleteMaintenan
 import { getLatestPositions, getObservations, type Observation } from '../api/observations'
 import { getSensorReadings } from '../api/sensors'
 import { useIdentityContext } from '../context/IdentityContext'
+import { useLiveDataRefresh } from '../hooks/useLiveDataRefresh'
 
 function formatTimestamp(value: string) {
   return new Date(value).toLocaleString()
@@ -353,6 +354,8 @@ export function AssetsPage() {
   useEffect(() => {
     void load()
   }, [])
+
+  useLiveDataRefresh(load, { eventTypes: ['data_changed', 'observation', 'speed_alert', 'geofence_breach'], debounceMs: 1200 })
 
   async function handleCreateAsset(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()

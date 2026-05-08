@@ -6,6 +6,7 @@ import { getIntegrationFeeds, type IntegrationFeed } from '../api/integrations'
 import { getLatestPositions, type Observation } from '../api/observations'
 import { getSensorReadings } from '../api/sensors'
 import { useIdentityContext } from '../context/IdentityContext'
+import { useLiveDataRefresh } from '../hooks/useLiveDataRefresh'
 
 function providerDisplayName(device: DeviceListItem): string {
   return device.providerLongName || device.providerLabel || device.providerShortName || device.label || device.identifier
@@ -109,6 +110,8 @@ export default function DevicesPage() {
   useEffect(() => {
     void load()
   }, [])
+
+  useLiveDataRefresh(load, { eventTypes: ['data_changed', 'observation'], debounceMs: 1200 })
 
   async function handleCreateDevice(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()

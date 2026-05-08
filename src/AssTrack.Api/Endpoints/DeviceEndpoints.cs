@@ -2,6 +2,7 @@ using AssTrack.Domain.Contracts;
 using AssTrack.Domain.Models;
 using AssTrack.Infrastructure.Repositories;
 using AssTrack.Api;
+using AssTrack.Api.Services;
 
 namespace AssTrack.Api.Endpoints;
 
@@ -59,7 +60,7 @@ public static class DeviceEndpoints
             return Results.Ok(summary);
         }).RequireAuthorization("Operator");
 
-        devices.MapPost(string.Empty, async (CreateDeviceRequest request, DeviceRepository repository, CancellationToken cancellationToken) =>
+        devices.MapPost(string.Empty, async (CreateDeviceRequest request, DeviceRepository repository, ILiveEventBroadcaster broadcaster, CancellationToken cancellationToken) =>
         {
             if (string.IsNullOrWhiteSpace(request.Identifier))
             {
@@ -86,10 +87,11 @@ public static class DeviceEndpoints
             };
 
             var created = await repository.AddAsync(device, cancellationToken);
+            broadcaster.PublishDataChanged("device", "created", created.Id, new { created.AssetId });
             return Results.Created($"/api/devices/{created.Id}", Map(created));
         }).RequireAuthorization("Operator");
 
-        devices.MapPut("/{id:guid}", async (Guid id, UpdateDeviceRequest request, DeviceRepository repository, CancellationToken cancellationToken) =>
+        devices.MapPut("/{id:guid}", async (Guid id, UpdateDeviceRequest request, DeviceRepository repository, ILiveEventBroadcaster broadcaster, CancellationToken cancellationToken) =>
         {
             if (string.IsNullOrWhiteSpace(request.Identifier))
             {
@@ -97,12 +99,14 @@ public static class DeviceEndpoints
             }
 
             var updated = await repository.UpdateAsync(id, request.Identifier.Trim(), request.Label, request.Protocol, request.AssetId, request.Provider, request.ExternalId, request.Tags, request.IntegrationFeedId, cancellationToken);
+            if (updated is not null) broadcaster.PublishDataChanged("device", "updated", updated.Id, new { updated.AssetId });
             return updated is null ? Results.NotFound() : Results.Ok(Map(updated));
         }).RequireAuthorization("Operator");
 
-        devices.MapDelete("/{id:guid}", async (Guid id, DeviceRepository repository, CancellationToken cancellationToken) =>
+        devices.MapDelete("/{id:guid}", async (Guid id, DeviceRepository repository, ILiveEventBroadcaster broadcaster, CancellationToken cancellationToken) =>
         {
             var deleted = await repository.DeleteAsync(id, cancellationToken);
+            if (deleted) broadcaster.PublishDataChanged("device", "deleted", id);
             return deleted ? Results.NoContent() : Results.NotFound();
         }).RequireAuthorization("Operator");
 

@@ -12,6 +12,7 @@ import { getDevices, getDeviceSummary, updateDevice, type DeviceSummary } from '
 import { createAsset, getAssets, type Asset, type Device } from '../api/assets'
 import { getIntegrationFeeds, type IntegrationFeed } from '../api/integrations'
 import { useLiveEvents } from '../hooks/useLiveEvents'
+import { useLiveDataRefresh } from '../hooks/useLiveDataRefresh'
 import { getSseStatus, type ObservationEvent } from '../api/sseClient'
 import { useAppearance, type ThemeStyle } from '../context/AppearanceContext'
 
@@ -885,39 +886,41 @@ export default function MapPage() {
     setDeviceSummary(summary)
   }
 
-  useEffect(() => {
-    async function load() {
-      try {
-        setError(null)
-        const [latestPositions, geofenceItems, deviceList, feedItems, assetItems] = await Promise.all([
-          getLatestPositions(),
-          getGeofences(),
-          getDevices(),
-          getIntegrationFeeds(),
-          getAssets(),
-        ])
-        setPositions(latestPositions)
-        setGeofences(geofenceItems)
-        setDevices(deviceList)
-        setFeeds(feedItems)
-        setAssets(assetItems)
-        setLastUpdated(new Date().toLocaleTimeString())
-      } catch (e: unknown) {
-        setError(e instanceof Error ? e.message : String(e))
-      } finally {
-        setLoading(false)
-      }
+  async function loadMapData() {
+    try {
+      setError(null)
+      const [latestPositions, geofenceItems, deviceList, feedItems, assetItems] = await Promise.all([
+        getLatestPositions(),
+        getGeofences(),
+        getDevices(),
+        getIntegrationFeeds(),
+        getAssets(),
+      ])
+      setPositions(latestPositions)
+      setGeofences(geofenceItems)
+      setDevices(deviceList)
+      setFeeds(feedItems)
+      setAssets(assetItems)
+      setLastUpdated(new Date().toLocaleTimeString())
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setLoading(false)
     }
+  }
 
-    void load()
+  useEffect(() => {
+    void loadMapData()
     pollRef.current = window.setInterval(() => {
-      void load()
+      void loadMapData()
     }, 30000)
 
     return () => {
       if (pollRef.current != null) window.clearInterval(pollRef.current)
     }
   }, [])
+
+  useLiveDataRefresh(loadMapData, { eventTypes: ['data_changed'], debounceMs: 1200 })
 
   useEffect(() => {
     const timer = window.setInterval(() => setNowMs(Date.now()), 1000)

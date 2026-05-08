@@ -96,6 +96,7 @@ public sealed class ObservationIngestService(
             speedKmh = created.SpeedKmh,
             observedAt = ApiDateTime.Utc(created.ObservedAt)
         }));
+        broadcaster.PublishDataChanged("observation", "created", created.Id, new { created.DeviceId, device.AssetId });
 
         SpeedAlert? firedAlert = null;
         var alert = SpeedAlertEvaluator.Evaluate(created, device.AssetId, device.Asset?.SpeedThresholdKmh ?? SpeedAlertEvaluator.DefaultThresholdKmh);

@@ -7,6 +7,7 @@ import {
   type ObservationHistoryParams,
   type PagedResult,
 } from '../api/observations'
+import { useLiveDataRefresh } from '../hooks/useLiveDataRefresh'
 
 export default function HistoryPage() {
   const [assets, setAssets] = useState<Asset[]>([])
@@ -117,6 +118,13 @@ export default function HistoryPage() {
   useEffect(() => {
     void loadAssets()
   }, [])
+
+  useLiveDataRefresh(async () => {
+    await loadAssets()
+    if (result !== null) {
+      await handleSearch()
+    }
+  }, { eventTypes: ['data_changed', 'observation'], debounceMs: 1500 })
 
   const hasFilters =
     filters.deviceId || filters.assetId || filters.fromDate || filters.toDate

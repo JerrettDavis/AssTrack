@@ -98,6 +98,50 @@ public class SseEndpointTests : IClassFixture<TestWebApplicationFactory>
     }
 
     [Fact]
+    public async Task GetEvents_WithValidToken_ReceivesDataChangedEvent()
+    {
+        var tokenService = _factory.Services.GetRequiredService<ISseTokenService>();
+        var (token, _) = tokenService.IssueToken();
+
+        using var client = _factory.CreateClient();
+        using var connectCts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        var response = await client.GetAsync($"/api/events?token={token}", HttpCompletionOption.ResponseHeadersRead, connectCts.Token);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var broadcaster = _factory.Services.GetRequiredService<ILiveEventBroadcaster>();
+        var stream = await response.Content.ReadAsStreamAsync();
+        using var reader = new System.IO.StreamReader(stream);
+
+        using var heartbeatCts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        while (!heartbeatCts.IsCancellationRequested)
+        {
+            string? line;
+            try { line = await reader.ReadLineAsync(heartbeatCts.Token); }
+            catch (OperationCanceledException) { break; }
+            if (line is null) break;
+            if (line.StartsWith(":")) break;
+        }
+        Assert.False(heartbeatCts.IsCancellationRequested, "Did not receive ': connected' heartbeat within timeout");
+
+        broadcaster.PublishDataChanged("asset", "updated", Guid.NewGuid());
+
+        var lines = new List<string>();
+        using var readCts = new CancellationTokenSource(TimeSpan.FromSeconds(8));
+        while (!readCts.Token.IsCancellationRequested)
+        {
+            string? line;
+            try { line = await reader.ReadLineAsync(readCts.Token); }
+            catch (OperationCanceledException) { break; }
+            if (line is null) break;
+            if (line.Length > 0) lines.Add(line);
+            if (lines.Count >= 2) break;
+        }
+
+        Assert.Contains(lines, l => l.StartsWith("event: data_changed"));
+        Assert.Contains(lines, l => l.Contains("\"entity\":\"asset\""));
+    }
+
+    [Fact]
     public async Task GetEvents_WithExpiredToken_Returns401()
     {
         // Create a token service configured with 0 minute TTL (expires immediately)

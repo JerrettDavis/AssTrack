@@ -13,6 +13,7 @@ import {
 } from '../api/alerts'
 import { acknowledgeBreach, bulkAcknowledgeBreaches, getGeofenceBreaches, type GeofenceBreach } from '../api/geofenceBreaches'
 import { useLiveEvents } from '../hooks/useLiveEvents'
+import { useLiveDataRefresh } from '../hooks/useLiveDataRefresh'
 import AcknowledgeModal from '../components/AcknowledgeModal'
 import { getIntegrationFeeds, type IntegrationFeed } from '../api/integrations'
 
@@ -91,6 +92,8 @@ export default function AlertsPage() {
       void load()
     }
   })
+
+  useLiveDataRefresh(load, { eventTypes: ['data_changed'], debounceMs: 750 })
 
   async function handleAcknowledgeAlert(id: string) {
     setAcknowledgeModal({

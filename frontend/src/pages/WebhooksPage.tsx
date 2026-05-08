@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { getWebhookStatus, fireWebhookTest, getWebhookDeliveries, type WebhookStatus, type WebhookDeliveryLog } from '../api/webhooks'
 import { useIdentityContext } from '../context/IdentityContext'
+import { useLiveDataRefresh } from '../hooks/useLiveDataRefresh'
 
 export default function WebhooksPage() {
   const { isOperator, loading: identityLoading } = useIdentityContext()
@@ -47,6 +48,8 @@ export default function WebhooksPage() {
       }
     }
   }, [deliveriesPage, identityLoading, isOperator])
+
+  useLiveDataRefresh(load, { eventTypes: ['data_changed', 'speed_alert', 'geofence_breach'], debounceMs: 1500, enabled: !identityLoading && isOperator })
 
   async function handleFireTest() {
     setTestLoading(true)

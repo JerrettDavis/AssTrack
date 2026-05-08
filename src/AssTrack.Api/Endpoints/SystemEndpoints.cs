@@ -47,11 +47,13 @@ public static class SystemEndpoints
         group.MapPost("/system/seed", async (
             SeedRequest request,
             ISeedService seedService,
+            ILiveEventBroadcaster broadcaster,
             CancellationToken ct) =>
         {
             try
             {
                 var result = await seedService.SeedAsync(request.Reset, ct);
+                broadcaster.PublishDataChanged("system", "seeded", metadata: new { request.Reset });
                 return Results.Ok(result);
             }
             catch (SeedingDisabledException)
@@ -66,9 +68,11 @@ public static class SystemEndpoints
         group.MapPost("/system/maintenance/clean-null-island", async (
             bool? dryRun,
             ObservationRepository observationRepository,
+            ILiveEventBroadcaster broadcaster,
             CancellationToken ct) =>
         {
             var result = await observationRepository.DeleteNullIslandNoiseAsync(dryRun ?? true, ct);
+            if (result.DeletedObservations > 0) broadcaster.PublishDataChanged("observation", "cleaned", metadata: new { result.DeletedObservations, dryRun = dryRun ?? true });
             return Results.Ok(new ObservationCleanupResultDto(
                 result.MatchingObservations,
                 result.DeletedObservations,
@@ -83,9 +87,11 @@ public static class SystemEndpoints
         group.MapPost("/system/maintenance/clean-auto-created-provider-assets", async (
             bool? dryRun,
             AssetRepository assetRepository,
+            ILiveEventBroadcaster broadcaster,
             CancellationToken ct) =>
         {
             var result = await assetRepository.DeleteAutoCreatedProviderAssetsAsync(dryRun ?? true, ct);
+            if (result.DeletedAssets > 0 || result.DetachedDevices > 0) broadcaster.PublishDataChanged("asset", "cleaned", metadata: new { result.DeletedAssets, result.DetachedDevices, dryRun = dryRun ?? true });
             return Results.Ok(new AutoCreatedAssetCleanupResultDto(
                 result.MatchingAssets,
                 result.DeletedAssets,
@@ -99,6 +105,7 @@ public static class SystemEndpoints
         group.MapDelete("/system/maintenance/e2e-data", async (
             IWebHostEnvironment env,
             AssTrackDbContext db,
+            ILiveEventBroadcaster broadcaster,
             CancellationToken ct) =>
         {
             if (env.IsProduction())
@@ -159,6 +166,8 @@ public static class SystemEndpoints
                 .Where(asset => assetIds.Contains(asset.Id))
                 .ExecuteDeleteAsync(ct);
 
+            var totalDeleted = deletedAssets + deletedDevices + deletedObservations + deletedSensorReadings + deletedAlerts + deletedBreaches + deletedStates + deletedSchedules + deletedServiceRecords + deletedCustodyEvents;
+            if (totalDeleted > 0) broadcaster.PublishDataChanged("system", "cleaned_e2e_data", metadata: new { totalDeleted });
             return Results.Ok(new E2EDataCleanupResultDto(
                 deletedAssets,
                 deletedDevices,

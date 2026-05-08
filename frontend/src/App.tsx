@@ -46,7 +46,7 @@ function AppContent() {
   }, [])
 
   useLiveEvents((type, _data) => {
-    if (type === 'speed_alert' || type === 'geofence_breach') {
+    if (type === 'speed_alert' || type === 'geofence_breach' || type === 'data_changed') {
       void loadSummary()
     }
   })

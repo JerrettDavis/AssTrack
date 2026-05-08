@@ -2,6 +2,7 @@ using AssTrack.Domain.Contracts;
 using AssTrack.Domain.Models;
 using AssTrack.Infrastructure.Repositories;
 using AssTrack.Api;
+using AssTrack.Api.Services;
 
 namespace AssTrack.Api.Endpoints;
 
@@ -26,7 +27,7 @@ public static class AssetEndpoints
             return asset is null ? Results.NotFound() : Results.Ok(Map(asset));
         }).RequireAuthorization("Operator");
 
-        assets.MapPost(string.Empty, async (CreateAssetRequest request, AssetRepository repository, CancellationToken cancellationToken) =>
+        assets.MapPost(string.Empty, async (CreateAssetRequest request, AssetRepository repository, ILiveEventBroadcaster broadcaster, CancellationToken cancellationToken) =>
         {
             if (string.IsNullOrWhiteSpace(request.Name))
             {
@@ -78,10 +79,11 @@ public static class AssetEndpoints
             };
 
             await repository.AddAsync(asset, cancellationToken);
+            broadcaster.PublishDataChanged("asset", "created", asset.Id);
             return Results.Created($"/api/assets/{asset.Id}", Map(asset));
         }).RequireAuthorization("Operator");
 
-        assets.MapPut("/{id:guid}", async (Guid id, UpdateAssetRequest request, AssetRepository repository, CancellationToken cancellationToken) =>
+        assets.MapPut("/{id:guid}", async (Guid id, UpdateAssetRequest request, AssetRepository repository, ILiveEventBroadcaster broadcaster, CancellationToken cancellationToken) =>
         {
             if (string.IsNullOrWhiteSpace(request.Name))
             {
@@ -112,12 +114,14 @@ public static class AssetEndpoints
             }
 
             var updated = await repository.UpdateAsync(id, request.Name.Trim(), request.Description, assetClass, request.Category, criticality, custodyStatus, Clean(request.CustodianName), Clean(request.CustodianContact), request.SpeedThresholdKmh, cancellationToken);
+            if (updated is not null) broadcaster.PublishDataChanged("asset", "updated", updated.Id);
             return updated is null ? Results.NotFound() : Results.Ok(Map(updated));
         }).RequireAuthorization("Operator");
 
-        assets.MapDelete("/{id:guid}", async (Guid id, AssetRepository repository, CancellationToken cancellationToken) =>
+        assets.MapDelete("/{id:guid}", async (Guid id, AssetRepository repository, ILiveEventBroadcaster broadcaster, CancellationToken cancellationToken) =>
         {
             var deleted = await repository.DeleteAsync(id, cancellationToken);
+            if (deleted) broadcaster.PublishDataChanged("asset", "deleted", id);
             return deleted ? Results.NoContent() : Results.NotFound();
         }).RequireAuthorization("Operator");
 
