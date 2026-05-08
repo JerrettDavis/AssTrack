@@ -3,9 +3,14 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using AssTrack.BridgeGateway;
 using AssTrack.BridgeGateway.Adapters;
+using AssTrack.BridgeGateway.Endpoints;
 using AssTrack.BridgeGateway.Services;
+using AssTrack.Domain.Contracts;
 using FluentAssertions;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
 namespace AssTrack.Tests.Api;
@@ -396,6 +401,139 @@ public sealed class BridgeGatewayTests
         devices.Should().ContainSingle(device => device.GetProperty("externalId").GetString() == "gateway-device-1");
     }
 
+    [Fact]
+    public async Task AssTrack_ingest_client_hands_off_bridge_messages_to_real_api_contract()
+    {
+        await using var factory = new TestWebApplicationFactory();
+        await factory.ResetDatabaseAsync();
+
+        var operatorClient = factory.CreateAuthenticatedClient();
+        var createFeed = await operatorClient.PostAsJsonAsync("/api/integrations", new
+        {
+            Name = "Signal Bridge",
+            Provider = "signal",
+            IsEnabled = true,
+            AutoCreateDevices = false,
+            ConfigurationJson = """{"bridgeKey":"signal-local","sharedSecret":"bridge-secret"}"""
+        });
+        createFeed.EnsureSuccessStatusCode();
+        var feed = await createFeed.Content.ReadFromJsonAsync<JsonElement>();
+        var feedId = feed.GetProperty("id").GetGuid();
+
+        var client = factory.CreateClient();
+        var ingestClient = new AssTrackIngestClient(client, Options.Create(new BridgeGatewayOptions
+        {
+            AssTrackBaseUrl = client.BaseAddress,
+            IngestApiKey = TestWebApplicationFactory.TestIngestApiKey
+        }));
+
+        var inbound = await ingestClient.SendInboundMessageAsync(new InboundMessageRequest(
+            "direct",
+            "signal",
+            feedId,
+            DeviceId: null,
+            AssetId: null,
+            ExternalPeerId: "+15551234567",
+            DisplayName: "Field Lead",
+            Sender: "+15551234567",
+            Body: "Gate is open",
+            ProviderMessageId: "signal-in-1",
+            ReceivedAt: DateTime.UtcNow,
+            Metadata: """{"source":"bridge"}"""), CancellationToken.None);
+
+        inbound.Success.Should().BeTrue(inbound.ResponseBody);
+
+        var threads = await operatorClient.GetFromJsonAsync<List<JsonElement>>("/api/messages/threads");
+        var thread = threads.Should().ContainSingle(item => item.GetProperty("externalPeerId").GetString() == "+15551234567").Subject;
+        var threadId = thread.GetProperty("id").GetGuid();
+
+        var sendResponse = await operatorClient.PostAsJsonAsync($"/api/messages/threads/{threadId}/messages", new
+        {
+            body = "Copy that"
+        });
+        sendResponse.EnsureSuccessStatusCode();
+        var queued = await sendResponse.Content.ReadFromJsonAsync<JsonElement>();
+        var messageId = queued.GetProperty("id").GetGuid();
+
+        var outbound = await ingestClient.GetOutboundMessagesAsync(feedId, 10, CancellationToken.None);
+        outbound.Success.Should().BeTrue(outbound.ResponseBody);
+        outbound.Messages.Should().ContainSingle(message => message.Id == messageId && message.Body == "Copy that");
+
+        var status = await ingestClient.UpdateMessageStatusAsync(messageId, new UpdateMessageStatusRequest(
+            "sent",
+            "signal-out-1",
+            DateTime.UtcNow,
+            ErrorMessage: null), CancellationToken.None);
+
+        status.Success.Should().BeTrue(status.ResponseBody);
+
+        var entries = await operatorClient.GetFromJsonAsync<List<JsonElement>>($"/api/messages/threads/{threadId}/messages");
+        entries.Should().Contain(message =>
+            message.GetProperty("id").GetGuid() == messageId &&
+            message.GetProperty("status").GetString() == "sent" &&
+            message.GetProperty("providerMessageId").GetString() == "signal-out-1");
+    }
+
+    [Fact]
+    public async Task Bridge_gateway_message_endpoints_validate_secret_and_forward_to_ingest_client()
+    {
+        var ingestClient = new FakeIngestClient
+        {
+            OutboundMessages =
+            [
+                new OutboundMessageDto(
+                    Guid.Parse("22222222-2222-2222-2222-222222222222"),
+                    Guid.Parse("33333333-3333-3333-3333-333333333333"),
+                    FeedId,
+                    "direct",
+                    "signal",
+                    "+15551234567",
+                    "Field Lead",
+                    "+15551234567",
+                    "Copy that",
+                    null,
+                    DateTime.UtcNow)
+            ]
+        };
+
+        await using var app = BuildGatewayTestApp(ingestClient);
+        await app.StartAsync();
+        var client = app.GetTestClient();
+
+        var rejected = await client.PostAsJsonAsync("/bridge/signal/messages/inbound", new
+        {
+            externalPeerId = "+15551234567",
+            body = "Gate is open"
+        });
+        rejected.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+
+        var inbound = await client.PostAsJsonAsync("/bridge/signal/messages/inbound?secret=bridge-secret", new
+        {
+            externalPeerId = "+15551234567",
+            body = "Gate is open",
+            sender = "+15551234567",
+            providerMessageId = "signal-in-1"
+        });
+        inbound.StatusCode.Should().Be(HttpStatusCode.Accepted);
+        ingestClient.InboundMessage.Should().NotBeNull();
+        ingestClient.InboundMessage!.Provider.Should().Be("signal");
+        ingestClient.InboundMessage.IntegrationFeedId.Should().Be(FeedId);
+        ingestClient.InboundMessage.ExternalPeerId.Should().Be("+15551234567");
+
+        var outbound = await client.GetFromJsonAsync<List<OutboundMessageDto>>("/bridge/signal/messages/outbound?secret=bridge-secret");
+        outbound.Should().ContainSingle(message => message.Body == "Copy that");
+
+        var status = await client.PostAsJsonAsync("/bridge/signal/messages/22222222-2222-2222-2222-222222222222/status?secret=bridge-secret", new
+        {
+            status = "delivered",
+            providerMessageId = "signal-out-1",
+            sentAt = DateTime.UtcNow
+        });
+        status.StatusCode.Should().Be(HttpStatusCode.Accepted);
+        ingestClient.StatusMessageId.Should().Be(Guid.Parse("22222222-2222-2222-2222-222222222222"));
+        ingestClient.StatusUpdate!.Status.Should().Be("delivered");
+    }
+
     private static BridgeFeedContext Context(string provider, string? defaultTags = null)
         => new("test", new BridgeFeedOptions
         {
@@ -405,9 +543,42 @@ public sealed class BridgeGatewayTests
             DefaultTags = defaultTags
         }, provider);
 
+    private static WebApplication BuildGatewayTestApp(IAssTrackIngestClient ingestClient)
+    {
+        var builder = WebApplication.CreateBuilder();
+        builder.WebHost.UseTestServer();
+        builder.Services.AddRouting();
+        builder.Services.AddSingleton<IOptions<BridgeGatewayOptions>>(Options.Create(new BridgeGatewayOptions
+        {
+            Feeds =
+            {
+                ["signal"] = new BridgeFeedOptions
+                {
+                    Enabled = true,
+                    FeedId = FeedId,
+                    Provider = "signal",
+                    SharedSecret = "bridge-secret"
+                }
+            }
+        }));
+        builder.Services.AddSingleton(new DynamicBridgeFeedStore());
+        builder.Services.AddSingleton(new BridgeFeedMonitor());
+        builder.Services.AddSingleton(new ProviderAdapterRegistry([new NormalizedJsonAdapter()]));
+        builder.Services.AddSingleton(ingestClient);
+        builder.Services.AddSingleton<BridgeRequestHandler>();
+
+        var app = builder.Build();
+        app.MapBridgeGatewayEndpoints();
+        return app;
+    }
+
     private sealed class FakeIngestClient : IAssTrackIngestClient
     {
         public int SendCount { get; private set; }
+        public InboundMessageRequest? InboundMessage { get; private set; }
+        public Guid? StatusMessageId { get; private set; }
+        public UpdateMessageStatusRequest? StatusUpdate { get; private set; }
+        public IReadOnlyList<OutboundMessageDto> OutboundMessages { get; init; } = [];
 
         public Task<BridgeDeliveryResult> SendAsync(Guid feedId, ProviderObservation observation, CancellationToken cancellationToken)
         {
@@ -417,5 +588,21 @@ public sealed class BridgeGatewayTests
 
         public Task<BridgeDeliveryResult> SendDeviceProfileAsync(Guid feedId, ProviderDeviceProfile profile, CancellationToken cancellationToken)
             => Task.FromResult(new BridgeDeliveryResult(true, (int)HttpStatusCode.OK, "{}", false));
+
+        public Task<BridgeDeliveryResult> SendInboundMessageAsync(InboundMessageRequest message, CancellationToken cancellationToken)
+        {
+            InboundMessage = message;
+            return Task.FromResult(new BridgeDeliveryResult(true, (int)HttpStatusCode.OK, "{}", false));
+        }
+
+        public Task<BridgeOutboundMessagesResult> GetOutboundMessagesAsync(Guid feedId, int take, CancellationToken cancellationToken)
+            => Task.FromResult(new BridgeOutboundMessagesResult(true, (int)HttpStatusCode.OK, "[]", false, OutboundMessages));
+
+        public Task<BridgeDeliveryResult> UpdateMessageStatusAsync(Guid messageId, UpdateMessageStatusRequest status, CancellationToken cancellationToken)
+        {
+            StatusMessageId = messageId;
+            StatusUpdate = status;
+            return Task.FromResult(new BridgeDeliveryResult(true, (int)HttpStatusCode.OK, "{}", false));
+        }
     }
 }

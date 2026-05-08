@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 using AssTrack.Domain.Contracts;
 using Microsoft.Extensions.Options;
 
@@ -58,6 +59,67 @@ public sealed class AssTrackIngestClient(HttpClient httpClient, IOptions<BridgeG
                 profile.Tags,
                 profile.AssetId,
                 profile.Metadata))
+        };
+
+        request.Headers.TryAddWithoutValidation("X-Api-Key", config.IngestApiKey);
+
+        using var response = await httpClient.SendAsync(request, cancellationToken);
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        return new BridgeDeliveryResult(response.IsSuccessStatusCode, (int)response.StatusCode, body, IsRetryable(response.StatusCode));
+    }
+
+    public async Task<BridgeDeliveryResult> SendInboundMessageAsync(InboundMessageRequest message, CancellationToken cancellationToken)
+    {
+        var config = options.Value;
+        EnsureConfigured(config);
+
+        var url = new Uri(config.AssTrackBaseUrl!, "/api/messages/inbound");
+        using var request = new HttpRequestMessage(HttpMethod.Post, url)
+        {
+            Content = JsonContent.Create(message with
+            {
+                ReceivedAt = NormalizeUtc(message.ReceivedAt)
+            })
+        };
+
+        request.Headers.TryAddWithoutValidation("X-Api-Key", config.IngestApiKey);
+
+        using var response = await httpClient.SendAsync(request, cancellationToken);
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        return new BridgeDeliveryResult(response.IsSuccessStatusCode, (int)response.StatusCode, body, IsRetryable(response.StatusCode));
+    }
+
+    public async Task<BridgeOutboundMessagesResult> GetOutboundMessagesAsync(Guid feedId, int take, CancellationToken cancellationToken)
+    {
+        var config = options.Value;
+        EnsureConfigured(config);
+
+        var boundedTake = Math.Clamp(take, 1, 200);
+        var url = new Uri(config.AssTrackBaseUrl!, $"/api/integrations/{feedId}/messages/outbound?take={boundedTake}");
+        using var request = new HttpRequestMessage(HttpMethod.Get, url);
+        request.Headers.TryAddWithoutValidation("X-Api-Key", config.IngestApiKey);
+
+        using var response = await httpClient.SendAsync(request, cancellationToken);
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        var messages = response.IsSuccessStatusCode
+            ? JsonSerializer.Deserialize<List<OutboundMessageDto>>(body, JsonSerializerOptions.Web) ?? []
+            : [];
+
+        return new BridgeOutboundMessagesResult(response.IsSuccessStatusCode, (int)response.StatusCode, body, IsRetryable(response.StatusCode), messages);
+    }
+
+    public async Task<BridgeDeliveryResult> UpdateMessageStatusAsync(Guid messageId, UpdateMessageStatusRequest status, CancellationToken cancellationToken)
+    {
+        var config = options.Value;
+        EnsureConfigured(config);
+
+        var url = new Uri(config.AssTrackBaseUrl!, $"/api/messages/{messageId}/status");
+        using var request = new HttpRequestMessage(HttpMethod.Post, url)
+        {
+            Content = JsonContent.Create(status with
+            {
+                SentAt = NormalizeUtc(status.SentAt)
+            })
         };
 
         request.Headers.TryAddWithoutValidation("X-Api-Key", config.IngestApiKey);

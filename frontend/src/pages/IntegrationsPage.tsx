@@ -97,6 +97,28 @@ const providerGuides: Record<string, { title: string; summary: string; steps: st
     ],
     fields: ['Home Assistant URL', 'Long-lived token', 'Device tracker entities'],
   },
+  'signal': {
+    title: 'Signal message bridge',
+    summary: 'Use this for a local Signal connector that can poll queued AssTrack messages and post received Signal messages back to the gateway.',
+    steps: [
+      'Create the feed and keep the shared secret private to the local connector.',
+      'Poll the outbound endpoint for queued AssTrack messages.',
+      'POST inbound Signal messages with externalPeerId, body, sender, and providerMessageId.',
+      'POST delivery status updates after the connector sends, delivers, or fails a queued message.',
+    ],
+    fields: ['Bridge key', 'Shared secret', 'Outbound messages', 'Inbound messages', 'Delivery status'],
+  },
+  'telegram': {
+    title: 'Telegram bot bridge',
+    summary: 'Use this for a Telegram bot worker that forwards chats into AssTrack message threads and sends queued replies back through Telegram.',
+    steps: [
+      'Create the feed and store the bot token only in the worker or secret manager.',
+      'Poll the outbound endpoint for queued AssTrack messages.',
+      'POST Telegram updates with chat ID as externalPeerId and the message text as body.',
+      'POST delivery status updates when the bot send result is known.',
+    ],
+    fields: ['Bridge key', 'Shared secret', 'Outbound messages', 'Inbound messages', 'Delivery status'],
+  },
   'google-findhub': {
     title: 'Google Find Hub authorized handoff',
     summary: 'Google does not expose a general consumer polling API for Find Hub tag locations.',
@@ -149,6 +171,11 @@ function bridgeUrl(formOrFeed: Pick<FeedForm, 'bridgeKey'> | IntegrationFeed) {
     : parseConfiguration(formOrFeed.configurationJson).bridgeKey
   const bridgeKey = key?.trim()
   return bridgeKey ? `http://127.0.0.1:5056/bridge/${bridgeKey}` : 'Set a bridge key to generate the endpoint'
+}
+
+function bridgeMessagesUrl(formOrFeed: Pick<FeedForm, 'bridgeKey'> | IntegrationFeed, suffix: string) {
+  const base = bridgeUrl(formOrFeed)
+  return base.startsWith('http') ? `${base}/messages/${suffix}` : base
 }
 
 function parseConfiguration(json?: string | null): Partial<FeedForm> {
@@ -205,7 +232,7 @@ function serializeConfiguration(form: FeedForm): string | null {
     config.entities = form.entities.split(',').map((item) => item.trim()).filter(Boolean)
   }
 
-  if (['google-findhub', 'samsung-find', 'apple-findmy', 'generic-webhook', 'gps-http'].includes(form.provider)) {
+  if (['google-findhub', 'samsung-find', 'apple-findmy', 'generic-webhook', 'gps-http', 'signal', 'telegram'].includes(form.provider)) {
     config.webhookSource = form.webhookSource.trim()
   }
 
@@ -237,6 +264,16 @@ function applyProviderDefaults(form: FeedForm, provider: string): FeedForm {
   }
   if (provider === 'google-findhub') next.defaultTags ||= 'google, find-hub'
   if (provider === 'samsung-find') next.defaultTags ||= 'samsung, smartthings'
+  if (provider === 'signal') {
+    next.defaultTags ||= 'signal, messaging'
+    next.autoCreateDevices = false
+    next.webhookSource ||= 'local-signal-bridge'
+  }
+  if (provider === 'telegram') {
+    next.defaultTags ||= 'telegram, messaging'
+    next.autoCreateDevices = false
+    next.webhookSource ||= 'telegram-bot-bridge'
+  }
   return next
 }
 
@@ -254,7 +291,7 @@ function runtimeForFeed(feed: IntegrationFeed, status: BridgeRuntimeStatus | nul
 
 function statusClass(state?: string) {
   if (!state) return 'status-warn'
-  if (['subscribed', 'receiving', 'delivering', 'http-request'].includes(state)) return 'status-ok'
+  if (['subscribed', 'receiving', 'delivering', 'http-request', 'message-request'].includes(state)) return 'status-ok'
   if (['connecting', 'resync-requested'].includes(state)) return 'status-polling'
   if (['disabled', 'disconnected'].includes(state)) return 'status-warn'
   return 'status-bad'
@@ -390,7 +427,7 @@ function BridgeConfigEditor({ form, onChange }: { form: FeedForm; onChange: Disp
         </div>
       )}
 
-      {['google-findhub', 'samsung-find', 'apple-findmy', 'generic-webhook', 'gps-http'].includes(form.provider) && (
+      {['google-findhub', 'samsung-find', 'apple-findmy', 'generic-webhook', 'gps-http', 'signal', 'telegram'].includes(form.provider) && (
         <div className="field-grid">
           <label className="field field-wide">
             <span>Webhook / partner source</span>
@@ -400,6 +437,15 @@ function BridgeConfigEditor({ form, onChange }: { form: FeedForm; onChange: Disp
               value={form.webhookSource}
             />
           </label>
+        </div>
+      )}
+
+      {['signal', 'telegram'].includes(form.provider) && (
+        <div className="notice notice-info field-wide">
+          <strong>Message bridge endpoints</strong>
+          <span className="muted">Outbound: {bridgeMessagesUrl(form, 'outbound')}</span>
+          <span className="muted">Inbound: {bridgeMessagesUrl(form, 'inbound')}</span>
+          <span className="muted">Status: {bridgeMessagesUrl(form, '{messageId}/status')}</span>
         </div>
       )}
 
