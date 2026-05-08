@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Circle, CircleMarker, MapContainer, Marker, Pane, Polygon, Polyline, Popup, TileLayer, useMap, useMapEvents } from 'react-leaflet'
 import L from 'leaflet'
@@ -288,6 +288,7 @@ type DisplayPosition = Observation & {
   groupedTrackers?: Observation[]
   groupedTrackerCount?: number
   displayMode?: MapEntityMode
+  displayKey?: string
 }
 
 type SeparationAlert = {
@@ -318,6 +319,13 @@ type MarkerCluster = {
   positions: DisplayPosition[]
 }
 
+function displayPositionKey(position: Pick<DisplayPosition, 'deviceId' | 'assetId' | 'assetName' | 'displayKey' | 'displayMode'>): string {
+  if (position.displayKey) return position.displayKey
+  if (position.displayMode === 'assets' && position.assetId) return `asset:${position.assetId}`
+  if (position.displayMode === 'assets' && position.assetName) return `asset-name:${position.assetName.toLocaleLowerCase()}`
+  return `device:${position.deviceId}`
+}
+
 function groupPositionsByAsset(positions: Observation[], deviceById: Map<string, Device>): DisplayPosition[] {
   const groupedByAsset = new Map<string, Observation[]>()
   const ungrouped: DisplayPosition[] = []
@@ -326,7 +334,7 @@ function groupPositionsByAsset(positions: Observation[], deviceById: Map<string,
     const device = deviceById.get(position.deviceId)
     const assetKey = position.assetId ?? device?.assetId ?? (position.assetName ? `name:${position.assetName.toLocaleLowerCase()}` : null)
     if (!assetKey) {
-      ungrouped.push(position)
+      ungrouped.push({ ...position, displayKey: `device:${position.deviceId}` })
       continue
     }
     groupedByAsset.set(assetKey, [...(groupedByAsset.get(assetKey) ?? []), position])
@@ -337,6 +345,7 @@ function groupPositionsByAsset(positions: Observation[], deviceById: Map<string,
     const ordered = [...assetPositions].sort((a, b) => positionTimeMs(b) - positionTimeMs(a))
     result.push({
       ...ordered[0],
+      displayKey: assetPositions[0].assetId ? `asset:${assetPositions[0].assetId}` : assetPositions[0].assetName ? `asset-name:${assetPositions[0].assetName.toLocaleLowerCase()}` : `asset:${assetPositions.map((position) => position.deviceId).sort().join('-')}`,
       displayMode: 'assets',
       groupedTrackers: ordered,
       groupedTrackerCount: ordered.length,
@@ -352,7 +361,7 @@ function clusterMapPositions(map: L.Map, positions: DisplayPosition[], pixelRang
   if (zoom >= maxZoom) {
     return positions.map((position) => ({
       center: [position.latitude, position.longitude],
-      id: position.id,
+      id: displayPositionKey(position),
       point: map.project([position.latitude, position.longitude], zoom),
       positions: [position],
     }))
@@ -366,7 +375,7 @@ function clusterMapPositions(map: L.Map, positions: DisplayPosition[], pixelRang
     if (!cluster) {
       clusters.push({
         center: [position.latitude, position.longitude],
-        id: position.id,
+        id: displayPositionKey(position),
         point,
         positions: [position],
       })
@@ -383,7 +392,7 @@ function clusterMapPositions(map: L.Map, positions: DisplayPosition[], pixelRang
       (cluster.center[1] * cluster.positions.length + position.longitude) / nextCount,
     ]
     cluster.positions.push(position)
-    cluster.id = `${cluster.id}-${position.id}`
+    cluster.id = [...cluster.positions.map(displayPositionKey)].sort().join('-')
   }
 
   return clusters
@@ -419,6 +428,53 @@ function DeviceMarkerPopup({ device, position }: { device?: Device | null; posit
       <br />
       {new Date(position.observedAt).toLocaleString()}
     </Popup>
+  )
+}
+
+function AnimatedMarker({
+  children,
+  eventHandlers,
+  icon,
+  position,
+}: {
+  children?: ReactNode
+  eventHandlers?: L.LeafletEventHandlerFnMap
+  icon: L.Icon | L.DivIcon
+  position: [number, number]
+}) {
+  const [displayPosition, setDisplayPosition] = useState<[number, number]>(position)
+  const previousTargetRef = useRef(position)
+
+  useEffect(() => {
+    const previousTarget = previousTargetRef.current
+    previousTargetRef.current = position
+    if (previousTarget[0] === position[0] && previousTarget[1] === position[1]) return
+
+    let frameId = 0
+    const startMs = performance.now()
+    const durationMs = 1200
+    setDisplayPosition((from) => {
+      const start = from
+      const tick = (frameMs: number) => {
+        const progress = Math.min(1, (frameMs - startMs) / durationMs)
+        const eased = progress < 0.5 ? 2 * progress * progress : 1 - Math.pow(-2 * progress + 2, 2) / 2
+        setDisplayPosition([
+          interpolateNumber(start[0], position[0], eased) ?? position[0],
+          interpolateNumber(start[1], position[1], eased) ?? position[1],
+        ])
+        if (progress < 1) frameId = window.requestAnimationFrame(tick)
+      }
+      frameId = window.requestAnimationFrame(tick)
+      return from
+    })
+
+    return () => window.cancelAnimationFrame(frameId)
+  }, [position])
+
+  return (
+    <Marker eventHandlers={eventHandlers} icon={icon} position={displayPosition}>
+      {children}
+    </Marker>
   )
 }
 
@@ -475,7 +531,7 @@ function DeviceMarkerLayer({
         if (cluster.positions.length > 1) {
           const clusterPulse = cluster.positions.some((position) => (recentPingByDeviceId.get(position.deviceId) ?? 0) > nowMs - 6500)
           return (
-            <Marker
+            <AnimatedMarker
               eventHandlers={{ click: () => zoomIntoCluster(cluster) }}
               icon={makeClusterIcon(cluster.positions.length, clusterPulse)}
               key={`cluster-${cluster.id}`}
@@ -492,14 +548,14 @@ function DeviceMarkerLayer({
           ? () => void selectAssetNode(position)
           : () => void selectDeviceNode(position)
         return (
-          <Marker
+          <AnimatedMarker
             eventHandlers={{ click: onClick }}
             icon={makeMarkerIcon(freshnessClass, device?.provider, pulse)}
-            key={position.id}
+            key={displayPositionKey(position)}
             position={[position.latitude, position.longitude]}
           >
             <DeviceMarkerPopup device={device} position={position} />
-          </Marker>
+          </AnimatedMarker>
         )
       })}
     </>
