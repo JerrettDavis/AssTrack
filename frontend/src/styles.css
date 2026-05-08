@@ -268,6 +268,10 @@ p {
   min-width: min(260px, 100%);
 }
 
+.toolbar .field:first-child {
+  flex: 1 1 300px;
+}
+
 .compact-actions {
   display: inline-flex;
   align-items: center;
@@ -353,6 +357,58 @@ p {
   grid-template-columns: repeat(auto-fit, minmax(min(360px, 100%), 1fr));
   gap: 0.9rem;
   align-items: start;
+}
+
+.asset-list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+  padding: 0.75rem 0;
+}
+
+.asset-list-footer {
+  border-top: 1px solid var(--border);
+}
+
+.pagination-controls {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.filter-disclosure {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.filter-disclosure summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.7rem 0.85rem;
+  color: var(--text-soft);
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 800;
+  list-style: none;
+}
+
+.filter-disclosure summary::-webkit-details-marker {
+  display: none;
+}
+
+.filter-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 240px));
+  gap: 0.75rem;
+  padding: 0 0.85rem 0.85rem;
+  border-top: 1px solid var(--border);
 }
 
 .metrics {

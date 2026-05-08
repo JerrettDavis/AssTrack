@@ -37,6 +37,7 @@ function getObservationStatus(observation: Observation | undefined) {
 
 type AssetStatusFilter = 'all' | 'moving' | 'stale' | 'unassigned'
 type AssetCardTab = 'overview' | 'telemetry' | 'custody' | 'maintenance'
+type AssetSortMode = 'attention' | 'recent' | 'name' | 'devices'
 
 const assetCardTabs: Array<{ value: AssetCardTab; label: string }> = [
   { value: 'overview', label: 'Overview' },
@@ -306,6 +307,11 @@ export function AssetsPage() {
   const [speedThresholdKmh, setSpeedThresholdKmh] = useState<string>('')
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<AssetStatusFilter>('all')
+  const [assetClassFilter, setAssetClassFilter] = useState('all')
+  const [criticalityFilter, setCriticalityFilter] = useState('all')
+  const [sortMode, setSortMode] = useState<AssetSortMode>('attention')
+  const [assetPage, setAssetPage] = useState(1)
+  const [assetPageSize, setAssetPageSize] = useState(24)
   const [activeAssetTabs, setActiveAssetTabs] = useState<Record<string, AssetCardTab>>({})
   const [submitting, setSubmitting] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -588,9 +594,51 @@ export function AssetsPage() {
         (statusFilter === 'stale' && (status === 'Stale' || status === 'No signal' || status === 'Aging')) ||
         (statusFilter === 'unassigned' && asset.devices.length === 0)
 
-      return searchMatches && statusMatches
+      const classMatches = assetClassFilter === 'all' || asset.assetClass === assetClassFilter
+      const criticalityMatches = criticalityFilter === 'all' || asset.criticality === criticalityFilter
+
+      return searchMatches && statusMatches && classMatches && criticalityMatches
+    }).sort((a, b) => {
+      const latestA = latestPositions.find((position) => a.devices.some((device) => device.id === position.deviceId))
+      const latestB = latestPositions.find((position) => b.devices.some((device) => device.id === position.deviceId))
+      if (sortMode === 'name') return a.name.localeCompare(b.name)
+      if (sortMode === 'devices') return b.devices.length - a.devices.length || a.name.localeCompare(b.name)
+      if (sortMode === 'recent') {
+        const aTime = latestA ? new Date(ageTimestamp(latestA.observedAt, latestA.receivedAt)).getTime() : 0
+        const bTime = latestB ? new Date(ageTimestamp(latestB.observedAt, latestB.receivedAt)).getTime() : 0
+        return bTime - aTime || a.name.localeCompare(b.name)
+      }
+
+      const attentionScore = (asset: Asset, latest: Observation | undefined) => {
+        const status = getObservationStatus(latest).label
+        const maintenanceCount = (maintenanceByAssetId.get(asset.id) ?? []).filter((schedule) => schedule.status === 'due' || schedule.status === 'overdue').length
+        const recentServiceCount = (maintenanceRecordsByAssetId.get(asset.id) ?? []).filter((record) => Date.now() - new Date(record.completedAt).getTime() < 60 * 60 * 1000).length
+        const custodyScore = asset.custodyStatus === 'missing' ? 4 : asset.custodyStatus === 'in_transit' ? 2 : 0
+        const signalScore = status === 'No signal' || status === 'Stale' ? 3 : status === 'Aging' ? 1 : 0
+        const criticalityScore = asset.criticality === 'critical' ? 2 : asset.criticality === 'high' ? 1 : 0
+        return maintenanceCount * 5 + recentServiceCount * 4 + custodyScore + signalScore + criticalityScore
+      }
+
+      return attentionScore(b, latestB) - attentionScore(a, latestA) || a.name.localeCompare(b.name)
     })
-  }, [assets, latestPositions, searchTerm, statusFilter])
+  }, [assets, latestPositions, searchTerm, statusFilter, assetClassFilter, criticalityFilter, sortMode, maintenanceByAssetId, maintenanceRecordsByAssetId])
+
+  const assetTotalPages = Math.max(1, Math.ceil(filteredAssets.length / assetPageSize))
+  const visibleAssetPage = Math.min(assetPage, assetTotalPages)
+  const pagedAssets = useMemo(() => {
+    const start = (visibleAssetPage - 1) * assetPageSize
+    return filteredAssets.slice(start, start + assetPageSize)
+  }, [assetPageSize, filteredAssets, visibleAssetPage])
+  const assetStart = filteredAssets.length === 0 ? 0 : (visibleAssetPage - 1) * assetPageSize + 1
+  const assetEnd = Math.min(filteredAssets.length, visibleAssetPage * assetPageSize)
+
+  useEffect(() => {
+    setAssetPage(1)
+  }, [searchTerm, statusFilter, assetClassFilter, criticalityFilter, sortMode, assetPageSize])
+
+  useEffect(() => {
+    setAssetPage((current) => Math.min(current, assetTotalPages))
+  }, [assetTotalPages])
 
   if (loading) {
     return <div className="card">Loading AssTrack data…</div>
@@ -654,10 +702,68 @@ export function AssetsPage() {
                 <option value="unassigned">Unassigned</option>
               </select>
             </label>
+            <label className="field">
+              <span>Sort</span>
+              <select onChange={(event) => setSortMode(event.target.value as AssetSortMode)} value={sortMode}>
+                <option value="attention">Attention first</option>
+                <option value="recent">Most recent signal</option>
+                <option value="name">Name</option>
+                <option value="devices">Most devices</option>
+              </select>
+            </label>
+            <label className="field compact-field">
+              <span>Page size</span>
+              <select onChange={(event) => setAssetPageSize(Number(event.target.value))} value={assetPageSize}>
+                <option value={12}>12</option>
+                <option value={24}>24</option>
+                <option value={48}>48</option>
+                <option value={96}>96</option>
+              </select>
+            </label>
             <div className="compact-actions">
-              <span className="muted">{filteredAssets.length} shown</span>
+              <span className="muted">{filteredAssets.length} matched</span>
+              {(searchTerm || statusFilter !== 'all' || assetClassFilter !== 'all' || criticalityFilter !== 'all') && (
+                <button
+                  className="button button-secondary button-compact"
+                  onClick={() => {
+                    setSearchTerm('')
+                    setStatusFilter('all')
+                    setAssetClassFilter('all')
+                    setCriticalityFilter('all')
+                  }}
+                  type="button"
+                >
+                  Clear
+                </button>
+              )}
             </div>
           </div>
+          <details className="filter-disclosure">
+            <summary>
+              More filters
+              {(assetClassFilter !== 'all' || criticalityFilter !== 'all') && <span className="badge">Active</span>}
+            </summary>
+            <div className="filter-grid">
+              <label className="field">
+                <span>Class</span>
+                <select onChange={(event) => setAssetClassFilter(event.target.value)} value={assetClassFilter}>
+                  <option value="all">All classes</option>
+                  {assetClasses.map((item) => (
+                    <option key={item.id} value={item.id}>{item.name}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
+                <span>Criticality</span>
+                <select onChange={(event) => setCriticalityFilter(event.target.value)} value={criticalityFilter}>
+                  <option value="all">All levels</option>
+                  {criticalityOptions.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          </details>
           {showAddForm && isOperator && (
             <form className="card inline-form" onSubmit={handleCreateAsset}>
               <div className="field-grid">
@@ -852,8 +958,20 @@ export function AssetsPage() {
               <span className="muted">Head to Settings → Demo Data to seed example fleet data and explore the UI.</span>
             </div>
           )}
+          <div className="asset-list-header">
+            <span className="muted">
+              Showing {assetStart}-{assetEnd} of {filteredAssets.length}
+            </span>
+            <div className="pagination-controls" aria-label="Asset pagination">
+              <button className="button button-secondary button-compact" disabled={visibleAssetPage <= 1} onClick={() => setAssetPage(1)} type="button">First</button>
+              <button className="button button-secondary button-compact" disabled={visibleAssetPage <= 1} onClick={() => setAssetPage((page) => Math.max(1, page - 1))} type="button">Previous</button>
+              <span className="muted">Page {visibleAssetPage} of {assetTotalPages}</span>
+              <button className="button button-secondary button-compact" disabled={visibleAssetPage >= assetTotalPages} onClick={() => setAssetPage((page) => Math.min(assetTotalPages, page + 1))} type="button">Next</button>
+              <button className="button button-secondary button-compact" disabled={visibleAssetPage >= assetTotalPages} onClick={() => setAssetPage(assetTotalPages)} type="button">Last</button>
+            </div>
+          </div>
           <div className="asset-grid">
-            {filteredAssets.map((asset) => {
+            {pagedAssets.map((asset) => {
               const latest = latestPositions.find((position) => asset.devices.some((device) => device.id === position.deviceId))
               const status = getObservationStatus(latest)
               const assetReadings = readingsByAssetId.get(asset.id) ?? []
@@ -1060,6 +1178,18 @@ export function AssetsPage() {
               <div className="card">No assets match the current filters.</div>
             )}
           </div>
+          {filteredAssets.length > assetPageSize && (
+            <div className="asset-list-header asset-list-footer">
+              <span className="muted">
+                Showing {assetStart}-{assetEnd} of {filteredAssets.length}
+              </span>
+              <div className="pagination-controls" aria-label="Asset pagination">
+                <button className="button button-secondary button-compact" disabled={visibleAssetPage <= 1} onClick={() => setAssetPage((page) => Math.max(1, page - 1))} type="button">Previous</button>
+                <span className="muted">Page {visibleAssetPage} of {assetTotalPages}</span>
+                <button className="button button-secondary button-compact" disabled={visibleAssetPage >= assetTotalPages} onClick={() => setAssetPage((page) => Math.min(assetTotalPages, page + 1))} type="button">Next</button>
+              </div>
+            </div>
+          )}
         </div>
       </section>
 
