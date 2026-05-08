@@ -376,21 +376,24 @@ p {
 }
 
 .display-controls {
-  display: inline-flex;
+  display: grid;
+  grid-template-columns: minmax(150px, 180px) minmax(230px, 300px);
   align-items: center;
   gap: 0.5rem;
-  flex-wrap: wrap;
+  min-width: 0;
+  width: auto;
 }
 
 .compact-segmented {
-  width: auto;
+  width: 100%;
+  min-width: 0;
   margin-top: 0;
 }
 
 .compact-segmented button {
-  min-width: 84px;
+  min-width: 0;
   min-height: 32px;
-  padding: 0.36rem 0.58rem;
+  padding: 0.36rem 0.5rem;
   font-size: 0.78rem;
 }
 
@@ -436,6 +439,10 @@ p {
   justify-content: flex-end;
   min-width: 0;
   align-self: center;
+}
+
+.control-bar .display-controls {
+  width: min(100%, 500px);
 }
 
 .control-bar-result {
@@ -2754,13 +2761,20 @@ summary {
   }
 
   .layout .control-bar .compact-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
     grid-column: 1 / -1;
     justify-content: flex-start;
+    justify-items: start;
     width: 100%;
   }
 
   .layout .control-bar .control-bar-result {
-    flex-basis: 100%;
+    justify-self: start;
+  }
+
+  .layout .control-bar .display-controls {
+    width: min(100%, 520px);
   }
 }
 
@@ -2838,9 +2852,16 @@ summary {
   }
 
   .control-bar .compact-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
     justify-content: space-between;
+    justify-items: stretch;
     width: 100%;
     min-width: 0;
+  }
+
+  .control-bar .display-controls {
+    width: 100%;
   }
 
   .bridge-message-summary,
@@ -2871,6 +2892,18 @@ summary {
 
   .message-compose {
     grid-template-columns: 1fr;
+  }
+
+  .display-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .asset-card-tabs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .asset-card-tabs button {
+    white-space: normal;
   }
 
   .message-bubble {
