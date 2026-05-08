@@ -1,6 +1,7 @@
 using AssTrack.E2ETests.PageObjects;
 using AssTrack.E2ETests.Support;
 using FluentAssertions;
+using Microsoft.Playwright;
 using Reqnroll;
 
 namespace AssTrack.E2ETests.Steps;
@@ -151,8 +152,22 @@ public class AppSteps
     {
         var panel = _context.Page.GetByTestId("map-node-detail-panel");
         await panel.WaitForAsync();
-        await panel.GetByText("Tracker node").WaitForAsync();
+        await ExpectAnyPanelTextAsync(panel, "Asset", "Tracker");
         await panel.GetByText("Observation log").WaitForAsync();
+    }
+
+    private static async Task ExpectAnyPanelTextAsync(ILocator panel, params string[] values)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        do
+        {
+            var text = await panel.InnerTextAsync();
+            if (values.Any(value => text.Contains(value, StringComparison.OrdinalIgnoreCase))) return;
+            await Task.Delay(250);
+        }
+        while (DateTime.UtcNow < deadline);
+
+        false.Should().BeTrue($"Expected panel to contain one of: {string.Join(", ", values)}");
     }
 
     [Then(@"the page contains ""([^""]*)""")]

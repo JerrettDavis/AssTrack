@@ -1161,6 +1161,39 @@ p {
   background: #8b5cf6;
 }
 
+.device-marker.live {
+  background: var(--success);
+}
+
+.device-marker.idle {
+  background: var(--warning);
+}
+
+.device-marker.offline {
+  background: var(--text-muted);
+}
+
+.map-alert-list {
+  display: grid;
+  gap: 0.28rem;
+}
+
+.compact-field-grid {
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0.65rem;
+}
+
+.node-log-button {
+  width: 100%;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.node-log-button:hover {
+  background: var(--surface-pressed);
+}
+
 .map-controls {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));

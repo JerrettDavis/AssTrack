@@ -28,19 +28,13 @@ function ageTimestamp(observedAt: string, receivedAt?: string | null): string {
   return receivedAt ?? observedAt
 }
 
-function getStaleClass(observedAt: string, receivedAt?: string | null): '' | 'stale' | 'very-stale' {
-  const ageMs = Math.max(0, Date.now() - new Date(ageTimestamp(observedAt, receivedAt)).getTime())
-  if (ageMs > 30 * 60 * 1000) return 'very-stale'
-  if (ageMs > 5 * 60 * 1000) return 'stale'
-  return ''
-}
-
 type MapBaseLayer = 'theme' | 'street' | 'satellite' | 'terrain'
 type TimeFilterMinutes = 'all' | '5' | '15' | '30' | '60' | '360' | '1440'
-type TrackerGroupingMode = 'all' | 'entity'
-type TrackerGroupingRangeMeters = '3' | '10' | '50' | '100' | '1000'
+type MapEntityMode = 'assets' | 'trackers'
+type SeparationRangeMeters = '100' | '250' | '500' | '1000'
 type TimelineWindowHours = '24' | '48' | '72'
 type SelectedMapNode =
+  | { type: 'asset'; assetId: string; observation: Observation }
   | { type: 'device'; deviceId: string; observation: Observation }
   | { type: 'geofence'; geofenceId: string }
 
@@ -54,11 +48,10 @@ const timeFilterOptions: Array<{ value: TimeFilterMinutes; label: string }> = [
   { value: '1440', label: 'Last 24 hours' },
 ]
 
-const groupingRangeOptions: Array<{ value: TrackerGroupingRangeMeters; label: string }> = [
-  { value: '3', label: '3 m' },
-  { value: '10', label: '10 m' },
-  { value: '50', label: '50 m' },
+const separationRangeOptions: Array<{ value: SeparationRangeMeters; label: string }> = [
   { value: '100', label: '100 m' },
+  { value: '250', label: '250 m' },
+  { value: '500', label: '500 m' },
   { value: '1000', label: '1000 m' },
 ]
 
@@ -104,11 +97,11 @@ function formatTimelineLabel(value: number): string {
   })
 }
 
-function makeMarkerIcon(staleClass: string, provider?: string | null) {
+function makeMarkerIcon(freshnessClass: string, provider?: string | null) {
   const providerClass = provider ? ` provider-${provider.replace(/[^a-z0-9-]/gi, '-').toLowerCase()}` : ''
   return L.divIcon({
     className: '',
-    html: `<div class="device-marker ${staleClass}${providerClass}"></div>`,
+    html: `<div class="device-marker ${freshnessClass}${providerClass}"></div>`,
     iconSize: [20, 20],
     iconAnchor: [10, 10],
     popupAnchor: [0, -10],
@@ -214,6 +207,19 @@ function observationAgeMs(position: Pick<Observation, 'observedAt' | 'receivedAt
   return Math.max(0, nowMs - new Date(ageTimestamp(position.observedAt, position.receivedAt)).getTime())
 }
 
+function getFreshnessState(position: Pick<Observation, 'observedAt' | 'receivedAt'>, nowMs: number, liveMinutes: number, idleMinutes: number): 'live' | 'idle' | 'offline' {
+  const ageMinutes = observationAgeMs(position, nowMs) / 60000
+  if (ageMinutes <= liveMinutes) return 'live'
+  if (ageMinutes <= idleMinutes) return 'idle'
+  return 'offline'
+}
+
+function freshnessLabel(state: 'live' | 'idle' | 'offline') {
+  if (state === 'live') return 'Live'
+  if (state === 'idle') return 'Idle'
+  return 'Offline'
+}
+
 function positionTimeMs(position: Pick<Observation, 'observedAt' | 'receivedAt'>): number {
   return new Date(ageTimestamp(position.observedAt, position.receivedAt)).getTime()
 }
@@ -233,6 +239,16 @@ function distanceMeters(a: Pick<Observation, 'latitude' | 'longitude'>, b: Pick<
 type DisplayPosition = Observation & {
   groupedTrackers?: Observation[]
   groupedTrackerCount?: number
+  displayMode?: MapEntityMode
+}
+
+type SeparationAlert = {
+  assetId: string
+  assetName: string
+  distanceMeters: number
+  thresholdMeters: number
+  primary: Observation
+  secondary: Observation
 }
 
 type MarkerCluster = {
@@ -242,7 +258,7 @@ type MarkerCluster = {
   positions: DisplayPosition[]
 }
 
-function groupPositionsByAsset(positions: Observation[], rangeMeters: number, deviceById: Map<string, Device>): DisplayPosition[] {
+function groupPositionsByAsset(positions: Observation[], deviceById: Map<string, Device>): DisplayPosition[] {
   const groupedByAsset = new Map<string, Observation[]>()
   const ungrouped: DisplayPosition[] = []
 
@@ -259,25 +275,12 @@ function groupPositionsByAsset(positions: Observation[], rangeMeters: number, de
   const result: DisplayPosition[] = [...ungrouped]
   for (const assetPositions of groupedByAsset.values()) {
     const ordered = [...assetPositions].sort((a, b) => positionTimeMs(b) - positionTimeMs(a))
-    const clusters: Observation[][] = []
-
-    for (const position of ordered) {
-      const cluster = clusters.find((items) => items.some((item) => distanceMeters(item, position) <= rangeMeters))
-      if (cluster) {
-        cluster.push(position)
-      } else {
-        clusters.push([position])
-      }
-    }
-
-    for (const cluster of clusters) {
-      const representative = [...cluster].sort((a, b) => positionTimeMs(b) - positionTimeMs(a))[0]
-      result.push({
-        ...representative,
-        groupedTrackers: cluster,
-        groupedTrackerCount: cluster.length,
-      })
-    }
+    result.push({
+      ...ordered[0],
+      displayMode: 'assets',
+      groupedTrackers: ordered,
+      groupedTrackerCount: ordered.length,
+    })
   }
 
   return result
@@ -361,11 +364,19 @@ function DeviceMarkerPopup({ device, position }: { device?: Device | null; posit
 
 function DeviceMarkerLayer({
   deviceById,
+  idleMinutes,
+  liveMinutes,
+  nowMs,
   positions,
+  selectAssetNode,
   selectDeviceNode,
 }: {
   deviceById: Map<string, Device>
+  idleMinutes: number
+  liveMinutes: number
+  nowMs: number
   positions: DisplayPosition[]
+  selectAssetNode: (position: DisplayPosition) => void
   selectDeviceNode: (position: Observation) => void
 }) {
   const map = useMap()
@@ -412,11 +423,14 @@ function DeviceMarkerLayer({
 
         const position = cluster.positions[0]
         const device = deviceById.get(position.deviceId)
-        const staleClass = getStaleClass(position.observedAt, position.receivedAt)
+        const freshnessClass = getFreshnessState(position, nowMs, liveMinutes, idleMinutes)
+        const onClick = position.displayMode === 'assets' && position.assetId
+          ? () => void selectAssetNode(position)
+          : () => void selectDeviceNode(position)
         return (
           <Marker
-            eventHandlers={{ click: () => void selectDeviceNode(position) }}
-            icon={makeMarkerIcon(staleClass, device?.provider)}
+            eventHandlers={{ click: onClick }}
+            icon={makeMarkerIcon(freshnessClass, device?.provider)}
             key={position.id}
             position={[position.latitude, position.longitude]}
           >
@@ -696,9 +710,11 @@ export default function MapPage() {
   const [showTimeline, setShowTimeline] = useState(() => boolParam(searchParams.get('timeline'), true))
   const [providerFilter, setProviderFilter] = useState(() => searchParams.get('provider') || 'all')
   const [feedFilter, setFeedFilter] = useState(() => searchParams.get('feed') || 'all')
-  const [timeFilterMinutes, setTimeFilterMinutes] = useState<TimeFilterMinutes>(() => optionOrDefault(searchParams.get('age'), ['all', '5', '15', '30', '60', '360', '1440'] as const, 'all'))
-  const [groupingMode, setGroupingMode] = useState<TrackerGroupingMode>(() => optionOrDefault(searchParams.get('grouping'), ['all', 'entity'] as const, 'all'))
-  const [groupingRangeMeters, setGroupingRangeMeters] = useState<TrackerGroupingRangeMeters>(() => optionOrDefault(searchParams.get('range'), ['3', '10', '50', '100', '1000'] as const, '1000'))
+  const [timeFilterMinutes, setTimeFilterMinutes] = useState<TimeFilterMinutes>(() => optionOrDefault(searchParams.get('age'), ['all', '5', '15', '30', '60', '360', '1440'] as const, '1440'))
+  const [mapMode, setMapMode] = useState<MapEntityMode>(() => optionOrDefault(searchParams.get('mode'), ['assets', 'trackers'] as const, 'assets'))
+  const [liveMinutes, setLiveMinutes] = useState(() => numberParam(searchParams.get('live'), 15))
+  const [idleMinutes, setIdleMinutes] = useState(() => numberParam(searchParams.get('idle'), 60))
+  const [separationRangeMeters, setSeparationRangeMeters] = useState<SeparationRangeMeters>(() => optionOrDefault(searchParams.get('separation'), ['100', '250', '500', '1000'] as const, '100'))
   const [mapViewport, setMapViewport] = useState<{ lat: number; lng: number; zoom: number } | null>(initialViewport)
   const [nowMs, setNowMs] = useState(() => Date.now())
   const [timelineDate, setTimelineDate] = useState(() => searchParams.get('timelineDate') || localDateInput())
@@ -791,9 +807,11 @@ export default function MapPage() {
     if (baseLayer !== 'theme') params.set('layer', baseLayer)
     if (providerFilter !== 'all') params.set('provider', providerFilter)
     if (feedFilter !== 'all') params.set('feed', feedFilter)
-    if (timeFilterMinutes !== 'all') params.set('age', timeFilterMinutes)
-    if (groupingMode !== 'all') params.set('grouping', groupingMode)
-    if (groupingMode === 'entity' && groupingRangeMeters !== '1000') params.set('range', groupingRangeMeters)
+    if (timeFilterMinutes !== '1440') params.set('age', timeFilterMinutes)
+    if (mapMode !== 'assets') params.set('mode', mapMode)
+    if (liveMinutes !== 15) params.set('live', String(liveMinutes))
+    if (idleMinutes !== 60) params.set('idle', String(idleMinutes))
+    if (separationRangeMeters !== '100') params.set('separation', separationRangeMeters)
     if (!showDevices) params.set('devices', '0')
     if (!showGeofences) params.set('geofences', '0')
     if (!showTrail) params.set('trailVisible', '0')
@@ -816,11 +834,13 @@ export default function MapPage() {
   }, [
     baseLayer,
     feedFilter,
-    groupingMode,
-    groupingRangeMeters,
+    idleMinutes,
+    liveMinutes,
     mapViewport,
+    mapMode,
     providerFilter,
     selectedDeviceId,
+    separationRangeMeters,
     selectedNode,
     setSearchParams,
     showAccuracy,
@@ -939,6 +959,37 @@ export default function MapPage() {
     }
   }
 
+  async function selectAssetNode(position: DisplayPosition) {
+    const assetId = position.assetId ?? deviceById.get(position.deviceId)?.assetId
+    if (!assetId) {
+      await selectDeviceNode(position)
+      return
+    }
+
+    setSelectedNode({ type: 'asset', assetId, observation: position })
+    setSelectedDeviceId(position.deviceId)
+    setAttachAssetId('')
+    setNewAssetName(position.assetName ?? 'Tracked asset')
+    setNodeLoading(true)
+    setNodeError(null)
+    try {
+      const [summary, history, breaches] = await Promise.all([
+        getDeviceSummary(position.deviceId),
+        getObservationHistory({ assetId, page: 1, pageSize: 20 }),
+        getGeofenceBreaches({ deviceId: position.deviceId, limit: 12 }),
+      ])
+      setDeviceSummary(summary)
+      setNodeHistory(history.items)
+      setNodeBreaches(breaches)
+      const trail = await getDeviceTrail(position.deviceId, trailLength)
+      setTrailPoints(trail.slice().reverse().map((item) => [item.latitude, item.longitude]))
+    } catch (err) {
+      setNodeError(err instanceof Error ? err.message : 'Unable to load asset details.')
+    } finally {
+      setNodeLoading(false)
+    }
+  }
+
   async function selectGeofenceNode(geofence: Geofence) {
     setSelectedNode({ type: 'geofence', geofenceId: geofence.id })
     setNodeHistory([])
@@ -1005,14 +1056,16 @@ export default function MapPage() {
 
   const deviceById = useMemo(() => new Map(devices.map((device) => [device.id, device])), [devices])
   const selectedDevice = selectedNode?.type === 'device' ? deviceById.get(selectedNode.deviceId) : null
+  const selectedAsset = selectedNode?.type === 'asset' ? assets.find((asset) => asset.id === selectedNode.assetId) : null
 
   const timelineScope = useMemo(() => {
+    if (selectedAsset) return { scoped: true as const, deviceId: undefined, assetId: selectedAsset.id, label: selectedAsset.name }
     if (!selectedDevice) return { scoped: false as const, deviceId: undefined, assetId: undefined, label: 'All map nodes' }
     if (selectedDevice.assetId) {
       return { scoped: true as const, deviceId: undefined, assetId: selectedDevice.assetId, label: selectedDevice.assetName ?? providerDisplayName(selectedDevice) }
     }
     return { scoped: true as const, deviceId: selectedDevice.id, assetId: undefined, label: providerDisplayName(selectedDevice) }
-  }, [selectedDevice])
+  }, [selectedAsset, selectedDevice])
 
   const timelineBounds = useMemo(() => {
     const end = endOfLocalDay(timelineDate)
@@ -1106,9 +1159,52 @@ export default function MapPage() {
   }), [deviceById, feedFilter, nowMs, providerFilter, timeFilterMinutes, timelineSourcePositions])
 
   const displayPositions = useMemo<DisplayPosition[]>(() => {
-    if (groupingMode === 'all') return visiblePositions
-    return groupPositionsByAsset(visiblePositions, Number(groupingRangeMeters), deviceById)
-  }, [deviceById, groupingMode, groupingRangeMeters, visiblePositions])
+    if (mapMode === 'trackers') return visiblePositions
+    return groupPositionsByAsset(visiblePositions, deviceById)
+  }, [deviceById, mapMode, visiblePositions])
+
+  const separationAlerts = useMemo<SeparationAlert[]>(() => {
+    const alerts: SeparationAlert[] = []
+    const grouped = new Map<string, Observation[]>()
+    for (const position of visiblePositions) {
+      const device = deviceById.get(position.deviceId)
+      const assetId = position.assetId ?? device?.assetId
+      if (!assetId) continue
+      grouped.set(assetId, [...(grouped.get(assetId) ?? []), position])
+    }
+
+    for (const [assetId, items] of grouped) {
+      const active = items
+        .filter((position) => observationAgeMs(position, nowMs) <= liveMinutes * 60 * 1000)
+        .sort((a, b) => positionTimeMs(b) - positionTimeMs(a))
+      if (active.length < 2) continue
+
+      let largest: SeparationAlert | null = null
+      for (let i = 0; i < active.length; i += 1) {
+        for (let j = i + 1; j < active.length; j += 1) {
+          const first = active[i]
+          const second = active[j]
+          const firstAccuracy = displayAccuracyMeters(first, deviceById.get(first.deviceId)) ?? 0
+          const secondAccuracy = displayAccuracyMeters(second, deviceById.get(second.deviceId)) ?? 0
+          const threshold = Math.max(Number(separationRangeMeters), firstAccuracy + secondAccuracy)
+          const distance = distanceMeters(first, second)
+          if (distance <= threshold) continue
+          const alert = {
+            assetId,
+            assetName: first.assetName ?? second.assetName ?? deviceById.get(first.deviceId)?.assetName ?? 'Tracked asset',
+            distanceMeters: distance,
+            thresholdMeters: threshold,
+            primary: first,
+            secondary: second,
+          }
+          if (!largest || alert.distanceMeters > largest.distanceMeters) largest = alert
+        }
+      }
+      if (largest) alerts.push(largest)
+    }
+
+    return alerts.sort((a, b) => b.distanceMeters - a.distanceMeters)
+  }, [deviceById, liveMinutes, nowMs, separationRangeMeters, visiblePositions])
 
   const timelinePaths = useMemo(() => {
     if (!showTimeline || timeline === null || timelineCursorMs === null) return []
@@ -1166,6 +1262,12 @@ export default function MapPage() {
   }, [displayPositions, geofences])
 
   const selectedCenter = useMemo<[number, number] | null>(() => {
+    if (selectedNode?.type === 'asset') {
+      const visibleSelected = displayPositions.find((position) =>
+        position.assetId === selectedNode.assetId ||
+        position.groupedTrackers?.some((tracker) => tracker.assetId === selectedNode.assetId))
+      return visibleSelected ? [visibleSelected.latitude, visibleSelected.longitude] : null
+    }
     if (selectedNode?.type === 'device') {
       const visibleSelected = displayPositions.find((position) =>
         position.deviceId === selectedNode.deviceId ||
@@ -1178,6 +1280,7 @@ export default function MapPage() {
     return null
   }, [deviceSummary, displayPositions, selectedNode])
   const selectedFocusKey = useMemo(() => {
+    if (selectedNode?.type === 'asset') return `asset:${selectedNode.assetId}`
     if (selectedNode?.type === 'device') return `device:${selectedNode.deviceId}`
     if (selectedNode?.type === 'geofence') return `geofence:${selectedNode.geofenceId}`
     if (selectedDeviceId !== null) return `device:${selectedDeviceId}`
@@ -1186,6 +1289,16 @@ export default function MapPage() {
 
   const mapTheme = useMemo(() => getBaseLayer(baseLayer, effectiveColorMode, themeStyle), [baseLayer, effectiveColorMode, themeStyle])
   const selectedGeofence = selectedNode?.type === 'geofence' ? geofences.find((item) => item.id === selectedNode.geofenceId) : null
+  const selectedAssetPositions = useMemo(() => {
+    if (!selectedAsset) return []
+    return positions
+      .filter((position) => position.assetId === selectedAsset.id || deviceById.get(position.deviceId)?.assetId === selectedAsset.id)
+      .sort((a, b) => positionTimeMs(b) - positionTimeMs(a))
+  }, [deviceById, positions, selectedAsset])
+  const selectedAssetSeparationAlerts = useMemo(
+    () => selectedAsset ? separationAlerts.filter((alert) => alert.assetId === selectedAsset.id) : [],
+    [selectedAsset, separationAlerts],
+  )
   const mapInitialCenter = useMemo<[number, number]>(
     () => mapViewport ? [mapViewport.lat, mapViewport.lng] : mapCenter,
     // MapContainer only consumes this on initial mount.
@@ -1229,6 +1342,10 @@ export default function MapPage() {
 
         <div className="map-panel" data-testid="map-layers-panel">
           <h2>Layers</h2>
+          <div className="segmented-control" aria-label="Map mode">
+            <button className={mapMode === 'assets' ? 'active' : ''} onClick={() => setMapMode('assets')} type="button">Assets</button>
+            <button className={mapMode === 'trackers' ? 'active' : ''} onClick={() => setMapMode('trackers')} type="button">Trackers</button>
+          </div>
           <label className="field">
             <span>Base map</span>
             <select value={baseLayer} onChange={(event) => setBaseLayer(event.target.value as MapBaseLayer)}>
@@ -1264,23 +1381,27 @@ export default function MapPage() {
               ))}
             </select>
           </label>
-          <label className="field">
-            <span>Tracker grouping</span>
-            <select value={groupingMode} onChange={(event) => setGroupingMode(event.target.value as TrackerGroupingMode)}>
-              <option value="all">Show all trackers</option>
-              <option value="entity">Group by asset</option>
-            </select>
-          </label>
-          {groupingMode === 'entity' && (
-            <label className="field">
-              <span>Grouping range</span>
-              <select value={groupingRangeMeters} onChange={(event) => setGroupingRangeMeters(event.target.value as TrackerGroupingRangeMeters)}>
-                {groupingRangeOptions.map((option) => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
-                ))}
-              </select>
-            </label>
-          )}
+          <details>
+            <summary>Advanced map preferences</summary>
+            <div className="field-grid compact-field-grid">
+              <label className="field">
+                <span>Live through minutes</span>
+                <input min={1} onChange={(event) => setLiveMinutes(Math.max(1, Number(event.target.value) || 15))} type="number" value={liveMinutes} />
+              </label>
+              <label className="field">
+                <span>Idle through minutes</span>
+                <input min={liveMinutes} onChange={(event) => setIdleMinutes(Math.max(liveMinutes, Number(event.target.value) || 60))} type="number" value={idleMinutes} />
+              </label>
+              <label className="field">
+                <span>Tracker separation</span>
+                <select value={separationRangeMeters} onChange={(event) => setSeparationRangeMeters(event.target.value as SeparationRangeMeters)}>
+                  {separationRangeOptions.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          </details>
           <div className="layer-toggle-list">
             <label className="check-field">
               <input checked={showDevices} onChange={(event) => setShowDevices(event.target.checked)} type="checkbox" />
@@ -1304,13 +1425,23 @@ export default function MapPage() {
             </label>
           </div>
           <div className="asset-meta-row">
-            <span>Visible signals</span>
+            <span>{mapMode === 'assets' ? 'Visible assets' : 'Visible trackers'}</span>
             <strong>{displayPositions.length}</strong>
           </div>
-          {groupingMode === 'entity' && (
+          {mapMode === 'assets' && (
             <div className="asset-meta-row">
-              <span>Grouped trackers</span>
+              <span>Hidden trackers</span>
               <strong>{groupedTrackerHiddenCount}</strong>
+            </div>
+          )}
+          {separationAlerts.length > 0 && (
+            <div className="notice notice-warning map-alert-list">
+              <strong>Tracker separation</strong>
+              {separationAlerts.slice(0, 2).map((alert) => (
+                <span key={`${alert.assetId}-${alert.primary.deviceId}-${alert.secondary.deviceId}`}>
+                  {alert.assetName}: {Math.round(alert.distanceMeters)} m apart
+                </span>
+              ))}
             </div>
           )}
           {timeFilterMinutes !== 'all' && (
@@ -1532,7 +1663,11 @@ export default function MapPage() {
             {showDevices && (
               <DeviceMarkerLayer
                 deviceById={deviceById}
+                idleMinutes={idleMinutes}
+                liveMinutes={liveMinutes}
+                nowMs={nowMs}
                 positions={displayPositions}
+                selectAssetNode={selectAssetNode}
                 selectDeviceNode={selectDeviceNode}
               />
             )}
@@ -1560,7 +1695,7 @@ export default function MapPage() {
       <aside className="map-detail-panel" aria-label="Selected node details" data-testid="map-node-detail-panel">
         <div className="map-sidebar-header">
           <div>
-            <h1>{selectedNode === null ? 'Node details' : selectedNode.type === 'device' ? 'Tracker node' : 'Geofence node'}</h1>
+            <h1>{selectedNode === null ? 'Details' : selectedNode.type === 'asset' ? 'Asset' : selectedNode.type === 'device' ? 'Tracker' : 'Geofence'}</h1>
             <span className="muted">{selectedNode === null ? 'Select a map marker or geofence' : nodeLoading ? 'Loading details...' : 'Inspection and actions'}</span>
           </div>
           {selectedNode !== null && (
@@ -1571,7 +1706,7 @@ export default function MapPage() {
         {selectedNode === null && (
           <div className="map-panel">
             <h2>Ready</h2>
-            <p className="muted">Click a tracker marker to inspect its signal, assign it to an asset, create a tracked asset, and review recent observation and geofence logs.</p>
+            <p className="muted">Click an asset marker to see its trackers and recent signals. Switch to Trackers for individual device inspection and assignment.</p>
             <p className="muted">Click a geofence to review configuration and breach history.</p>
           </div>
         )}
@@ -1581,6 +1716,64 @@ export default function MapPage() {
             <strong>Action failed</strong>
             <span>{nodeError}</span>
           </div>
+        )}
+
+        {selectedNode?.type === 'asset' && selectedAsset && (
+          <>
+            <div className="map-panel">
+              <h2>{selectedAsset.name}</h2>
+              <p className="muted">{selectedAsset.description ?? 'No description provided.'}</p>
+              <div className="asset-meta">
+                <div className="asset-meta-row"><span>Trackers</span><strong>{selectedAssetPositions.length}</strong></div>
+                <div className="asset-meta-row"><span>Shown on map</span><strong>{selectedNode.observation.deviceIdentifier}</strong></div>
+                <div className="asset-meta-row"><span>Last signal</span><strong>{formatRelativeTime(selectedNode.observation.observedAt, selectedNode.observation.receivedAt)}</strong></div>
+                <div className="asset-meta-row"><span>Freshness</span><strong>{freshnessLabel(getFreshnessState(selectedNode.observation, nowMs, liveMinutes, idleMinutes))}</strong></div>
+              </div>
+            </div>
+
+            {selectedAssetSeparationAlerts.length > 0 && (
+              <div className="notice notice-warning">
+                <strong>Tracker separation</strong>
+                {selectedAssetSeparationAlerts.map((alert) => (
+                  <span key={`${alert.primary.deviceId}-${alert.secondary.deviceId}`}>
+                    {Math.round(alert.distanceMeters)} m apart, threshold {Math.round(alert.thresholdMeters)} m
+                  </span>
+                ))}
+              </div>
+            )}
+
+            <div className="map-panel">
+              <h2>Trackers</h2>
+              <div className="node-log-list">
+                {selectedAssetPositions.map((position) => {
+                  const device = deviceById.get(position.deviceId)
+                  const state = getFreshnessState(position, nowMs, liveMinutes, idleMinutes)
+                  return (
+                    <button className="node-log-row node-log-button" key={position.deviceId} onClick={() => void selectDeviceNode(position)} type="button">
+                      <strong>{providerDisplayName(device, position.deviceIdentifier)}</strong>
+                      <span>{freshnessLabel(state)} · {formatRelativeTime(position.observedAt, position.receivedAt)}</span>
+                      <span className="muted">{position.latitude.toFixed(5)}, {position.longitude.toFixed(5)}</span>
+                    </button>
+                  )
+                })}
+                {selectedAssetPositions.length === 0 && <span className="muted">No tracker signals loaded.</span>}
+              </div>
+            </div>
+
+            <div className="map-panel">
+              <h2>Observation log</h2>
+              <div className="node-log-list">
+                {nodeHistory.map((item) => (
+                  <div className="node-log-row" key={item.id}>
+                    <strong>{item.deviceIdentifier}</strong>
+                    <span>{formatRelativeTime(item.observedAt, item.receivedAt)} · {item.latitude.toFixed(5)}, {item.longitude.toFixed(5)}</span>
+                    <span className="muted">{item.speedKmh != null ? `${item.speedKmh.toFixed(1)} km/h` : 'Speed N/A'}</span>
+                  </div>
+                ))}
+                {nodeHistory.length === 0 && <span className="muted">No observations loaded.</span>}
+              </div>
+            </div>
+          </>
         )}
 
         {selectedNode?.type === 'device' && selectedDevice && (

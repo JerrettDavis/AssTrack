@@ -4,7 +4,7 @@ This audit tracks the product areas AssTrack should cover as it grows from a loc
 
 ## Current Foundation
 
-- Live map with latest positions, clustering, focus behavior, timeline scrubber, range circles, and map query-string state.
+- Live map with asset/tracker modes, latest asset positions, tracker freshness states, clustering, focus behavior, timeline scrubber, range circles, and map query-string state.
 - Manual asset and device inventory, device-to-asset linking, and provider-enriched Meshtastic node profiles.
 - Geofences, speed alerts, observation history, bridge delivery logs, MQTT visualization, and messaging threads.
 - Integration feed configuration with normalized location ingest and a pluggable bridge gateway.
