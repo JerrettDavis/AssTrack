@@ -993,6 +993,83 @@ p {
   z-index: 2;
 }
 
+.live-update-stream {
+  position: sticky;
+  bottom: 0;
+  display: grid;
+  gap: 0;
+  margin-top: auto;
+  border-top: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface-solid) 96%, transparent);
+  box-shadow: 0 -10px 26px color-mix(in srgb, #000 10%, transparent);
+  backdrop-filter: blur(10px);
+}
+
+.live-update-stream-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.7rem;
+  width: 100%;
+  border: 0;
+  color: var(--text);
+  background: transparent;
+  padding: 0.8rem 1rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.live-update-stream-header span:first-child {
+  display: grid;
+  gap: 0.18rem;
+}
+
+.live-update-stream-header strong {
+  font-size: 0.9rem;
+}
+
+.live-update-stream-header small,
+.live-update-stream-header span:last-child {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.live-update-stream-list {
+  display: grid;
+  gap: 0.45rem;
+  max-height: 230px;
+  overflow-y: auto;
+  padding: 0 1rem 1rem;
+}
+
+.live-update-stream.collapsed .live-update-stream-header {
+  padding-bottom: 0.8rem;
+}
+
+.live-update-row {
+  display: grid;
+  gap: 0.18rem;
+  width: 100%;
+  padding: 0.58rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  background: var(--surface-muted);
+  text-align: left;
+  cursor: pointer;
+}
+
+.live-update-row:hover {
+  background: var(--surface-pressed);
+}
+
+.live-update-row strong,
+.live-update-row span {
+  overflow-wrap: anywhere;
+}
+
 .map-sidebar-header,
 .map-panel {
   padding: 1rem;
@@ -1078,6 +1155,11 @@ p {
   font-size: 0.82rem;
   font-weight: 850;
   line-height: 1;
+}
+
+.device-cluster-marker.pulse,
+.device-marker.pulse {
+  animation: marker-ping 1.2s ease-out 3;
 }
 
 .device-cluster-marker span {
@@ -1186,6 +1268,23 @@ p {
 
 .device-marker.offline {
   background: var(--text-muted);
+}
+
+@keyframes marker-ping {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--success) 62%, transparent), 0 4px 12px rgba(32, 33, 36, 0.35);
+    transform: scale(1);
+  }
+
+  45% {
+    box-shadow: 0 0 0 10px color-mix(in srgb, var(--success) 22%, transparent), 0 8px 18px rgba(32, 33, 36, 0.28);
+    transform: scale(1.18);
+  }
+
+  100% {
+    box-shadow: 0 0 0 18px color-mix(in srgb, var(--success) 0%, transparent), 0 4px 12px rgba(32, 33, 36, 0.35);
+    transform: scale(1);
+  }
 }
 
 .map-alert-list {

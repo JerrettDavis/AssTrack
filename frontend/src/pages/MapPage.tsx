@@ -97,10 +97,10 @@ function formatTimelineLabel(value: number): string {
   })
 }
 
-function makeMarkerIcon(freshnessClass: string, provider?: string | null) {
+function makeMarkerIcon(freshnessClass: string, provider?: string | null, pulse = false) {
   const providerClass = provider ? ` provider-${provider.replace(/[^a-z0-9-]/gi, '-').toLowerCase()}` : ''
   return L.divIcon({
-    className: `device-marker ${freshnessClass}${providerClass}`,
+    className: `device-marker ${freshnessClass}${providerClass}${pulse ? ' pulse' : ''}`,
     html: '',
     iconSize: [20, 20],
     iconAnchor: [10, 10],
@@ -108,10 +108,10 @@ function makeMarkerIcon(freshnessClass: string, provider?: string | null) {
   })
 }
 
-function makeClusterIcon(count: number) {
+function makeClusterIcon(count: number, pulse = false) {
   const size = count >= 100 ? 48 : count >= 10 ? 42 : 36
   return L.divIcon({
-    className: 'device-cluster-marker',
+    className: `device-cluster-marker${pulse ? ' pulse' : ''}`,
     html: `<span>${count}</span>`,
     iconSize: [size, size],
     iconAnchor: [size / 2, size / 2],
@@ -193,7 +193,7 @@ function displayAccuracyMeters(position: Observation, device?: Device | null): n
 }
 
 function formatRelativeTime(observedAt: string, receivedAt?: string | null): string {
-  const diffMs = Math.max(0, Date.now() - new Date(ageTimestamp(observedAt, receivedAt)).getTime())
+  const diffMs = Math.max(0, Date.now() - signalTimeMs({ observedAt, receivedAt }))
   const diffSec = Math.floor(diffMs / 1000)
   if (diffSec < 60) return `${diffSec}s ago`
   const diffMin = Math.floor(diffSec / 60)
@@ -203,11 +203,18 @@ function formatRelativeTime(observedAt: string, receivedAt?: string | null): str
   return `${Math.floor(diffHr / 24)}d ago`
 }
 
-function observationAgeMs(position: Pick<Observation, 'observedAt' | 'receivedAt'>, nowMs = Date.now()): number {
-  return Math.max(0, nowMs - new Date(ageTimestamp(position.observedAt, position.receivedAt)).getTime())
+function signalTimeMs(position: { observedAt: string; receivedAt?: string | null }, nowMs = Date.now()): number {
+  const observedMs = new Date(position.observedAt).getTime()
+  const receivedMs = position.receivedAt ? new Date(position.receivedAt).getTime() : NaN
+  const candidates = [observedMs, receivedMs].filter((value) => Number.isFinite(value) && value <= nowMs)
+  return candidates.length > 0 ? Math.max(...candidates) : nowMs
 }
 
-function getFreshnessState(position: Pick<Observation, 'observedAt' | 'receivedAt'>, nowMs: number, liveMinutes: number, idleMinutes: number): 'live' | 'idle' | 'offline' {
+function observationAgeMs(position: { observedAt: string; receivedAt?: string | null }, nowMs = Date.now()): number {
+  return Math.max(0, nowMs - signalTimeMs(position, nowMs))
+}
+
+function getFreshnessState(position: { observedAt: string; receivedAt?: string | null }, nowMs: number, liveMinutes: number, idleMinutes: number): 'live' | 'idle' | 'offline' {
   const ageMinutes = observationAgeMs(position, nowMs) / 60000
   if (ageMinutes <= liveMinutes) return 'live'
   if (ageMinutes <= idleMinutes) return 'idle'
@@ -290,6 +297,18 @@ type SeparationAlert = {
   thresholdMeters: number
   primary: Observation
   secondary: Observation
+}
+
+type LiveLocationUpdate = {
+  id: string
+  deviceId: string
+  deviceIdentifier: string
+  assetName?: string | null
+  observedAt: string
+  receivedAt: string
+  latitude: number
+  longitude: number
+  speedKmh?: number | null
 }
 
 type MarkerCluster = {
@@ -409,6 +428,7 @@ function DeviceMarkerLayer({
   liveMinutes,
   nowMs,
   positions,
+  recentPingByDeviceId,
   selectAssetNode,
   selectDeviceNode,
 }: {
@@ -417,6 +437,7 @@ function DeviceMarkerLayer({
   liveMinutes: number
   nowMs: number
   positions: DisplayPosition[]
+  recentPingByDeviceId: Map<string, number>
   selectAssetNode: (position: DisplayPosition) => void
   selectDeviceNode: (position: Observation) => void
 }) {
@@ -452,10 +473,11 @@ function DeviceMarkerLayer({
     <>
       {clusters.map((cluster) => {
         if (cluster.positions.length > 1) {
+          const clusterPulse = cluster.positions.some((position) => (recentPingByDeviceId.get(position.deviceId) ?? 0) > nowMs - 6500)
           return (
             <Marker
               eventHandlers={{ click: () => zoomIntoCluster(cluster) }}
-              icon={makeClusterIcon(cluster.positions.length)}
+              icon={makeClusterIcon(cluster.positions.length, clusterPulse)}
               key={`cluster-${cluster.id}`}
               position={cluster.center}
             />
@@ -465,13 +487,14 @@ function DeviceMarkerLayer({
         const position = cluster.positions[0]
         const device = deviceById.get(position.deviceId)
         const freshnessClass = getFreshnessState(position, nowMs, liveMinutes, idleMinutes)
+        const pulse = (recentPingByDeviceId.get(position.deviceId) ?? 0) > nowMs - 6500
         const onClick = position.displayMode === 'assets' && position.assetId
           ? () => void selectAssetNode(position)
           : () => void selectDeviceNode(position)
         return (
           <Marker
             eventHandlers={{ click: onClick }}
-            icon={makeMarkerIcon(freshnessClass, device?.provider)}
+            icon={makeMarkerIcon(freshnessClass, device?.provider, pulse)}
             key={position.id}
             position={[position.latitude, position.longitude]}
           >
@@ -781,6 +804,9 @@ export default function MapPage() {
   const [attachAssetId, setAttachAssetId] = useState('')
   const [newAssetName, setNewAssetName] = useState('')
   const [nodeSubmitting, setNodeSubmitting] = useState(false)
+  const [recentPingByDeviceId, setRecentPingByDeviceId] = useState<Map<string, number>>(() => new Map())
+  const [liveLocationUpdates, setLiveLocationUpdates] = useState<LiveLocationUpdate[]>([])
+  const [liveUpdateStreamCollapsed, setLiveUpdateStreamCollapsed] = useState(false)
   const pollRef = useRef<number | null>(null)
   const restoredSelectionRef = useRef(false)
   const timelineDateUserSetRef = useRef(searchParams.has('timelineDate'))
@@ -833,7 +859,7 @@ export default function MapPage() {
   }, [])
 
   useEffect(() => {
-    const timer = window.setInterval(() => setNowMs(Date.now()), 30000)
+    const timer = window.setInterval(() => setNowMs(Date.now()), 1000)
     return () => window.clearInterval(timer)
   }, [])
 
@@ -936,6 +962,8 @@ export default function MapPage() {
   useLiveEvents((type, data) => {
     if (type === 'observation') {
       const obs = data as ObservationEvent
+      const receivedAt = new Date().toISOString()
+      const now = Date.now()
       setPositions(prev => {
         const idx = prev.findIndex(p => p.deviceId === obs.deviceId)
         const existing = idx >= 0 ? prev[idx] : undefined
@@ -947,20 +975,43 @@ export default function MapPage() {
           longitude: obs.longitude,
           speedKmh: obs.speedKmh ?? undefined,
           observedAt: obs.observedAt,
-          receivedAt: new Date().toISOString(),
+          receivedAt,
           assetName: existing?.assetName,
           deviceIdentifier: existing?.deviceIdentifier ?? obs.deviceId,
         }
         if (idx >= 0) {
           const current = existing!
-          if (new Date(ageTimestamp(newPos.observedAt, newPos.receivedAt)) <= new Date(ageTimestamp(current.observedAt, current.receivedAt))) return prev
+          if (signalTimeMs(newPos, now) <= signalTimeMs(current, now)) return prev
           const updated = [...prev]
           updated[idx] = { ...current, ...newPos }
           return updated
         }
         return [...prev, newPos]
       })
-      setNowMs(Date.now())
+      setRecentPingByDeviceId((current) => {
+        const next = new Map(current)
+        next.set(obs.deviceId, now)
+        for (const [deviceId, pingMs] of next) {
+          if (pingMs < now - 30000) next.delete(deviceId)
+        }
+        return next
+      })
+      setLiveLocationUpdates((current) => {
+        const existing = positions.find((position) => position.deviceId === obs.deviceId)
+        const nextUpdate: LiveLocationUpdate = {
+          id: obs.id,
+          deviceId: obs.deviceId,
+          deviceIdentifier: existing?.deviceIdentifier ?? obs.deviceId,
+          assetName: existing?.assetName,
+          observedAt: obs.observedAt,
+          receivedAt,
+          latitude: obs.latitude,
+          longitude: obs.longitude,
+          speedKmh: obs.speedKmh,
+        }
+        return [nextUpdate, ...current.filter((item) => item.id !== obs.id)].slice(0, 40)
+      })
+      setNowMs(now)
       setLastUpdated(new Date().toLocaleTimeString())
       if (obs.deviceId === selectedDeviceId) {
         void loadTrailAndSummary(obs.deviceId, trailLength)
@@ -1760,6 +1811,7 @@ export default function MapPage() {
                 liveMinutes={liveMinutes}
                 nowMs={nowMs}
                 positions={displayPositions}
+                recentPingByDeviceId={recentPingByDeviceId}
                 selectAssetNode={selectAssetNode}
                 selectDeviceNode={selectDeviceNode}
               />
@@ -1990,6 +2042,37 @@ export default function MapPage() {
             </div>
           </>
         )}
+
+        <div className={`live-update-stream${liveUpdateStreamCollapsed ? ' collapsed' : ''}`} aria-label="Live location updates">
+          <button className="live-update-stream-header" onClick={() => setLiveUpdateStreamCollapsed((value) => !value)} type="button">
+            <span>
+              <strong>Location updates</strong>
+              <small>{liveLocationUpdates.length === 0 ? 'Waiting for signals' : `${liveLocationUpdates.length} recent`}</small>
+            </span>
+            <span aria-hidden="true">{liveUpdateStreamCollapsed ? 'Expand' : 'Collapse'}</span>
+          </button>
+          {!liveUpdateStreamCollapsed && (
+            <div className="live-update-stream-list">
+              {liveLocationUpdates.map((update) => (
+                <button
+                  className="live-update-row"
+                  key={update.id}
+                  onClick={() => {
+                    const position = positions.find((item) => item.deviceId === update.deviceId)
+                    if (position) void selectDeviceNode(position)
+                    else handleDeviceSelect(update.deviceId)
+                  }}
+                  type="button"
+                >
+                  <strong>{update.assetName ?? update.deviceIdentifier}</strong>
+                  <span>{formatRelativeTime(update.observedAt, update.receivedAt)} · {update.latitude.toFixed(5)}, {update.longitude.toFixed(5)}</span>
+                  <span className="muted">{update.speedKmh != null ? `${update.speedKmh.toFixed(1)} km/h` : 'Position ping'}</span>
+                </button>
+              ))}
+              {liveLocationUpdates.length === 0 && <span className="muted">New bridge and API observations will appear here.</span>}
+            </div>
+          )}
+        </div>
       </aside>
     </div>
   )
