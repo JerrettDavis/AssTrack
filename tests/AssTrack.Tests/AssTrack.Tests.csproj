@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -26,6 +26,7 @@
     <ProjectReference Include="..\..\src\AssTrack.Infrastructure\AssTrack.Infrastructure.csproj" />
     <ProjectReference Include="..\..\src\AssTrack.Api\AssTrack.Api.csproj" />
     <ProjectReference Include="..\..\src\AssTrack.BridgeGateway\AssTrack.BridgeGateway.csproj" />
+    <ProjectReference Include="..\..\src\AssTrack.MessageBridge.Worker\AssTrack.MessageBridge.Worker.csproj" />
   </ItemGroup>
 
 </Project>

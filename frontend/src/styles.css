@@ -336,6 +336,7 @@ p {
 .section {
   display: grid;
   gap: 1.15rem;
+  min-width: 0;
 }
 
 .ops-page {
@@ -383,9 +384,11 @@ p {
 
 .compact-segmented {
   width: auto;
+  margin-top: 0;
 }
 
 .compact-segmented button {
+  min-width: 84px;
   min-height: 32px;
   padding: 0.36rem 0.58rem;
   font-size: 0.78rem;
@@ -431,7 +434,7 @@ p {
 
 .control-bar .compact-actions {
   justify-content: flex-end;
-  min-width: max-content;
+  min-width: 0;
   align-self: center;
 }
 
@@ -495,6 +498,7 @@ p {
 .operations-panel {
   display: grid;
   gap: 0.8rem;
+  min-width: 0;
 }
 
 .page-band {
@@ -2741,6 +2745,22 @@ summary {
   .button-primary:active,
   .button-secondary:active {
     transform: translateY(1px);
+  }
+}
+
+@media (max-width: 1500px) {
+  .layout .control-bar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .layout .control-bar .compact-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+    width: 100%;
+  }
+
+  .layout .control-bar .control-bar-result {
+    flex-basis: 100%;
   }
 }
 

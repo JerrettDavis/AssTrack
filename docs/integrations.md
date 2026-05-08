@@ -163,6 +163,9 @@ Gateway endpoints:
 | `GET` | `/bridge/providers` | List loaded adapters and aliases. |
 | `GET` | `/bridge/feeds` | List configured feed keys with secrets redacted. |
 | `POST` | `/bridge/{feedKey}` | Accept a provider-native payload for a configured feed. |
+| `GET` | `/bridge/{feedKey}/messages/outbound` | Let a provider worker fetch queued outbound AssTrack messages. |
+| `POST` | `/bridge/{feedKey}/messages/inbound` | Let a provider worker hand inbound messages into AssTrack threads. |
+| `POST` | `/bridge/{feedKey}/messages/{messageId}/status` | Let a provider worker mark outbound messages sent, delivered, or failed. |
 
 Bridge authentication:
 
@@ -226,6 +229,46 @@ curl -X POST http://localhost:5056/bridge/generic \
   -H "X-Bridge-Secret: change-me" \
   -d '{"externalTrackerId":"demo-1","observedAt":"2026-05-06T01:30:00Z","latitude":41.8781,"longitude":-87.6298}'
 ```
+
+### Messaging Workers
+
+The repo includes provider worker executables for messaging bridges:
+
+| Project | Provider API | Purpose |
+|---|---|---|
+| `src/AssTrack.SignalWorker` | `signal-cli-rest-api` | Polls Signal receive/send APIs and bridges contact or group messages. |
+| `src/AssTrack.TelegramWorker` | Telegram Bot API | Polls bot updates, sends queued replies, and tracks update offsets. |
+
+Both workers use the same bridge handoff contract:
+
+```text
+Provider API -> worker -> POST /bridge/{feedKey}/messages/inbound
+AssTrack thread -> GET /bridge/{feedKey}/messages/outbound -> worker -> Provider API
+Provider send result -> POST /bridge/{feedKey}/messages/{messageId}/status
+```
+
+Signal local run:
+
+```powershell
+dotnet run --project src\AssTrack.SignalWorker\AssTrack.SignalWorker.csproj -- `
+  --BridgeWorker:BridgeBaseUrl http://localhost:5056 `
+  --BridgeWorker:FeedKey signal-local `
+  --BridgeWorker:SharedSecret bridge-secret `
+  --SignalWorker:SignalBaseUrl http://localhost:8080 `
+  --SignalWorker:Account +15551234567
+```
+
+Telegram local run:
+
+```powershell
+dotnet run --project src\AssTrack.TelegramWorker\AssTrack.TelegramWorker.csproj -- `
+  --BridgeWorker:BridgeBaseUrl http://localhost:5056 `
+  --BridgeWorker:FeedKey telegram-local `
+  --BridgeWorker:SharedSecret bridge-secret `
+  --TelegramWorker:BotToken 123456:bot-token
+```
+
+Create matching `signal` or `telegram` feeds in `/integrations`, copy the bridge key/shared secret into the worker configuration, and keep provider tokens out of source-controlled settings files.
 
 ### Generic Webhook
 

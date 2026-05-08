@@ -678,6 +678,27 @@ Useful AppHost overrides:
 | `ASSTRACK_CONNECTION_STRING` | SQLite connection string for local API storage | `Data Source=<repo>\asstrack-dev.db` |
 The frontend still loads `/config.json` in hosted/containerized deployments. Under the Vite dev server, the AppHost also supplies `VITE_DEV_API_KEY` so the local UI can call the API without a separate config file.
 
+### Messaging bridge workers
+
+Signal and Telegram run as separate worker executables so provider credentials and long-running polling stay outside the API process.
+
+```powershell
+dotnet run --project src\AssTrack.SignalWorker\AssTrack.SignalWorker.csproj -- `
+  --BridgeWorker:BridgeBaseUrl http://localhost:5056 `
+  --BridgeWorker:FeedKey signal-local `
+  --BridgeWorker:SharedSecret bridge-secret `
+  --SignalWorker:SignalBaseUrl http://localhost:8080 `
+  --SignalWorker:Account +15551234567
+
+dotnet run --project src\AssTrack.TelegramWorker\AssTrack.TelegramWorker.csproj -- `
+  --BridgeWorker:BridgeBaseUrl http://localhost:5056 `
+  --BridgeWorker:FeedKey telegram-local `
+  --BridgeWorker:SharedSecret bridge-secret `
+  --TelegramWorker:BotToken 123456:bot-token
+```
+
+Create the matching feed and shared secret in `/integrations`; the workers use the bridge gateway message handoff endpoints for inbound messages, outbound queues, and delivery status updates.
+
 ### Integrated production publish
 
 The API project can publish a production-ready single-origin app with the built SPA under `wwwroot`. The publish target runs `npm ci` and `npm run build` automatically.
