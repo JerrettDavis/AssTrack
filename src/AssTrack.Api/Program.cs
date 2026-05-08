@@ -27,6 +27,7 @@ builder.Services.AddScoped<SpeedAlertRepository>();
 builder.Services.AddScoped<GeofenceBreachRepository>();
 builder.Services.AddScoped<IntegrationFeedRepository>();
 builder.Services.AddScoped<MessageRepository>();
+builder.Services.AddScoped<AlertRoutingRuleRepository>();
 builder.Services.AddScoped<SensorReadingRepository>();
 builder.Services.AddScoped<MaintenanceScheduleRepository>();
 builder.Services.AddScoped<CustodyRepository>();
@@ -97,6 +98,7 @@ builder.Services.AddSingleton(webhookRetryChannel.Writer);
 builder.Services.AddHttpClient<IWebhookNotificationService, WebhookNotificationService>();
 builder.Services.AddHostedService<WebhookRetryWorker>();
 builder.Services.AddScoped<IObservationIngestService, ObservationIngestService>();
+builder.Services.AddScoped<IAlertRoutingService, AlertRoutingService>();
 builder.Services.Configure<SimulationOptions>(builder.Configuration.GetSection(SimulationOptions.SectionName));
 builder.Services.AddScoped<ISimulationService, SimulationService>();
 builder.Services.AddScoped<ISeedService, SeedService>();
@@ -111,7 +113,7 @@ var app = builder.Build();
     {
         var isDevOrTesting = app.Environment.IsDevelopment() ||
             string.Equals(app.Environment.EnvironmentName, "Testing", StringComparison.OrdinalIgnoreCase);
-        
+
         if (!isDevOrTesting)
         {
             throw new InvalidOperationException(
@@ -210,6 +212,7 @@ api.MapSseTokenEndpoints();
 api.MapAuthEndpoints();
 api.MapIntegrationEndpoints();
 api.MapMessageEndpoints();
+api.MapAlertRoutingEndpoints();
 api.MapSensorEndpoints();
 api.MapMaintenanceEndpoints();
 api.MapCustodyEndpoints();
@@ -262,4 +265,3 @@ static Task WriteHealthCheckResponse(HttpContext ctx, HealthReport report)
 }
 
 public partial class Program;
-

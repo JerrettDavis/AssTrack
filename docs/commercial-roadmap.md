@@ -7,6 +7,7 @@ This audit tracks the product areas AssTrack should cover as it grows from a loc
 - Live map with asset/tracker modes, latest asset positions, tracker freshness states, clustering, focus behavior, timeline scrubber, range circles, and map query-string state.
 - Manual asset and device inventory, device-to-asset linking, and provider-enriched Meshtastic node profiles.
 - Geofences, speed alerts, observation history, bridge delivery logs, MQTT visualization, and messaging threads.
+- Alert routing rules that queue speed and geofence alerts into provider-backed message threads.
 - Integration feed configuration with normalized location ingest and a pluggable bridge gateway.
 - Asset classes and criticality for people, vehicles, property, pets, equipment, containers, and other assets.
 - Generic sensor readings attached to assets, devices, and integration feeds.
@@ -35,8 +36,8 @@ This audit tracks the product areas AssTrack should cover as it grows from a loc
 
 ## Next Iterations
 
-1. Alert routing: add escalation rules that send alerts through message providers, SMS, email, and webhooks.
-2. Messaging providers: implement Signal and Telegram bridge adapters against the existing message-thread API.
+1. Messaging providers: implement Signal and Telegram bridge adapters against the existing message-thread API.
+2. Alert escalation policies: add retry windows, acknowledgement deadlines, recipient schedules, SMS/email providers, and per-asset routing filters.
 3. Reports: add daily/weekly utilization, dwell time, geofence visits, mileage, stop summaries, and sensor exceptions.
 4. Privacy: add per-asset retention, hidden zones, share links, and stricter handling for people/pet classes.
 5. Import/enrollment: provide controlled bulk enrollment for known devices without auto-creating unwanted assets.

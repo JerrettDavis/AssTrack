@@ -1,14 +1,28 @@
 import { useEffect, useRef, useState } from 'react'
-import { acknowledgeSpeedAlert, bulkAcknowledgeSpeedAlerts, getSpeedAlerts, type SpeedAlert } from '../api/alerts'
+import {
+  acknowledgeSpeedAlert,
+  bulkAcknowledgeSpeedAlerts,
+  createAlertRoute,
+  deleteAlertRoute,
+  getAlertRoutes,
+  getSpeedAlerts,
+  updateAlertRoute,
+  type AlertRoutingRule,
+  type AlertRoutingRuleRequest,
+  type SpeedAlert,
+} from '../api/alerts'
 import { acknowledgeBreach, bulkAcknowledgeBreaches, getGeofenceBreaches, type GeofenceBreach } from '../api/geofenceBreaches'
 import { useLiveEvents } from '../hooks/useLiveEvents'
 import AcknowledgeModal from '../components/AcknowledgeModal'
+import { getIntegrationFeeds, type IntegrationFeed } from '../api/integrations'
 
 type FilterTab = 'all' | 'unacknowledged'
 
 export default function AlertsPage() {
   const [alerts, setAlerts] = useState<SpeedAlert[]>([])
   const [breaches, setBreaches] = useState<GeofenceBreach[]>([])
+  const [routes, setRoutes] = useState<AlertRoutingRule[]>([])
+  const [feeds, setFeeds] = useState<IntegrationFeed[]>([])
   const [alertsTotal, setAlertsTotal] = useState(0)
   const [breachesTotal, setBreachesTotal] = useState(0)
   const [alertsPage, setAlertsPage] = useState(1)
@@ -21,19 +35,36 @@ export default function AlertsPage() {
   const [selectedSpeedAlerts, setSelectedSpeedAlerts] = useState<Set<string>>(new Set())
   const [selectedBreaches, setSelectedBreaches] = useState<Set<string>>(new Set())
   const [acknowledgeModal, setAcknowledgeModal] = useState<{ open: boolean; title: string; onConfirm: (name: string | undefined) => void } | null>(null)
+  const [routeForm, setRouteForm] = useState<AlertRoutingRuleRequest>({
+    name: '',
+    isEnabled: true,
+    eventType: 'all',
+    channel: 'direct',
+    provider: 'meshtastic',
+    integrationFeedId: null,
+    externalPeerId: '',
+    displayName: '',
+    recipient: '',
+    messageTemplate: '',
+  })
+  const [editingRouteId, setEditingRouteId] = useState<string | null>(null)
   const pollRef = useRef<number | null>(null)
 
   async function load() {
     try {
       setError(null)
-      const [speedAlerts, geofenceBreaches] = await Promise.all([
+      const [speedAlerts, geofenceBreaches, routeItems, feedItems] = await Promise.all([
         getSpeedAlerts({ unacknowledged: speedFilter === 'unacknowledged' || undefined, page: alertsPage, pageSize: 50 }),
         getGeofenceBreaches({ unacknowledged: breachFilter === 'unacknowledged' || undefined, page: breachesPage, pageSize: 50 }),
+        getAlertRoutes(),
+        getIntegrationFeeds(),
       ])
       setAlerts(speedAlerts.items)
       setAlertsTotal(speedAlerts.totalCount)
       setBreaches(geofenceBreaches.items)
       setBreachesTotal(geofenceBreaches.totalCount)
+      setRoutes(routeItems)
+      setFeeds(feedItems)
       setLastUpdated(new Date().toLocaleTimeString())
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e))
@@ -143,6 +174,57 @@ export default function AlertsPage() {
     setSelectedBreaches(newSet)
   }
 
+  async function saveRoute() {
+    try {
+      setError(null)
+      const payload = {
+        ...routeForm,
+        integrationFeedId: routeForm.integrationFeedId || null,
+        externalPeerId: routeForm.externalPeerId || null,
+        displayName: routeForm.displayName || null,
+        recipient: routeForm.recipient || null,
+        messageTemplate: routeForm.messageTemplate || null,
+      }
+      if (editingRouteId) {
+        await updateAlertRoute(editingRouteId, payload)
+      } else {
+        await createAlertRoute(payload)
+      }
+      setEditingRouteId(null)
+      setRouteForm({
+        name: '',
+        isEnabled: true,
+        eventType: 'all',
+        channel: 'direct',
+        provider: 'meshtastic',
+        integrationFeedId: null,
+        externalPeerId: '',
+        displayName: '',
+        recipient: '',
+        messageTemplate: '',
+      })
+      await load()
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }
+
+  function editRoute(route: AlertRoutingRule) {
+    setEditingRouteId(route.id)
+    setRouteForm({
+      name: route.name,
+      isEnabled: route.isEnabled,
+      eventType: route.eventType,
+      channel: route.channel,
+      provider: route.provider,
+      integrationFeedId: route.integrationFeedId ?? null,
+      externalPeerId: route.externalPeerId ?? '',
+      displayName: route.displayName ?? '',
+      recipient: route.recipient ?? '',
+      messageTemplate: route.messageTemplate ?? '',
+    })
+  }
+
   if (loading) return <div className="card">Loading alerts…</div>
   if (error) return <div className="card">Error: {error}</div>
 
@@ -159,6 +241,98 @@ export default function AlertsPage() {
         onConfirm={(name) => acknowledgeModal?.onConfirm(name)}
         onCancel={() => setAcknowledgeModal(null)}
       />
+
+      <div className="card">
+        <div className="page-header">
+          <div>
+            <h2>Alert Routing</h2>
+            <p className="muted">Queue alert messages to provider-backed threads for bridge delivery.</p>
+          </div>
+        </div>
+        <div className="compact-field-grid">
+          <label className="field">
+            <span>Name</span>
+            <input value={routeForm.name} onChange={(event) => setRouteForm({ ...routeForm, name: event.target.value })} placeholder="Dispatch channel" />
+          </label>
+          <label className="field">
+            <span>Event</span>
+            <select value={routeForm.eventType} onChange={(event) => setRouteForm({ ...routeForm, eventType: event.target.value as AlertRoutingRuleRequest['eventType'] })}>
+              <option value="all">All alerts</option>
+              <option value="speed_alert">Speed alerts</option>
+              <option value="geofence_breach">Geofence breaches</option>
+            </select>
+          </label>
+          <label className="field">
+            <span>Provider</span>
+            <input value={routeForm.provider} onChange={(event) => setRouteForm({ ...routeForm, provider: event.target.value })} />
+          </label>
+          <label className="field">
+            <span>Feed</span>
+            <select value={routeForm.integrationFeedId ?? ''} onChange={(event) => setRouteForm({ ...routeForm, integrationFeedId: event.target.value || null })}>
+              <option value="">No bridge feed</option>
+              {feeds.map((feed) => (
+                <option key={feed.id} value={feed.id}>{feed.name}</option>
+              ))}
+            </select>
+          </label>
+          <label className="field">
+            <span>Peer</span>
+            <input value={routeForm.externalPeerId ?? ''} onChange={(event) => setRouteForm({ ...routeForm, externalPeerId: event.target.value })} placeholder="Node, chat, phone, or email" />
+          </label>
+          <label className="field">
+            <span>Label</span>
+            <input value={routeForm.displayName ?? ''} onChange={(event) => setRouteForm({ ...routeForm, displayName: event.target.value })} placeholder="Dispatch" />
+          </label>
+        </div>
+        <label className="field">
+          <span>Message template</span>
+          <input value={routeForm.messageTemplate ?? ''} onChange={(event) => setRouteForm({ ...routeForm, messageTemplate: event.target.value })} placeholder="Optional, use {message} for the generated alert text" />
+        </label>
+        <div className="table-actions">
+          <label className="check-row">
+            <input type="checkbox" checked={routeForm.isEnabled} onChange={(event) => setRouteForm({ ...routeForm, isEnabled: event.target.checked })} />
+            Enabled
+          </label>
+          <div className="compact-actions">
+            {editingRouteId && (
+              <button className="button button-secondary" onClick={() => setEditingRouteId(null)} type="button">Cancel</button>
+            )}
+            <button className="button button-primary" onClick={() => void saveRoute()} type="button">{editingRouteId ? 'Update route' : 'Add route'}</button>
+          </div>
+        </div>
+        <div className="table-scroll">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Event</th>
+                <th>Target</th>
+                <th>Status</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {routes.map((route) => (
+                <tr key={route.id}>
+                  <td>{route.name}</td>
+                  <td>{route.eventType}</td>
+                  <td>{route.integrationFeedName ?? route.provider} {route.externalPeerId ? `· ${route.externalPeerId}` : ''}</td>
+                  <td>{route.isEnabled ? 'Enabled' : 'Paused'}</td>
+                  <td>
+                    <div className="compact-actions">
+                      <button className="button button-secondary" onClick={() => editRoute(route)} type="button">Edit</button>
+                      <button className="button button-secondary" onClick={() => void deleteAlertRoute(route.id).then(load)} type="button">Delete</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {routes.length === 0 && (
+                <tr><td className="muted" colSpan={5}>No alert routes configured.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
 
       <div className="card table-card">
         <div className="page-header">

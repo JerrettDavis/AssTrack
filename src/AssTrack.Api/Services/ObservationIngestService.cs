@@ -14,6 +14,7 @@ public sealed class ObservationIngestService(
     GeofenceBreachRepository geofenceBreachRepository,
     SpeedAlertRepository speedAlertRepository,
     IWebhookNotificationService webhookService,
+    IAlertRoutingService alertRoutingService,
     ILiveEventBroadcaster broadcaster) : IObservationIngestService
 {
     public async Task<IngestResult> IngestAsync(CreateObservationRequest request, CancellationToken cancellationToken = default)
@@ -107,6 +108,7 @@ public sealed class ObservationIngestService(
                 alert.Device = device;
                 alert.Asset = device.Asset;
                 await webhookService.NotifySpeedAlertAsync(alert, cancellationToken);
+                await alertRoutingService.RouteSpeedAlertAsync(alert, cancellationToken);
                 firedAlert = alert;
                 broadcaster.Publish(new LiveEvent(LiveEventType.SpeedAlert, new {
                     id = alert.Id,
@@ -144,6 +146,7 @@ public sealed class ObservationIngestService(
                 breach.Asset = device.Asset;
                 breach.Geofence = geofence;
                 await webhookService.NotifyGeofenceBreachAsync(breach, cancellationToken);
+                await alertRoutingService.RouteGeofenceBreachAsync(breach, cancellationToken);
                 firedBreaches.Add(breach);
                 broadcaster.Publish(new LiveEvent(LiveEventType.GeofenceBreach, new {
                     id = breach.Id,
@@ -170,6 +173,7 @@ public sealed class ObservationIngestService(
                 breach.Asset = device.Asset;
                 breach.Geofence = geofence;
                 await webhookService.NotifyGeofenceBreachAsync(breach, cancellationToken);
+                await alertRoutingService.RouteGeofenceBreachAsync(breach, cancellationToken);
                 firedBreaches.Add(breach);
                 broadcaster.Publish(new LiveEvent(LiveEventType.GeofenceBreach, new {
                     id = breach.Id,

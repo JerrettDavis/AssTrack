@@ -1,4 +1,4 @@
-import { apiGet, apiPost } from './client'
+import { apiDelete, apiGet, apiPost, apiPut } from './client'
 import { PagedResult } from './types'
 
 export type SpeedAlert = {
@@ -49,4 +49,50 @@ export async function bulkAcknowledgeSpeedAlerts(ids: string[], acknowledgedBy?:
 
 export function getAlertSummary(): Promise<AlertSummary> {
   return apiGet<AlertSummary>('/api/alerts/summary')
+}
+
+export type AlertRoutingRule = {
+  id: string
+  name: string
+  isEnabled: boolean
+  eventType: 'all' | 'speed_alert' | 'geofence_breach'
+  channel: string
+  provider: string
+  integrationFeedId?: string | null
+  integrationFeedName?: string | null
+  externalPeerId?: string | null
+  displayName?: string | null
+  recipient?: string | null
+  messageTemplate?: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export type AlertRoutingRuleRequest = {
+  name: string
+  isEnabled: boolean
+  eventType: 'all' | 'speed_alert' | 'geofence_breach'
+  channel: string
+  provider: string
+  integrationFeedId?: string | null
+  externalPeerId?: string | null
+  displayName?: string | null
+  recipient?: string | null
+  messageTemplate?: string | null
+}
+
+export function getAlertRoutes(): Promise<AlertRoutingRule[]> {
+  return apiGet<AlertRoutingRule[]>('/api/alert-routes')
+}
+
+export function createAlertRoute(data: AlertRoutingRuleRequest): Promise<AlertRoutingRule> {
+  return apiPost<AlertRoutingRule>('/api/alert-routes', data)
+}
+
+export function updateAlertRoute(id: string, data: AlertRoutingRuleRequest): Promise<AlertRoutingRule> {
+  return apiPut<AlertRoutingRule>(`/api/alert-routes/${id}`, data)
+}
+
+export async function deleteAlertRoute(id: string): Promise<void> {
+  await apiDelete(`/api/alert-routes/${id}`)
 }

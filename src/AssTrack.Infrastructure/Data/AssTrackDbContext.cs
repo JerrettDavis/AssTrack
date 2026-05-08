@@ -16,6 +16,7 @@ public class AssTrackDbContext(DbContextOptions<AssTrackDbContext> options) : Db
     public DbSet<IntegrationFeed> IntegrationFeeds => Set<IntegrationFeed>();
     public DbSet<MessageThread> MessageThreads => Set<MessageThread>();
     public DbSet<MessageEntry> MessageEntries => Set<MessageEntry>();
+    public DbSet<AlertRoutingRule> AlertRoutingRules => Set<AlertRoutingRule>();
     public DbSet<SensorReading> SensorReadings => Set<SensorReading>();
     public DbSet<MaintenanceSchedule> MaintenanceSchedules => Set<MaintenanceSchedule>();
     public DbSet<MaintenanceServiceRecord> MaintenanceServiceRecords => Set<MaintenanceServiceRecord>();
@@ -207,6 +208,24 @@ public class AssTrackDbContext(DbContextOptions<AssTrackDbContext> options) : Db
                 .WithMany(x => x.Messages)
                 .HasForeignKey(x => x.ThreadId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<AlertRoutingRule>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Name).IsRequired().HasMaxLength(200);
+            entity.Property(x => x.EventType).IsRequired().HasMaxLength(80);
+            entity.Property(x => x.Channel).IsRequired().HasMaxLength(80);
+            entity.Property(x => x.Provider).IsRequired().HasMaxLength(80);
+            entity.Property(x => x.ExternalPeerId).HasMaxLength(300);
+            entity.Property(x => x.DisplayName).HasMaxLength(200);
+            entity.Property(x => x.Recipient).HasMaxLength(300);
+            entity.Property(x => x.MessageTemplate).HasMaxLength(1000);
+            entity.HasIndex(x => new { x.IsEnabled, x.EventType });
+            entity.HasOne(x => x.IntegrationFeed)
+                .WithMany()
+                .HasForeignKey(x => x.IntegrationFeedId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
 
         modelBuilder.Entity<SensorReading>(entity =>
