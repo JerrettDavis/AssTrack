@@ -24,6 +24,7 @@ public class LifecycleHooks
         if (E2ESettings.UseExternalApp)
         {
             await WaitForExternalAppAsync();
+            await CleanupE2EDataAsync();
         }
         else
         {
@@ -66,8 +67,13 @@ public class LifecycleHooks
     }
 
     [AfterTestRun]
-    public static void AfterTestRun()
+    public static async Task AfterTestRun()
     {
+        if (E2ESettings.UseExternalApp)
+        {
+            await CleanupE2EDataAsync();
+        }
+
         _frontend?.Dispose();
         _backend?.Dispose();
         _playwrightFixture?.Dispose();
@@ -99,9 +105,26 @@ public class LifecycleHooks
     [AfterScenario]
     public async Task AfterScenario(ScenarioContext scenarioContext)
     {
+        if (scenarioContext.TryGetValue("ApiClient", out ApiClient apiClient))
+        {
+            await CleanupE2EDataAsync(apiClient);
+        }
+
         if (scenarioContext.TryGetValue("Page", out IPage page))
         {
             await page.CloseAsync();
+        }
+    }
+
+    private static async Task CleanupE2EDataAsync(ApiClient? apiClient = null)
+    {
+        try
+        {
+            await (apiClient ?? new ApiClient()).CleanupE2EDataAsync();
+        }
+        catch
+        {
+            // Best effort cleanup; test assertions should surface functional failures separately.
         }
     }
 }

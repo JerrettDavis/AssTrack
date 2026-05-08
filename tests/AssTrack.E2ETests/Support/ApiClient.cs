@@ -60,4 +60,10 @@ public class ApiClient
         var result = await response.Content.ReadFromJsonAsync<JsonElement>();
         return result.GetProperty("id").GetString() ?? throw new Exception("No maintenance service record ID returned");
     }
+
+    public async Task CleanupE2EDataAsync()
+    {
+        var response = await _client.DeleteAsync("/api/system/maintenance/e2e-data");
+        response.EnsureSuccessStatusCode();
+    }
 }
