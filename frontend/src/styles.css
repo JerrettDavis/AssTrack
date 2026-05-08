@@ -348,7 +348,13 @@ p {
   gap: 0.95rem;
 }
 
-.asset-grid,
+.asset-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(360px, 100%), 1fr));
+  gap: 0.9rem;
+  align-items: start;
+}
+
 .metrics {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
@@ -419,6 +425,113 @@ p {
 
 .list-card > p {
   margin: 0.35rem 0 0;
+}
+
+.asset-card {
+  display: grid;
+  gap: 0.9rem;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.asset-card-header {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.asset-title-block {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.asset-title-block p {
+  margin: 0;
+}
+
+.asset-title-row,
+.asset-card-badges {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.asset-title-row h3 {
+  min-width: 0;
+  margin: 0;
+}
+
+.asset-card-badges {
+  padding-top: 0.65rem;
+  border-top: 1px solid var(--border);
+}
+
+.asset-card-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.25rem;
+  padding: 0.25rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-muted);
+}
+
+.asset-card-tabs button {
+  min-width: 0;
+  min-height: 34px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.83rem;
+  font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.asset-card-tabs button:hover {
+  color: var(--text);
+  background: var(--surface-pressed);
+}
+
+.asset-card-tabs button.active {
+  color: var(--on-primary);
+  background: var(--primary);
+}
+
+.asset-tab-panel {
+  min-width: 0;
+}
+
+.asset-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.asset-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+}
+
+.asset-card-footer .asset-meta-row {
+  flex: 1 1 240px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+}
+
+.asset-card-footer .button-row {
+  margin: 0;
 }
 
 .badge {

@@ -36,6 +36,14 @@ function getObservationStatus(observation: Observation | undefined) {
 }
 
 type AssetStatusFilter = 'all' | 'moving' | 'stale' | 'unassigned'
+type AssetCardTab = 'overview' | 'telemetry' | 'custody' | 'maintenance'
+
+const assetCardTabs: Array<{ value: AssetCardTab; label: string }> = [
+  { value: 'overview', label: 'Overview' },
+  { value: 'telemetry', label: 'Telemetry' },
+  { value: 'custody', label: 'Custody' },
+  { value: 'maintenance', label: 'Maintenance' },
+]
 
 const criticalityOptions = [
   { value: 'low', label: 'Low' },
@@ -54,14 +62,6 @@ const custodyStatusOptions = [
 
 function classLabel(value: string, classes: AssetClass[]) {
   return classes.find((item) => item.id === value)?.name ?? value
-}
-
-function sensorLabel(reading: SensorReading) {
-  const name = reading.name || reading.sensorType.replaceAll('_', ' ')
-  const value = reading.numericValue != null
-    ? `${reading.numericValue}${reading.unit ? ` ${reading.unit}` : ''}`
-    : reading.textValue ?? 'N/A'
-  return `${name}: ${value}`
 }
 
 function sensorName(reading: SensorReading) {
@@ -306,6 +306,7 @@ export function AssetsPage() {
   const [speedThresholdKmh, setSpeedThresholdKmh] = useState<string>('')
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<AssetStatusFilter>('all')
+  const [activeAssetTabs, setActiveAssetTabs] = useState<Record<string, AssetCardTab>>({})
   const [submitting, setSubmitting] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editForm, setEditForm] = useState<UpdateAssetRequest>({ name: '', description: null, assetClass: 'property', category: null, criticality: 'normal', speedThresholdKmh: null })
@@ -495,6 +496,7 @@ export function AssetsPage() {
         runtimeHours: schedule.latestRuntimeHours ?? null,
         notes: notes.trim() || null,
       })
+      setActiveAssetTabs((current) => ({ ...current, [schedule.assetId]: 'maintenance' }))
       await load()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to complete maintenance schedule.')
@@ -854,9 +856,16 @@ export function AssetsPage() {
             {filteredAssets.map((asset) => {
               const latest = latestPositions.find((position) => asset.devices.some((device) => device.id === position.deviceId))
               const status = getObservationStatus(latest)
+              const assetReadings = readingsByAssetId.get(asset.id) ?? []
+              const assetMaintenance = maintenanceByAssetId.get(asset.id) ?? []
+              const assetMaintenanceRecords = maintenanceRecordsByAssetId.get(asset.id) ?? []
+              const assetCustodyEvents = custodyEventsByAssetId.get(asset.id) ?? []
+              const dueMaintenance = assetMaintenance.filter((schedule) => schedule.status === 'due' || schedule.status === 'overdue').length
+              const hasRecentMaintenanceRecord = assetMaintenanceRecords.some((record) => Date.now() - new Date(record.completedAt).getTime() < 60 * 60 * 1000)
+              const activeTab = activeAssetTabs[asset.id] ?? (dueMaintenance > 0 || hasRecentMaintenanceRecord ? 'maintenance' : 'overview')
 
               return (
-              <article className="list-card" key={asset.id}>
+              <article className="list-card asset-card" key={asset.id}>
                 {editingId === asset.id ? (
                   <div className="inline-form">
                     <div className="field-grid">
@@ -926,71 +935,121 @@ export function AssetsPage() {
                   </div>
                 ) : (
                   <>
-                    <header>
-                      <h3>{asset.name}</h3>
-                      {asset.isSeeded && <span className="badge badge-demo">Demo</span>}
-                      <span className="badge">{classLabel(asset.assetClass, assetClasses)}</span>
-                      <span className={`badge ${asset.criticality === 'critical' || asset.criticality === 'high' ? 'badge-warning' : ''}`}>{asset.criticality}</span>
-                      <span className="badge">{asset.category ?? 'Uncategorized'}</span>
-                      <span className={`badge ${custodyStatusClass(asset.custodyStatus)}`}>{custodyLabel(asset.custodyStatus)}</span>
-                      <span className={`badge ${status.className}`}>{status.label}</span>
-                    </header>
-                    <p className="muted">{asset.description ?? 'No description provided.'}</p>
-                    <div className="asset-meta">
-                      <div className="asset-meta-row">
-                        <span>Devices</span>
-                        <strong>{asset.devices.length}</strong>
-                      </div>
-                      <div className="asset-meta-row">
-                        <span>Speed threshold</span>
-                        <strong>{asset.speedThresholdKmh != null ? `${asset.speedThresholdKmh} km/h` : 'Default'}</strong>
-                      </div>
-                      {asset.latestSensorReadings.slice(0, 4).map((reading) => (
-                        <div className="asset-meta-row" key={reading.id}>
-                          <span>{reading.sensorType.replaceAll('_', ' ')}</span>
-                          <strong>{sensorLabel(reading).split(': ').slice(1).join(': ')}</strong>
+                    <header className="asset-card-header">
+                      <div className="asset-title-block">
+                        <div className="asset-title-row">
+                          <h3>{asset.name}</h3>
+                          {asset.isSeeded && <span className="badge badge-demo">Demo</span>}
+                          <span className={`badge ${status.className}`}>{status.label}</span>
                         </div>
-                      ))}
-                      <div className="asset-meta-row">
-                        <span>Last signal</span>
-                        <strong>{latest ? formatRelativeTime(latest.observedAt, latest.receivedAt) : 'Never'}</strong>
+                        <p className="muted">{asset.description ?? 'No description provided.'}</p>
                       </div>
+                      <div className="asset-card-badges" aria-label="Asset attributes">
+                        <span className="badge">{classLabel(asset.assetClass, assetClasses)}</span>
+                        <span className={`badge ${asset.criticality === 'critical' || asset.criticality === 'high' ? 'badge-warning' : ''}`}>{asset.criticality}</span>
+                        <span className="badge">{asset.category ?? 'Uncategorized'}</span>
+                        <span className={`badge ${custodyStatusClass(asset.custodyStatus)}`}>{custodyLabel(asset.custodyStatus)}</span>
+                      </div>
+                    </header>
+                    <div className="asset-card-tabs" role="tablist" aria-label={`${asset.name} sections`}>
+                      {assetCardTabs.map((tab) => (
+                        <button
+                          aria-selected={activeTab === tab.value}
+                          className={activeTab === tab.value ? 'active' : ''}
+                          key={tab.value}
+                          onClick={() => setActiveAssetTabs((current) => ({ ...current, [asset.id]: tab.value }))}
+                          role="tab"
+                          type="button"
+                        >
+                          {tab.label}
+                        </button>
+                      ))}
+                    </div>
+                    {activeTab === 'overview' && (
+                      <div className="asset-tab-panel" role="tabpanel">
+                        <div className="asset-summary-grid">
+                          <div className="status-tile">
+                            <span className="muted">Devices</span>
+                            <strong>{asset.devices.length}</strong>
+                          </div>
+                          <div className="status-tile">
+                            <span className="muted">Last signal</span>
+                            <strong>{latest ? formatRelativeTime(latest.observedAt, latest.receivedAt) : 'Never'}</strong>
+                          </div>
+                          <div className="status-tile">
+                            <span className="muted">Sensors</span>
+                            <strong>{latestBySensorType([...asset.latestSensorReadings, ...assetReadings]).length}</strong>
+                          </div>
+                          <div className="status-tile">
+                            <span className="muted">Maintenance due</span>
+                            <strong>{dueMaintenance}</strong>
+                          </div>
+                        </div>
+                        <div className="asset-meta">
+                          <div className="asset-meta-row">
+                            <span>Speed threshold</span>
+                            <strong>{asset.speedThresholdKmh != null ? `${asset.speedThresholdKmh} km/h` : 'Default'}</strong>
+                          </div>
+                          <div className="asset-meta-row">
+                            <span>Custody</span>
+                            <strong>{custodyLabel(asset.custodyStatus)}</strong>
+                          </div>
+                          {latest && (
+                            <div className="asset-meta-row">
+                              <span>Position</span>
+                              <strong className="coords">{latest.latitude.toFixed(4)}, {latest.longitude.toFixed(4)}</strong>
+                            </div>
+                          )}
+                          <div className="asset-meta-row">
+                            <span>Updated</span>
+                            <strong>{formatTimestamp(asset.updatedAt)}</strong>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    {activeTab === 'telemetry' && (
+                      <div className="asset-tab-panel" role="tabpanel">
+                        <TelemetryPanel latestReadings={asset.latestSensorReadings} recentReadings={assetReadings} />
+                      </div>
+                    )}
+                    {activeTab === 'custody' && (
+                      <div className="asset-tab-panel" role="tabpanel">
+                        <CustodyPanel asset={asset} events={assetCustodyEvents} />
+                      </div>
+                    )}
+                    {activeTab === 'maintenance' && (
+                      <div className="asset-tab-panel" role="tabpanel">
+                        <MaintenancePanel
+                          isOperator={isOperator}
+                          onComplete={(schedule) => void handleCompleteMaintenance(schedule)}
+                          onDelete={(schedule) => void handleDeleteMaintenance(schedule)}
+                          records={assetMaintenanceRecords}
+                          schedules={assetMaintenance}
+                          submitting={submitting}
+                        />
+                      </div>
+                    )}
+                    <div className="asset-card-footer">
                       {latest && (
                         <div className="asset-meta-row">
-                          <span>Position</span>
+                          <span>Current position</span>
                           <strong className="coords">{latest.latitude.toFixed(4)}, {latest.longitude.toFixed(4)}</strong>
                         </div>
                       )}
-                      <div className="asset-meta-row">
-                        <span>Updated</span>
-                        <strong>{formatTimestamp(asset.updatedAt)}</strong>
-                      </div>
-                    </div>
-                    <TelemetryPanel latestReadings={asset.latestSensorReadings} recentReadings={readingsByAssetId.get(asset.id) ?? []} />
-                    <CustodyPanel asset={asset} events={custodyEventsByAssetId.get(asset.id) ?? []} />
-                    <MaintenancePanel
-                      isOperator={isOperator}
-                      onComplete={(schedule) => void handleCompleteMaintenance(schedule)}
-                      onDelete={(schedule) => void handleDeleteMaintenance(schedule)}
-                      records={maintenanceRecordsByAssetId.get(asset.id) ?? []}
-                      schedules={maintenanceByAssetId.get(asset.id) ?? []}
-                      submitting={submitting}
-                    />
-                    <div className="button-row">
                       {isOperator && (
-                        <button className="button button-secondary" disabled={submitting} onClick={() => startEdit(asset)} type="button">
-                          Edit
-                        </button>
-                      )}
-                      {isOperator && (
-                        <button
-                          className="button button-danger"
-                          disabled={submitting}
-                          onClick={() => void handleDeleteAsset(asset.id, asset.name)}
-                          type="button"
-                        >
-                          Delete
-                        </button>
+                        <div className="button-row">
+                          <button className="button button-secondary" disabled={submitting} onClick={() => startEdit(asset)} type="button">
+                            Edit
+                          </button>
+                          <button
+                            className="button button-danger"
+                            disabled={submitting}
+                            onClick={() => void handleDeleteAsset(asset.id, asset.name)}
+                            type="button"
+                          >
+                            Delete
+                          </button>
+                        </div>
                       )}
                     </div>
                   </>
