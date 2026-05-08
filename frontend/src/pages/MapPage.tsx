@@ -785,6 +785,8 @@ export default function MapPage() {
   const [mapMode, setMapMode] = useState<MapEntityMode>(() => optionOrDefault(searchParams.get('mode'), ['assets', 'trackers'] as const, 'assets'))
   const [liveMinutes, setLiveMinutes] = useState(() => numberParam(searchParams.get('live'), 15))
   const [idleMinutes, setIdleMinutes] = useState(() => numberParam(searchParams.get('idle'), 60))
+  const effectiveLiveMinutes = Math.max(1, liveMinutes)
+  const effectiveIdleMinutes = Math.max(effectiveLiveMinutes, idleMinutes)
   const [separationRangeMeters, setSeparationRangeMeters] = useState<SeparationRangeMeters>(() => optionOrDefault(searchParams.get('separation'), ['100', '250', '500', '1000'] as const, '100'))
   const [mapViewport, setMapViewport] = useState<{ lat: number; lng: number; zoom: number } | null>(initialViewport)
   const [nowMs, setNowMs] = useState(() => Date.now())
@@ -884,8 +886,8 @@ export default function MapPage() {
     if (feedFilter !== 'all') params.set('feed', feedFilter)
     if (timeFilterMinutes !== '1440') params.set('age', timeFilterMinutes)
     if (mapMode !== 'assets') params.set('mode', mapMode)
-    if (liveMinutes !== 15) params.set('live', String(liveMinutes))
-    if (idleMinutes !== 60) params.set('idle', String(idleMinutes))
+    if (effectiveLiveMinutes !== 15) params.set('live', String(effectiveLiveMinutes))
+    if (effectiveIdleMinutes !== 60) params.set('idle', String(effectiveIdleMinutes))
     if (separationRangeMeters !== '100') params.set('separation', separationRangeMeters)
     if (!showDevices) params.set('devices', '0')
     if (!showGeofences) params.set('geofences', '0')
@@ -909,8 +911,8 @@ export default function MapPage() {
   }, [
     baseLayer,
     feedFilter,
-    idleMinutes,
-    liveMinutes,
+    effectiveIdleMinutes,
+    effectiveLiveMinutes,
     mapViewport,
     mapMode,
     providerFilter,
@@ -1288,7 +1290,7 @@ export default function MapPage() {
 
     for (const [assetId, items] of grouped) {
       const active = items
-        .filter((position) => observationAgeMs(position, nowMs) <= liveMinutes * 60 * 1000)
+        .filter((position) => observationAgeMs(position, nowMs) <= effectiveLiveMinutes * 60 * 1000)
         .sort((a, b) => positionTimeMs(b) - positionTimeMs(a))
       if (active.length < 2) continue
 
@@ -1317,7 +1319,7 @@ export default function MapPage() {
     }
 
     return alerts.sort((a, b) => b.distanceMeters - a.distanceMeters)
-  }, [deviceById, liveMinutes, nowMs, separationRangeMeters, visiblePositions])
+  }, [deviceById, effectiveLiveMinutes, nowMs, separationRangeMeters, visiblePositions])
 
   const timelinePaths = useMemo(() => {
     if (timelineLive || !showTimeline || timeline === null || timelineCursorMs === null) return []
@@ -1530,11 +1532,11 @@ export default function MapPage() {
             <div className="field-grid compact-field-grid">
               <label className="field">
                 <span>Live through minutes</span>
-                <input min={1} onChange={(event) => setLiveMinutes(Math.max(1, Number(event.target.value) || 15))} type="number" value={liveMinutes} />
+                <input min={1} onChange={(event) => setLiveMinutes(Math.max(1, Number(event.target.value) || 15))} type="number" value={effectiveLiveMinutes} />
               </label>
               <label className="field">
                 <span>Idle through minutes</span>
-                <input min={liveMinutes} onChange={(event) => setIdleMinutes(Math.max(liveMinutes, Number(event.target.value) || 60))} type="number" value={idleMinutes} />
+                <input min={effectiveLiveMinutes} onChange={(event) => setIdleMinutes(Math.max(effectiveLiveMinutes, Number(event.target.value) || 60))} type="number" value={effectiveIdleMinutes} />
               </label>
               <label className="field">
                 <span>Tracker separation</span>
@@ -1807,8 +1809,8 @@ export default function MapPage() {
             {showDevices && (
               <DeviceMarkerLayer
                 deviceById={deviceById}
-                idleMinutes={idleMinutes}
-                liveMinutes={liveMinutes}
+                idleMinutes={effectiveIdleMinutes}
+                liveMinutes={effectiveLiveMinutes}
                 nowMs={nowMs}
                 positions={displayPositions}
                 recentPingByDeviceId={recentPingByDeviceId}
@@ -1878,7 +1880,7 @@ export default function MapPage() {
                 <div className="asset-meta-row"><span>Trackers</span><strong>{selectedAssetPositions.length}</strong></div>
                 <div className="asset-meta-row"><span>Shown on map</span><strong>{selectedNode.observation.deviceIdentifier}</strong></div>
                 <div className="asset-meta-row"><span>Last signal</span><strong>{formatRelativeTime(selectedNode.observation.observedAt, selectedNode.observation.receivedAt)}</strong></div>
-                <div className="asset-meta-row"><span>Freshness</span><strong>{freshnessLabel(getFreshnessState(selectedNode.observation, nowMs, liveMinutes, idleMinutes))}</strong></div>
+                <div className="asset-meta-row"><span>Freshness</span><strong>{freshnessLabel(getFreshnessState(selectedNode.observation, nowMs, effectiveLiveMinutes, effectiveIdleMinutes))}</strong></div>
               </div>
             </div>
 
@@ -1898,7 +1900,7 @@ export default function MapPage() {
               <div className="node-log-list">
                 {selectedAssetPositions.map((position) => {
                   const device = deviceById.get(position.deviceId)
-                  const state = getFreshnessState(position, nowMs, liveMinutes, idleMinutes)
+                  const state = getFreshnessState(position, nowMs, effectiveLiveMinutes, effectiveIdleMinutes)
                   return (
                     <button className="node-log-row node-log-button" key={position.deviceId} onClick={() => void selectDeviceNode(position)} type="button">
                       <strong>{providerDisplayName(device, position.deviceIdentifier)}</strong>
