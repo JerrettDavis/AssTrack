@@ -877,7 +877,7 @@ p {
 
 .timeline-controls {
   display: grid;
-  grid-template-columns: auto auto auto minmax(0, 1fr);
+  grid-template-columns: auto auto auto auto minmax(0, 1fr);
   gap: 0.65rem;
   align-items: end;
 }
@@ -905,15 +905,30 @@ p {
   background: var(--surface-solid);
 }
 
-.timeline-play-button {
+.timeline-play-button,
+.timeline-live-button {
   min-height: 2.1rem;
   padding: 0 0.85rem;
   border: 1px solid var(--primary);
   border-radius: 6px;
-  color: #fff;
-  background: var(--primary);
   font-weight: 800;
   cursor: pointer;
+}
+
+.timeline-play-button {
+  color: #fff;
+  background: var(--primary);
+}
+
+.timeline-live-button {
+  color: var(--primary);
+  background: var(--surface-solid);
+}
+
+.timeline-live-button.active {
+  color: #fff;
+  background: var(--success);
+  border-color: var(--success);
 }
 
 .timeline-track-shell {

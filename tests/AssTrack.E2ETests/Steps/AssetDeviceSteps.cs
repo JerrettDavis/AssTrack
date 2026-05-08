@@ -91,7 +91,7 @@ public class AssetDeviceSteps
             ["notes"] = "Completed in e2e"
         });
         await _context.Page.ReloadAsync();
-        await _context.Page.GetByText("Recent service").WaitForAsync();
-        await _context.Page.GetByText("Completed in e2e").WaitForAsync();
+        await _context.Page.GetByText("Recent service").First.WaitForAsync();
+        await _context.Page.GetByText("Completed in e2e").First.WaitForAsync();
     }
 }

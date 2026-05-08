@@ -100,8 +100,8 @@ function formatTimelineLabel(value: number): string {
 function makeMarkerIcon(freshnessClass: string, provider?: string | null) {
   const providerClass = provider ? ` provider-${provider.replace(/[^a-z0-9-]/gi, '-').toLowerCase()}` : ''
   return L.divIcon({
-    className: '',
-    html: `<div class="device-marker ${freshnessClass}${providerClass}"></div>`,
+    className: `device-marker ${freshnessClass}${providerClass}`,
+    html: '',
     iconSize: [20, 20],
     iconAnchor: [10, 10],
     popupAnchor: [0, -10],
@@ -111,8 +111,8 @@ function makeMarkerIcon(freshnessClass: string, provider?: string | null) {
 function makeClusterIcon(count: number) {
   const size = count >= 100 ? 48 : count >= 10 ? 42 : 36
   return L.divIcon({
-    className: '',
-    html: `<div class="device-cluster-marker" style="width:${size}px;height:${size}px"><span>${count}</span></div>`,
+    className: 'device-cluster-marker',
+    html: `<span>${count}</span>`,
     iconSize: [size, size],
     iconAnchor: [size / 2, size / 2],
   })
@@ -487,10 +487,12 @@ function TimelineScrubber({
   cursorMs,
   error,
   isPlaying,
+  isLive,
   loading,
   maxMs,
   minMs,
   onCursorChange,
+  onLive,
   onDateChange,
   onPlayToggle,
   onWindowChange,
@@ -502,10 +504,12 @@ function TimelineScrubber({
   cursorMs: number | null
   error: string | null
   isPlaying: boolean
+  isLive: boolean
   loading: boolean
   maxMs: number
   minMs: number
   onCursorChange: (value: number) => void
+  onLive: () => void
   onDateChange: (value: string) => void
   onPlayToggle: () => void
   onWindowChange: (value: TimelineWindowHours) => void
@@ -524,6 +528,9 @@ function TimelineScrubber({
         <button className="timeline-play-button" onClick={onPlayToggle} type="button" title={isPlaying ? 'Pause playback' : 'Play timeline'}>
           {isPlaying ? 'Pause' : 'Play'}
         </button>
+        <button className={`timeline-live-button${isLive ? ' active' : ''}`} onClick={onLive} type="button" title="Return to live map positions">
+          Live
+        </button>
         <label>
           <span>Day</span>
           <input type="date" value={timelineDate} onChange={(event) => onDateChange(event.target.value)} />
@@ -537,7 +544,7 @@ function TimelineScrubber({
           </select>
         </label>
         <div className="timeline-readout">
-          <strong>{cursorMs == null ? error ? 'Timeline unavailable' : 'Loading timeline' : formatTimelineLabel(cursorMs)}</strong>
+          <strong>{isLive ? 'LIVE' : cursorMs == null ? error ? 'Timeline unavailable' : 'Loading timeline' : formatTimelineLabel(cursorMs)}</strong>
           <span>
             {timeline
               ? `${timeline.totalCount}${timeline.truncated ? '+' : ''} observations${scoped ? ' scoped' : ' across map'}`
@@ -764,6 +771,7 @@ export default function MapPage() {
   const [timelineCursorMs, setTimelineCursorMs] = useState<number | null>(null)
   const [timelineLoading, setTimelineLoading] = useState(false)
   const [timelineError, setTimelineError] = useState<string | null>(null)
+  const [timelineLive, setTimelineLive] = useState(() => !searchParams.has('timelineAt'))
   const [timelinePlaying, setTimelinePlaying] = useState(false)
   const [selectedNode, setSelectedNode] = useState<SelectedMapNode | null>(null)
   const [nodeHistory, setNodeHistory] = useState<Observation[]>([])
@@ -861,7 +869,7 @@ export default function MapPage() {
     if (trailLength !== 50) params.set('trail', String(trailLength))
     if (timelineDate !== localDateInput()) params.set('timelineDate', timelineDate)
     if (timelineWindowHours !== '24') params.set('timelineWindow', timelineWindowHours)
-    if (timelineCursorMs != null) params.set('timelineAt', new Date(timelineCursorMs).toISOString())
+    if (!timelineLive && timelineCursorMs != null) params.set('timelineAt', new Date(timelineCursorMs).toISOString())
     if (selectedNode?.type === 'device') params.set('device', selectedNode.deviceId)
     else if (selectedDeviceId) params.set('device', selectedDeviceId)
     if (selectedNode?.type === 'geofence') params.set('geofence', selectedNode.geofenceId)
@@ -892,6 +900,7 @@ export default function MapPage() {
     timeFilterMinutes,
     timelineCursorMs,
     timelineDate,
+    timelineLive,
     timelineWindowHours,
     trailLength,
   ])
@@ -951,6 +960,7 @@ export default function MapPage() {
         }
         return [...prev, newPos]
       })
+      setNowMs(Date.now())
       setLastUpdated(new Date().toLocaleTimeString())
       if (obs.deviceId === selectedDeviceId) {
         void loadTrailAndSummary(obs.deviceId, trailLength)
@@ -1123,6 +1133,7 @@ export default function MapPage() {
         setTimelineCursorMs(null)
         setTimelineLoading(false)
         setTimelineError(null)
+        setTimelineLive(true)
         setTimelinePlaying(false)
         return
       }
@@ -1142,7 +1153,8 @@ export default function MapPage() {
         const toMs = new Date(result.to).getTime()
         const requested = searchParams.get('timelineAt')
         const requestedMs = requested ? new Date(requested).getTime() : NaN
-        setTimelineCursorMs(Number.isFinite(requestedMs) && requestedMs >= new Date(result.from).getTime() && requestedMs <= toMs ? requestedMs : toMs)
+        const nextCursorMs = Number.isFinite(requestedMs) && requestedMs >= new Date(result.from).getTime() && requestedMs <= toMs ? requestedMs : toMs
+        setTimelineCursorMs(nextCursorMs)
       } catch (err) {
         if (!cancelled) {
           setTimeline(null)
@@ -1160,7 +1172,7 @@ export default function MapPage() {
   }, [showTimeline, timelineBounds.from, timelineBounds.to, timelineScope.assetId, timelineScope.deviceId, timelineScope.scoped])
 
   useEffect(() => {
-    if (!timelinePlaying || timeline === null || timelineCursorMs === null) return
+    if (timelineLive || !timelinePlaying || timeline === null || timelineCursorMs === null) return
     let lastFrameMs = performance.now()
     let frameId = 0
     const playbackMsPerSecond = 5 * 60 * 1000
@@ -1178,7 +1190,7 @@ export default function MapPage() {
 
     frameId = window.requestAnimationFrame(tick)
     return () => window.cancelAnimationFrame(frameId)
-  }, [timeline, timelinePlaying])
+  }, [timeline, timelineLive, timelinePlaying])
 
   useEffect(() => {
     if (timeline === null || timelineCursorMs === null) return
@@ -1186,7 +1198,7 @@ export default function MapPage() {
   }, [timeline, timelineCursorMs])
 
   const timelineSourcePositions = useMemo(() => {
-    if (!showTimeline || timeline === null || timelineCursorMs === null) return positions
+    if (timelineLive || !showTimeline || timeline === null || timelineCursorMs === null) return positions
 
     const grouped = new Map<string, Observation[]>()
     for (const observation of timeline.observations) {
@@ -1198,7 +1210,7 @@ export default function MapPage() {
     return Array.from(grouped.values())
       .map((items) => observationAtCursor([...items].sort((a, b) => positionTimeMs(a) - positionTimeMs(b)), timelineCursorMs))
       .filter((item): item is Observation => item != null)
-  }, [positions, showTimeline, timeline, timelineCursorMs])
+  }, [positions, showTimeline, timeline, timelineCursorMs, timelineLive])
 
   const visiblePositions = useMemo(() => timelineSourcePositions.filter((position) => {
     const device = deviceById.get(position.deviceId)
@@ -1257,7 +1269,7 @@ export default function MapPage() {
   }, [deviceById, liveMinutes, nowMs, separationRangeMeters, visiblePositions])
 
   const timelinePaths = useMemo(() => {
-    if (!showTimeline || timeline === null || timelineCursorMs === null) return []
+    if (timelineLive || !showTimeline || timeline === null || timelineCursorMs === null) return []
     const grouped = new Map<string, Observation[]>()
     for (const observation of timeline.observations) {
       const device = deviceById.get(observation.deviceId)
@@ -1292,7 +1304,7 @@ export default function MapPage() {
         future,
       }
     }).filter((path) => path.past.length + path.future.length > 1)
-  }, [deviceById, feedFilter, providerFilter, showTimeline, timeline, timelineCursorMs])
+  }, [deviceById, feedFilter, providerFilter, showTimeline, timeline, timelineCursorMs, timelineLive])
 
   const groupedTrackerHiddenCount = useMemo(
     () => displayPositions.reduce((total, position) => total + Math.max(0, (position.groupedTrackerCount ?? 1) - 1), 0),
@@ -1363,13 +1375,8 @@ export default function MapPage() {
     () => selectedAsset ? separationAlerts.filter((alert) => alert.assetId === selectedAsset.id) : [],
     [selectedAsset, separationAlerts],
   )
-  const mapInitialCenter = useMemo<[number, number]>(
-    () => mapViewport ? [mapViewport.lat, mapViewport.lng] : mapCenter,
-    // MapContainer only consumes this on initial mount.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [],
-  )
-  const mapInitialZoom = mapViewport?.zoom ?? (displayPositions.length > 0 ? 10 : 2)
+  const mapInitialCenter: [number, number] = mapViewport ? [mapViewport.lat, mapViewport.lng] : mapCenter
+  const mapInitialZoom = mapViewport?.zoom ?? (displayPositions.length > 1 ? 3 : displayPositions.length === 1 ? 10 : 2)
   const handleViewportChange = useCallback((viewport: { lat: number; lng: number; zoom: number }) => {
     setMapViewport((current) => {
       if (
@@ -1385,8 +1392,30 @@ export default function MapPage() {
   }, [])
   const handleTimelineDateChange = useCallback((value: string) => {
     timelineDateUserSetRef.current = true
+    setTimelineLive(false)
+    setTimelinePlaying(false)
     setTimelineDate(value)
   }, [])
+  const handleTimelineCursorChange = useCallback((value: number) => {
+    setTimelineLive(false)
+    setTimelinePlaying(false)
+    setTimelineCursorMs(value)
+  }, [])
+  const handleTimelinePlayToggle = useCallback(() => {
+    if (timelineLive && timeline) {
+      setTimelineCursorMs(new Date(timeline.from).getTime())
+      setTimelineLive(false)
+      setTimelinePlaying(true)
+      return
+    }
+    setTimelineLive(false)
+    setTimelinePlaying((value) => !value)
+  }, [timeline, timelineLive])
+  const handleTimelineLive = useCallback(() => {
+    setTimelinePlaying(false)
+    setTimelineLive(true)
+    setTimelineCursorMs(timeline ? new Date(timeline.to).getTime() : Date.now())
+  }, [timeline])
 
   if (loading) return <div className="map-workspace map-workspace-state">Loading map...</div>
   if (error) return <div className="map-workspace map-workspace-state">Error: {error}</div>
@@ -1741,13 +1770,19 @@ export default function MapPage() {
               cursorMs={timelineCursorMs}
               error={timelineError}
               isPlaying={timelinePlaying}
+              isLive={timelineLive}
               loading={timelineLoading}
               maxMs={timeline ? new Date(timeline.to).getTime() : timelineBounds.to.getTime()}
               minMs={timeline ? new Date(timeline.from).getTime() : timelineBounds.from.getTime()}
-              onCursorChange={setTimelineCursorMs}
+              onCursorChange={handleTimelineCursorChange}
               onDateChange={handleTimelineDateChange}
-              onPlayToggle={() => setTimelinePlaying((value) => !value)}
-              onWindowChange={setTimelineWindowHours}
+              onLive={handleTimelineLive}
+              onPlayToggle={handleTimelinePlayToggle}
+              onWindowChange={(value) => {
+                setTimelineLive(false)
+                setTimelinePlaying(false)
+                setTimelineWindowHours(value)
+              }}
               scoped={timelineScope.scoped}
               timeline={timeline}
               timelineDate={timelineDate}

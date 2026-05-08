@@ -123,19 +123,18 @@ public class AppSteps
     public async Task WhenISelectTheFirstMapNode()
     {
         var marker = _context.Page.Locator(".device-marker").First;
-        var cluster = _context.Page.Locator(".device-cluster-marker").First;
+        var markers = _context.Page.Locator(".device-marker");
+        var clusters = _context.Page.Locator(".device-cluster-marker");
 
         for (var attempt = 0; attempt < 6; attempt++)
         {
-            if (await marker.CountAsync() > 0 && await marker.IsVisibleAsync())
+            if (await TryClickVisibleAsync(markers))
             {
-                await marker.ClickAsync(new() { Force = true });
                 return;
             }
 
-            if (await cluster.CountAsync() > 0 && await cluster.IsVisibleAsync())
+            if (await TryClickVisibleAsync(clusters))
             {
-                await cluster.ClickAsync(new() { Force = true });
                 await _context.Page.WaitForTimeoutAsync(500);
                 continue;
             }
@@ -145,6 +144,20 @@ public class AppSteps
 
         await marker.WaitForAsync();
         await marker.ClickAsync(new() { Force = true });
+    }
+
+    private static async Task<bool> TryClickVisibleAsync(ILocator locator)
+    {
+        var count = await locator.CountAsync();
+        for (var index = 0; index < count; index++)
+        {
+            var item = locator.Nth(index);
+            if (!await item.IsVisibleAsync()) continue;
+            await item.ClickAsync(new() { Force = true });
+            return true;
+        }
+
+        return false;
     }
 
     [Then(@"the map node details panel is available")]
