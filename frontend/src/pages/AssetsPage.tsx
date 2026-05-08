@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react'
+import { Fragment, FormEvent, useEffect, useMemo, useState } from 'react'
 import { createAsset, deleteAsset, getAssetClasses, getAssets, type Asset, type AssetClass, type SensorReading, updateAsset, type UpdateAssetRequest } from '../api/assets'
 import { createCustodyEvent, getCustodyEvents, type CustodyEvent } from '../api/custody'
 import { completeMaintenanceSchedule, createMaintenanceSchedule, deleteMaintenanceSchedule, getMaintenanceReminders, getMaintenanceSchedules, getMaintenanceServiceRecords, type MaintenanceReminder, type MaintenanceSchedule, type MaintenanceServiceRecord, type MaintenanceStatus } from '../api/maintenance'
@@ -992,75 +992,6 @@ export function AssetsPage() {
 
               return (
               <article className="list-card asset-card" key={asset.id}>
-                {editingId === asset.id ? (
-                  <div className="inline-form">
-                    <div className="field-grid">
-                      <label className="field">
-                        <span>Name</span>
-                        <input onChange={(e) => setEditForm(f => ({ ...f, name: e.target.value }))} required value={editForm.name} />
-                      </label>
-                      <label className="field field-wide">
-                        <span>Description</span>
-                        <input onChange={(e) => setEditForm(f => ({ ...f, description: e.target.value || null }))} value={editForm.description ?? ''} />
-                      </label>
-                      <label className="field">
-                        <span>Asset class</span>
-                        <select onChange={(e) => setEditForm(f => ({ ...f, assetClass: e.target.value }))} value={editForm.assetClass ?? 'property'}>
-                          {assetClasses.map((item) => (
-                            <option key={item.id} value={item.id}>{item.name}</option>
-                          ))}
-                        </select>
-                      </label>
-                      <label className="field">
-                        <span>Criticality</span>
-                        <select onChange={(e) => setEditForm(f => ({ ...f, criticality: e.target.value }))} value={editForm.criticality ?? 'normal'}>
-                          {criticalityOptions.map((option) => (
-                            <option key={option.value} value={option.value}>{option.label}</option>
-                          ))}
-                        </select>
-                      </label>
-                      <label className="field">
-                        <span>Custody status</span>
-                        <select onChange={(e) => setEditForm(f => ({ ...f, custodyStatus: e.target.value }))} value={editForm.custodyStatus ?? 'available'}>
-                          {custodyStatusOptions.map((option) => (
-                            <option key={option.value} value={option.value}>{option.label}</option>
-                          ))}
-                        </select>
-                      </label>
-                      <label className="field">
-                        <span>Custodian</span>
-                        <input onChange={(e) => setEditForm(f => ({ ...f, custodianName: e.target.value || null }))} value={editForm.custodianName ?? ''} />
-                      </label>
-                      <label className="field">
-                        <span>Custodian contact</span>
-                        <input onChange={(e) => setEditForm(f => ({ ...f, custodianContact: e.target.value || null }))} value={editForm.custodianContact ?? ''} />
-                      </label>
-                      <label className="field">
-                        <span>Category</span>
-                        <input onChange={(e) => setEditForm(f => ({ ...f, category: e.target.value || null }))} value={editForm.category ?? ''} />
-                      </label>
-                      <label className="field">
-                        <span>Speed Threshold (km/h)</span>
-                        <input
-                          min={0.001}
-                          onChange={(e) => setEditForm(f => ({ ...f, speedThresholdKmh: e.target.value ? parseFloat(e.target.value) : null }))}
-                          placeholder="Default 120 km/h"
-                          type="number"
-                          value={editForm.speedThresholdKmh ?? ''}
-                        />
-                      </label>
-                    </div>
-                    <div className="button-row">
-                      <button className="button" disabled={submitting} onClick={() => void saveEdit()} type="button">
-                        {submitting ? 'Saving…' : 'Save'}
-                      </button>
-                      <button className="button button-secondary" onClick={() => setEditingId(null)} type="button">
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <>
                     <header className="asset-card-header">
                       <div className="asset-title-block">
                         <div className="asset-title-row">
@@ -1155,6 +1086,7 @@ export function AssetsPage() {
                         />
                       </div>
                     )}
+                    {latest && (
                     <div className="asset-card-footer">
                       {latest && (
                         <div className="asset-meta-row">
@@ -1162,30 +1094,147 @@ export function AssetsPage() {
                           <strong className="coords">{latest.latitude.toFixed(4)}, {latest.longitude.toFixed(4)}</strong>
                         </div>
                       )}
-                      {isOperator && (
-                        <div className="button-row">
-                          <button className="button button-secondary" disabled={submitting} onClick={() => startEdit(asset)} type="button">
-                            Edit
-                          </button>
-                          <button
-                            className="button button-danger"
-                            disabled={submitting}
-                            onClick={() => void handleDeleteAsset(asset.id, asset.name)}
-                            type="button"
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      )}
                     </div>
-                  </>
-                )}
+                    )}
               </article>
             )})}
             {assets.length > 0 && filteredAssets.length === 0 && (
               <div className="card">No assets match the current filters.</div>
             )}
           </div>
+          {isOperator && (
+            <details className="quiet-disclosure">
+              <summary>
+                Admin asset management
+                <span className="badge">{assetStart}-{assetEnd} of {filteredAssets.length}</span>
+              </summary>
+              <div className="table-scroll">
+                <table className="data-table admin-table">
+                  <thead>
+                    <tr>
+                      <th>Asset</th>
+                      <th>Class</th>
+                      <th>Custody</th>
+                      <th>Trackers</th>
+                      <th>Updated</th>
+                      <th>Manage</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pagedAssets.map((asset) => (
+                      <Fragment key={`admin-${asset.id}`}>
+                        <tr>
+                          <td>
+                            <strong>{asset.name}</strong>
+                            <div className="muted">{asset.description ?? asset.category ?? 'No description'}</div>
+                          </td>
+                          <td>
+                            <span className="badge">{classLabel(asset.assetClass, assetClasses)}</span>
+                            <span className={`badge badge-inline ${asset.criticality === 'critical' || asset.criticality === 'high' ? 'badge-warning' : ''}`}>{asset.criticality}</span>
+                          </td>
+                          <td><span className={`badge ${custodyStatusClass(asset.custodyStatus)}`}>{custodyLabel(asset.custodyStatus)}</span></td>
+                          <td>{asset.devices.length}</td>
+                          <td>{formatTimestamp(asset.updatedAt)}</td>
+                          <td>
+                            <div className="compact-actions">
+                              <button className="button button-secondary button-compact" disabled={submitting} onClick={() => startEdit(asset)} type="button">
+                                Edit
+                              </button>
+                              <button
+                                className="button button-danger button-compact"
+                                disabled={submitting}
+                                onClick={() => void handleDeleteAsset(asset.id, asset.name)}
+                                type="button"
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                        {editingId === asset.id && (
+                          <tr key={`admin-${asset.id}-edit`}>
+                            <td colSpan={6}>
+                              <div className="inline-form">
+                                <div className="field-grid">
+                                  <label className="field">
+                                    <span>Name</span>
+                                    <input onChange={(e) => setEditForm(f => ({ ...f, name: e.target.value }))} required value={editForm.name} />
+                                  </label>
+                                  <label className="field field-wide">
+                                    <span>Description</span>
+                                    <input onChange={(e) => setEditForm(f => ({ ...f, description: e.target.value || null }))} value={editForm.description ?? ''} />
+                                  </label>
+                                  <label className="field">
+                                    <span>Asset class</span>
+                                    <select onChange={(e) => setEditForm(f => ({ ...f, assetClass: e.target.value }))} value={editForm.assetClass ?? 'property'}>
+                                      {assetClasses.map((item) => (
+                                        <option key={item.id} value={item.id}>{item.name}</option>
+                                      ))}
+                                    </select>
+                                  </label>
+                                  <label className="field">
+                                    <span>Criticality</span>
+                                    <select onChange={(e) => setEditForm(f => ({ ...f, criticality: e.target.value }))} value={editForm.criticality ?? 'normal'}>
+                                      {criticalityOptions.map((option) => (
+                                        <option key={option.value} value={option.value}>{option.label}</option>
+                                      ))}
+                                    </select>
+                                  </label>
+                                  <label className="field">
+                                    <span>Custody status</span>
+                                    <select onChange={(e) => setEditForm(f => ({ ...f, custodyStatus: e.target.value }))} value={editForm.custodyStatus ?? 'available'}>
+                                      {custodyStatusOptions.map((option) => (
+                                        <option key={option.value} value={option.value}>{option.label}</option>
+                                      ))}
+                                    </select>
+                                  </label>
+                                  <label className="field">
+                                    <span>Custodian</span>
+                                    <input onChange={(e) => setEditForm(f => ({ ...f, custodianName: e.target.value || null }))} value={editForm.custodianName ?? ''} />
+                                  </label>
+                                  <label className="field">
+                                    <span>Custodian contact</span>
+                                    <input onChange={(e) => setEditForm(f => ({ ...f, custodianContact: e.target.value || null }))} value={editForm.custodianContact ?? ''} />
+                                  </label>
+                                  <label className="field">
+                                    <span>Category</span>
+                                    <input onChange={(e) => setEditForm(f => ({ ...f, category: e.target.value || null }))} value={editForm.category ?? ''} />
+                                  </label>
+                                  <label className="field">
+                                    <span>Speed Threshold (km/h)</span>
+                                    <input
+                                      min={0.001}
+                                      onChange={(e) => setEditForm(f => ({ ...f, speedThresholdKmh: e.target.value ? parseFloat(e.target.value) : null }))}
+                                      placeholder="Default 120 km/h"
+                                      type="number"
+                                      value={editForm.speedThresholdKmh ?? ''}
+                                    />
+                                  </label>
+                                </div>
+                                <div className="button-row">
+                                  <button className="button" disabled={submitting} onClick={() => void saveEdit()} type="button">
+                                    {submitting ? 'Saving…' : 'Save changes'}
+                                  </button>
+                                  <button className="button button-secondary" onClick={() => setEditingId(null)} type="button">
+                                    Cancel
+                                  </button>
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
+                    ))}
+                    {filteredAssets.length === 0 && (
+                      <tr>
+                        <td className="muted" colSpan={6}>No assets match the current filters.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </details>
+          )}
           {filteredAssets.length > assetPageSize && (
             <div className="asset-list-header asset-list-footer">
               <span className="muted">
