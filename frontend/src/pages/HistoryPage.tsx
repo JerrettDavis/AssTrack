@@ -130,14 +130,15 @@ export default function HistoryPage() {
     filters.deviceId || filters.assetId || filters.fromDate || filters.toDate
 
   return (
-    <div className="section">
-      <div className="page-header">
-        <h1>Observation History</h1>
+    <div className="section ops-page">
+      <div className="ops-header">
+        <div className="ops-title">
+          <h1>Observation History</h1>
+          <p>Search, review, and export tracker observations</p>
+        </div>
       </div>
 
-      <div className="card">
-        <h2>Filters</h2>
-        <div className="field-grid">
+      <div className="card control-bar history-control-bar">
           <div className="field">
             <span>Device</span>
             <select
@@ -179,7 +180,7 @@ export default function HistoryPage() {
           </div>
 
           <div className="field">
-            <span>From Date</span>
+            <span>From</span>
             <input
               type="datetime-local"
               value={filters.fromDate || ''}
@@ -193,7 +194,7 @@ export default function HistoryPage() {
           </div>
 
           <div className="field">
-            <span>To Date</span>
+            <span>To</span>
             <input
               type="datetime-local"
               value={filters.toDate || ''}
@@ -205,9 +206,7 @@ export default function HistoryPage() {
               }
             />
           </div>
-        </div>
-
-        <div className="button-row">
+        <div className="compact-actions">
           <button className="button button-primary" onClick={() => void handleSearch()} type="button" disabled={loading}>
             {loading ? 'Searching…' : 'Search'}
           </button>
@@ -220,9 +219,9 @@ export default function HistoryPage() {
             {exporting ? 'Exporting…' : 'Export CSV'}
           </button>
         </div>
-
-        {error && <div className="notice notice-danger">{error}</div>}
       </div>
+
+      {error && <div className="notice notice-danger">{error}</div>}
 
       {result && (
         <div className="card table-card">

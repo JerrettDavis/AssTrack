@@ -232,10 +232,15 @@ export default function AlertsPage() {
   if (error) return <div className="card">Error: {error}</div>
 
   return (
-    <div className="section">
-      <div className="page-header">
-        <h1>Alerts</h1>
-        <span className="muted">Last updated: {lastUpdated ?? '—'}</span>
+    <div className="section ops-page">
+      <div className="ops-header">
+        <div className="ops-title">
+          <h1>Alerts</h1>
+          <p>Exception review, acknowledgements, and routing</p>
+        </div>
+        <div className="ops-actions">
+          <span className="muted">Last updated: {lastUpdated ?? '—'}</span>
+        </div>
       </div>
 
       <AcknowledgeModal
@@ -245,13 +250,30 @@ export default function AlertsPage() {
         onCancel={() => setAcknowledgeModal(null)}
       />
 
-      <div className="card">
-        <div className="page-header">
-          <div>
-            <h2>Alert Routing</h2>
-            <p className="muted">Queue alert messages to provider-backed threads for bridge delivery.</p>
-          </div>
+      <div className="metrics kpi-strip">
+        <div className="metric">
+          <span>Speed alerts</span>
+          <strong>{alertsTotal}</strong>
         </div>
+        <div className="metric">
+          <span>Geofence breaches</span>
+          <strong>{breachesTotal}</strong>
+        </div>
+        <div className="metric">
+          <span>Unacknowledged</span>
+          <strong>{alerts.filter(a => !a.acknowledgedAtUtc).length + breaches.filter(b => !b.acknowledgedAtUtc).length}</strong>
+        </div>
+        <div className="metric">
+          <span>Routes</span>
+          <strong>{routes.length}</strong>
+        </div>
+      </div>
+
+      <details className="quiet-disclosure">
+        <summary>
+          Alert routing
+          <span className="badge">{routes.length} routes</span>
+        </summary>
         <div className="compact-field-grid">
           <label className="field">
             <span>Name</span>
@@ -335,7 +357,7 @@ export default function AlertsPage() {
             </tbody>
           </table>
         </div>
-      </div>
+      </details>
 
       <div className="card table-card">
         <div className="page-header">

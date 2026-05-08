@@ -275,17 +275,22 @@ export default function DevicesPage() {
   if (error) return <div className="card">Error: {error}</div>
 
   return (
-    <div className="section">
-      <div className="page-header">
-        <h1>Devices</h1>
-        {isOperator && (
-          <button className="button button-secondary" onClick={() => setShowAddForm((value) => !value)} type="button">
-            {showAddForm ? 'Cancel' : 'Add Device'}
-          </button>
-        )}
+    <div className="section ops-page">
+      <div className="ops-header">
+        <div className="ops-title">
+          <h1>Devices</h1>
+          <p>{devices.length} trackers, sensors, and bridge-created nodes</p>
+        </div>
+        <div className="ops-actions">
+          {isOperator && (
+            <button className="button button-secondary" onClick={() => setShowAddForm((value) => !value)} type="button">
+              {showAddForm ? 'Cancel' : 'Add Device'}
+            </button>
+          )}
+        </div>
       </div>
 
-      <div className="metrics">
+      <div className="metrics kpi-strip">
         <div className="metric">
           <span>Devices</span>
           <strong>{devices.length}</strong>
@@ -308,14 +313,11 @@ export default function DevicesPage() {
         </div>
       </div>
 
-      <div className="card tracking-inbox" data-testid="tracking-signal-inbox">
-        <div className="page-header">
-          <div>
-            <h2>Tracking signal inbox</h2>
-            <p className="muted">Bridge-created devices that are receiving location signals but are not attached to an asset yet.</p>
-          </div>
-          <span className="badge badge-warning">{signalInbox.length} unassigned</span>
-        </div>
+      <details className="quiet-disclosure tracking-inbox" data-testid="tracking-signal-inbox" open={signalInbox.length > 0}>
+        <summary>
+          Tracking signal inbox
+          <span className={signalInbox.length > 0 ? 'badge badge-warning' : 'badge'}>{signalInbox.length} unassigned</span>
+        </summary>
         {signalInbox.length === 0 ? (
           <div className="notice notice-info">
             <strong>No unassigned bridge signals</strong>
@@ -394,11 +396,11 @@ export default function DevicesPage() {
             })}
           </div>
         )}
-      </div>
+      </details>
 
-      <div className="card toolbar">
+      <div className="card control-bar control-bar-compact">
         <label className="field">
-          <span>Search devices</span>
+          <span>Search</span>
           <input
             onChange={(event) => setSearchTerm(event.target.value)}
             placeholder="Identifier, label, asset, protocol"
@@ -414,7 +416,21 @@ export default function DevicesPage() {
             <option value="unassigned">Unassigned</option>
           </select>
         </label>
-        <span className="muted">{filteredDevices.length} shown</span>
+        <div className="compact-actions">
+          <span className="control-bar-result"><strong>{filteredDevices.length}</strong> shown</span>
+          {(searchTerm || assignmentFilter !== 'all') && (
+            <button
+              className="button button-secondary button-compact"
+              onClick={() => {
+                setSearchTerm('')
+                setAssignmentFilter('all')
+              }}
+              type="button"
+            >
+              Clear
+            </button>
+          )}
+        </div>
       </div>
 
       {showAddForm && isOperator && (

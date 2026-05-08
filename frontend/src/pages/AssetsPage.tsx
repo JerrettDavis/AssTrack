@@ -653,10 +653,23 @@ export function AssetsPage() {
 
   return (
     <div className="layout">
-      <section className="section">
-        <div className="card">
-          <h2>Fleet overview</h2>
-          <div className="metrics">
+      <section className="section ops-page">
+        <div className="ops-header">
+          <div className="ops-title">
+            <h1>Assets</h1>
+            <p>{assets.length} tracked assets across {assets.reduce((sum, asset) => sum + asset.devices.length, 0)} trackers</p>
+          </div>
+          {isOperator && (
+            <div className="ops-actions">
+              <button className="button button-secondary" onClick={() => setShowAddForm((value) => !value)} type="button">
+                {showAddForm ? 'Cancel' : 'Add Asset'}
+              </button>
+            </div>
+          )}
+        </div>
+
+        <div className="page-band">
+          <div className="metrics kpi-strip">
             {metrics.map((metric) => (
               <div className="metric" key={metric.label}>
                 <span className="muted">{metric.label}</span>
@@ -677,18 +690,10 @@ export function AssetsPage() {
           )}
         </div>
 
-        <div className="section">
-          <div className="page-header">
-            <h2>Assets</h2>
-            {isOperator && (
-              <button className="button button-secondary" onClick={() => setShowAddForm((value) => !value)} type="button">
-                {showAddForm ? 'Cancel' : 'Add Asset'}
-              </button>
-            )}
-          </div>
-          <div className="card toolbar">
+        <div className="operations-panel">
+          <div className="card control-bar">
             <label className="field">
-              <span>Search inventory</span>
+              <span>Search</span>
               <input
                 onChange={(event) => setSearchTerm(event.target.value)}
                 placeholder="Asset, category, device"
@@ -724,7 +729,7 @@ export function AssetsPage() {
               </select>
             </label>
             <div className="compact-actions">
-              <span className="muted">{filteredAssets.length} matched</span>
+              <span className="control-bar-result"><strong>{filteredAssets.length}</strong> matched</span>
               {(searchTerm || statusFilter !== 'all' || assetClassFilter !== 'all' || criticalityFilter !== 'all') && (
                 <button
                   className="button button-secondary button-compact"
@@ -741,7 +746,7 @@ export function AssetsPage() {
               )}
             </div>
           </div>
-          <details className="filter-disclosure">
+          <details className="quiet-disclosure">
             <summary>
               More filters
               {(assetClassFilter !== 'all' || criticalityFilter !== 'all') && <span className="badge">Active</span>}

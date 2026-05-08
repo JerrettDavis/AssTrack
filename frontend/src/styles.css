@@ -338,6 +338,161 @@ p {
   gap: 1.15rem;
 }
 
+.ops-page {
+  gap: 1rem;
+}
+
+.ops-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.15rem 0 0.35rem;
+}
+
+.ops-title {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.ops-title h1,
+.ops-title h2 {
+  margin: 0;
+}
+
+.ops-title p {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.ops-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+}
+
+.kpi-strip {
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 0.55rem;
+}
+
+.kpi-strip .metric {
+  min-height: 68px;
+  padding: 0.72rem 0.85rem;
+  box-shadow: none;
+}
+
+.kpi-strip .metric strong {
+  font-size: 1.35rem;
+  margin-top: 0.25rem;
+}
+
+.control-bar {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) repeat(3, minmax(140px, 190px)) auto;
+  gap: 0.65rem;
+  align-items: end;
+  padding: 0.75rem;
+  box-shadow: none;
+}
+
+.control-bar-compact {
+  grid-template-columns: minmax(240px, 1fr) minmax(150px, 190px) auto;
+}
+
+.control-bar .field,
+.control-bar .compact-field {
+  min-width: 0;
+}
+
+.control-bar .field span {
+  font-size: 0.74rem;
+}
+
+.control-bar .compact-actions {
+  justify-content: flex-end;
+  min-width: max-content;
+  align-self: center;
+}
+
+.control-bar-result {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: var(--text-muted);
+  font-size: 0.88rem;
+  white-space: nowrap;
+}
+
+.control-bar-result strong {
+  color: var(--text);
+}
+
+.quiet-disclosure {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-solid);
+}
+
+.quiet-disclosure summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 40px;
+  padding: 0 0.8rem;
+  color: var(--text-soft);
+  cursor: pointer;
+  font-size: 0.88rem;
+  font-weight: 800;
+  list-style: none;
+}
+
+.quiet-disclosure summary::-webkit-details-marker {
+  display: none;
+}
+
+.quiet-disclosure .filter-grid,
+.quiet-disclosure .inline-form,
+.quiet-disclosure .table-scroll,
+.quiet-disclosure .compact-field-grid,
+.quiet-disclosure > .field,
+.quiet-disclosure > .table-actions,
+.quiet-disclosure > .notice {
+  border-top: 1px solid var(--border);
+}
+
+.quiet-disclosure .compact-field-grid,
+.quiet-disclosure > .field,
+.quiet-disclosure > .table-actions,
+.quiet-disclosure > .notice {
+  padding: 0.85rem;
+}
+
+.quiet-disclosure > .table-scroll {
+  padding: 0;
+}
+
+.operations-panel {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.page-band {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.table-card {
+  overflow: hidden;
+}
+
+.table-card .data-table {
+  margin-top: 0.15rem;
+}
+
 .card,
 .list-card {
   background: var(--surface);
@@ -642,6 +797,14 @@ p {
   align-items: flex-start;
   gap: 1rem;
   flex-wrap: wrap;
+}
+
+.section > .page-header {
+  padding: 0.15rem 0 0.25rem;
+}
+
+.section > .page-header h1 {
+  margin: 0;
 }
 
 .page-header > div {
@@ -1471,20 +1634,24 @@ p {
 
 .alert-tabs {
   display: flex;
-  gap: 0.35rem;
-  margin: 0 0 1rem;
-  border-bottom: 1px solid var(--border);
+  gap: 0.25rem;
+  margin: 0.8rem 1rem 0;
+  padding: 0.25rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-muted);
   overflow-x: auto;
 }
 
 .alert-tabs button {
   background: transparent;
-  border: none;
+  border: 0;
+  border-radius: 6px;
   color: var(--text-muted);
-  padding: 0.72rem 0.9rem;
+  padding: 0.52rem 0.75rem;
   cursor: pointer;
   font-weight: 750;
-  border-bottom: 2px solid transparent;
+  white-space: nowrap;
 }
 
 .alert-tabs button:hover {
@@ -1492,8 +1659,8 @@ p {
 }
 
 .alert-tabs button.active {
-  color: var(--primary);
-  border-bottom-color: var(--primary);
+  color: var(--on-primary);
+  background: var(--primary);
 }
 
 .nav-badge {
@@ -2580,6 +2747,25 @@ summary {
   .toolbar .field,
   .toolbar .compact-actions {
     width: 100%;
+  }
+
+  .ops-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .ops-actions {
+    justify-content: flex-start;
+  }
+
+  .control-bar {
+    grid-template-columns: 1fr;
+  }
+
+  .control-bar .compact-actions {
+    justify-content: space-between;
+    width: 100%;
+    min-width: 0;
   }
 
   .bridge-message-summary,
