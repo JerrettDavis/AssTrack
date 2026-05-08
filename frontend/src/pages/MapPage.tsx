@@ -236,6 +236,47 @@ function distanceMeters(a: Pick<Observation, 'latitude' | 'longitude'>, b: Pick<
   return earthRadiusMeters * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h))
 }
 
+function interpolateNumber(a: number | null | undefined, b: number | null | undefined, progress: number): number | null {
+  if (a == null || b == null) return a ?? b ?? null
+  return a + (b - a) * progress
+}
+
+function interpolateObservation(from: Observation, to: Observation, cursorMs: number): Observation {
+  const fromMs = positionTimeMs(from)
+  const toMs = positionTimeMs(to)
+  if (!Number.isFinite(fromMs) || !Number.isFinite(toMs) || toMs <= fromMs) return from
+
+  const progress = Math.max(0, Math.min(1, (cursorMs - fromMs) / (toMs - fromMs)))
+  return {
+    ...from,
+    id: `${from.id}:${to.id}:${Math.round(cursorMs)}`,
+    observedAt: new Date(cursorMs).toISOString(),
+    latitude: interpolateNumber(from.latitude, to.latitude, progress) ?? from.latitude,
+    longitude: interpolateNumber(from.longitude, to.longitude, progress) ?? from.longitude,
+    altitude: interpolateNumber(from.altitude, to.altitude, progress),
+    accuracyMeters: interpolateNumber(from.accuracyMeters, to.accuracyMeters, progress),
+    speedKmh: interpolateNumber(from.speedKmh, to.speedKmh, progress),
+    headingDegrees: interpolateNumber(from.headingDegrees, to.headingDegrees, progress),
+  }
+}
+
+function observationAtCursor(ordered: Observation[], cursorMs: number): Observation | null {
+  if (ordered.length === 0) return null
+  const firstMs = positionTimeMs(ordered[0])
+  if (cursorMs < firstMs) return null
+
+  for (let index = 0; index < ordered.length - 1; index += 1) {
+    const current = ordered[index]
+    const next = ordered[index + 1]
+    const currentMs = positionTimeMs(current)
+    const nextMs = positionTimeMs(next)
+    if (cursorMs === currentMs) return current
+    if (cursorMs > currentMs && cursorMs < nextMs) return interpolateObservation(current, next, cursorMs)
+  }
+
+  return ordered[ordered.length - 1]
+}
+
 type DisplayPosition = Observation & {
   groupedTrackers?: Observation[]
   groupedTrackerCount?: number
@@ -1120,15 +1161,24 @@ export default function MapPage() {
 
   useEffect(() => {
     if (!timelinePlaying || timeline === null || timelineCursorMs === null) return
-    const interval = window.setInterval(() => {
+    let lastFrameMs = performance.now()
+    let frameId = 0
+    const playbackMsPerSecond = 5 * 60 * 1000
+
+    const tick = (frameMs: number) => {
+      const elapsedMs = Math.max(0, frameMs - lastFrameMs)
+      lastFrameMs = frameMs
       setTimelineCursorMs((current) => {
         const max = new Date(timeline.to).getTime()
-        const next = (current ?? max) + 5 * 60 * 1000
+        const next = (current ?? max) + (elapsedMs / 1000) * playbackMsPerSecond
         return next >= max ? max : next
       })
-    }, 650)
-    return () => window.clearInterval(interval)
-  }, [timeline, timelineCursorMs, timelinePlaying])
+      frameId = window.requestAnimationFrame(tick)
+    }
+
+    frameId = window.requestAnimationFrame(tick)
+    return () => window.cancelAnimationFrame(frameId)
+  }, [timeline, timelinePlaying])
 
   useEffect(() => {
     if (timeline === null || timelineCursorMs === null) return
@@ -1138,16 +1188,16 @@ export default function MapPage() {
   const timelineSourcePositions = useMemo(() => {
     if (!showTimeline || timeline === null || timelineCursorMs === null) return positions
 
-    const latestByDevice = new Map<string, Observation>()
+    const grouped = new Map<string, Observation[]>()
     for (const observation of timeline.observations) {
-      if (new Date(ageTimestamp(observation.observedAt, observation.receivedAt)).getTime() > timelineCursorMs) continue
-      const current = latestByDevice.get(observation.deviceId)
-      if (!current || positionTimeMs(observation) >= positionTimeMs(current)) {
-        latestByDevice.set(observation.deviceId, observation)
-      }
+      const items = grouped.get(observation.deviceId)
+      if (items) items.push(observation)
+      else grouped.set(observation.deviceId, [observation])
     }
 
-    return Array.from(latestByDevice.values())
+    return Array.from(grouped.values())
+      .map((items) => observationAtCursor([...items].sort((a, b) => positionTimeMs(a) - positionTimeMs(b)), timelineCursorMs))
+      .filter((item): item is Observation => item != null)
   }, [positions, showTimeline, timeline, timelineCursorMs])
 
   const visiblePositions = useMemo(() => timelineSourcePositions.filter((position) => {
@@ -1213,19 +1263,33 @@ export default function MapPage() {
       const device = deviceById.get(observation.deviceId)
       if (providerFilter !== 'all' && (device?.provider ?? 'manual') !== providerFilter) continue
       if (feedFilter !== 'all' && (device?.integrationFeedId ?? '') !== feedFilter) continue
-      grouped.set(observation.deviceId, [...(grouped.get(observation.deviceId) ?? []), observation])
+      const items = grouped.get(observation.deviceId)
+      if (items) items.push(observation)
+      else grouped.set(observation.deviceId, [observation])
     }
 
     return Array.from(grouped.entries()).map(([deviceId, items]) => {
       const ordered = [...items].sort((a, b) => positionTimeMs(a) - positionTimeMs(b))
+      const cursorPosition = observationAtCursor(ordered, timelineCursorMs)
+      const cursorPoint = cursorPosition ? [cursorPosition.latitude, cursorPosition.longitude] as [number, number] : null
+      const past = ordered
+        .filter((item) => positionTimeMs(item) <= timelineCursorMs)
+        .map((item) => [item.latitude, item.longitude] as [number, number])
+      const future = ordered
+        .filter((item) => positionTimeMs(item) > timelineCursorMs)
+        .map((item) => [item.latitude, item.longitude] as [number, number])
+
+      if (cursorPoint) {
+        const lastPast = past[past.length - 1]
+        if (!lastPast || lastPast[0] !== cursorPoint[0] || lastPast[1] !== cursorPoint[1]) past.push(cursorPoint)
+        const firstFuture = future[0]
+        if (!firstFuture || firstFuture[0] !== cursorPoint[0] || firstFuture[1] !== cursorPoint[1]) future.unshift(cursorPoint)
+      }
+
       return {
         deviceId,
-        past: ordered
-          .filter((item) => positionTimeMs(item) <= timelineCursorMs)
-          .map((item) => [item.latitude, item.longitude] as [number, number]),
-        future: ordered
-          .filter((item) => positionTimeMs(item) > timelineCursorMs)
-          .map((item) => [item.latitude, item.longitude] as [number, number]),
+        past,
+        future,
       }
     }).filter((path) => path.past.length + path.future.length > 1)
   }, [deviceById, feedFilter, providerFilter, showTimeline, timeline, timelineCursorMs])
