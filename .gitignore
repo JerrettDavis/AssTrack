@@ -42,6 +42,7 @@ docs/_site/
 # Environment variables
 .env
 frontend/public/config.json
+installer/AssTrack.Setup/HarvestedFiles.wxs
 
 # OS files
 Thumbs.db
