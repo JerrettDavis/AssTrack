@@ -5,7 +5,9 @@ public record SystemStatusDto(
     bool SimulationEnabled,
     bool WebhookConfigured,
     bool ApiKeyConfigured,
+    bool AdminApiKeyConfigured,
     bool IngestApiKeyConfigured,
+    string AccessTier,
     bool SwaggerEnabled,
     int RateLimitPermitLimit,
     int RateLimitWindowSeconds,
@@ -25,5 +27,18 @@ public record AutoCreatedAssetCleanupResultDto(
     int MatchingAssets,
     int DeletedAssets,
     int DetachedDevices,
+    bool DryRun
+);
+
+public record EnterpriseRetentionCleanupResultDto(
+    int MatchingAuditEvents,
+    int DeletedAuditEvents,
+    int MatchingResolvedIntegrationEvents,
+    int DeletedResolvedIntegrationEvents,
+    int MatchingWebhookDeliveries,
+    int DeletedWebhookDeliveries,
+    int AuditRetentionDays,
+    int SignalRetentionDays,
+    int WebhookRetentionDays,
     bool DryRun
 );

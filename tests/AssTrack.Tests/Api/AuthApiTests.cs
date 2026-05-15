@@ -80,6 +80,35 @@ public class AuthApiTests : IClassFixture<TestWebApplicationFactory>
     }
 
     [Fact]
+    public async Task AdminOnlyEndpoint_WithSeparateOperatorKey_Returns403()
+    {
+        await using var factory = new TestWebApplicationFactory(null, new Dictionary<string, string?>
+        {
+            ["Auth:AdminApiKey"] = "test-admin-key"
+        });
+        using var client = factory.CreateAuthenticatedClient();
+
+        var response = await client.PostAsync("/api/system/maintenance/clean-null-island?dryRun=true", null);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task AdminOnlyEndpoint_WithAdminKey_Returns200()
+    {
+        await using var factory = new TestWebApplicationFactory(null, new Dictionary<string, string?>
+        {
+            ["Auth:AdminApiKey"] = "test-admin-key"
+        });
+        await factory.ResetDatabaseAsync();
+        using var client = factory.CreateClientWithApiKey("test-admin-key");
+
+        var response = await client.PostAsync("/api/system/maintenance/clean-null-island?dryRun=true", null);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
     public async Task HealthEndpoint_WithoutApiKey_Returns200()
     {
         using var client = _factory.CreateClient();

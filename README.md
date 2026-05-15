@@ -43,6 +43,7 @@ The API is built with ASP.NET Core minimal APIs on .NET 10. The route prefix for
 | GET | `/api/observations` | Recent observations (last 100) |
 | GET | `/api/observations/latest-positions` | Latest observation per device (live map feed) |
 | GET | `/api/observations/latest/{deviceId}` | Latest observation for a specific device |
+| GET | `/api/reports/utilization` | Date-bounded utilization report with distance, moving time, idle time, stops, and max speed by device |
 | POST | `/api/observations` | Ingest an observation (triggers speed alert if `speedKmh > 120`) |
 | POST | `/api/observations/ingest` | Alias for the POST above |
 | GET | `/api/integrations/providers` | List supported integration provider profiles |
@@ -89,16 +90,19 @@ The frontend handles token management automatically: it fetches a fresh token on
 
 ## Key Separation (Migration)
 
-AssTrack supports two API keys for role-based access control:
+AssTrack supports API-key based RBAC with explicit roles and an access tier claim:
 
 | Key | Environment Variable | Role(s) | Purpose |
 |-----|---------------------|---------|---------|
-| Operator key | `ASSTRACK_API_KEY` | `operator`, `ingest` | Full control-plane access |
+| Admin key | `ASSTRACK_ADMIN_API_KEY` | `admin`, `operator`, `viewer`, `ingest` | Enterprise administration and destructive maintenance |
+| Operator key | `ASSTRACK_API_KEY` | `operator`, `viewer`, `ingest` | Day-to-day control-plane access |
 | Ingest key | `ASSTRACK_INGEST_API_KEY` | `ingest` | Device POST-only access |
 
 ### Backward Compatibility
 
-If `ASSTRACK_INGEST_API_KEY` is not set, the operator key (`ASSTRACK_API_KEY`) continues to work for all endpoints, including ingest. Existing deployments do not need to change anything.
+If `ASSTRACK_ADMIN_API_KEY` is not set, the operator key (`ASSTRACK_API_KEY`) also receives the `admin` role so existing deployments keep working. If `ASSTRACK_INGEST_API_KEY` is not set, the operator key continues to work for ingest endpoints.
+
+Set `ASSTRACK_ACCESS_TIER` to `community`, `professional`, or `enterprise` to expose the deployment tier through `/api/auth/me` and `/api/system/status`. The default is `enterprise`.
 
 ### Upgrading to Key Separation
 
@@ -111,7 +115,8 @@ If `ASSTRACK_INGEST_API_KEY` is not set, the operator key (`ASSTRACK_API_KEY`) c
    ASSTRACK_INGEST_API_KEY=<your-new-ingest-key>
    ```
 3. Update device firmware, ingestion clients, and integration bridge workers to use the new ingest key in the `X-Api-Key` header.
-4. The operator key retains full access. The ingest key is restricted to direct observation ingest and integration-feed observation ingest.
+4. Generate and set `ASSTRACK_ADMIN_API_KEY` before enforcing separate enterprise administration.
+5. The ingest key is restricted to direct observation ingest and integration-feed observation ingest.
 
 ### Policy Summary
 
@@ -120,6 +125,7 @@ If `ASSTRACK_INGEST_API_KEY` is not set, the operator key (`ASSTRACK_API_KEY`) c
 | `POST /api/observations` | `Ingest` | operator key, ingest key |
 | `POST /api/observations/ingest` | `Ingest` | operator key, ingest key |
 | `POST /api/integrations/{id}/observations` | `Ingest` | operator key, ingest key |
+| `POST /api/system/maintenance/*`, `DELETE /api/system/maintenance/e2e-data` | `Admin` | admin key, or operator key when no admin key is configured |
 | `GET /api/integrations/providers` | `Operator` | operator key only |
 | `GET\|POST\|PUT\|DELETE /api/integrations*` | `Operator` | operator key only |
 | `GET /api/system/status` | `Operator` | operator key only |
@@ -142,10 +148,11 @@ The frontend adapts its interface based on the authenticated key's roles:
 
 | Role | UI Behaviour |
 |------|-------------|
+| `admin` | Includes operator capabilities plus destructive maintenance and access administration capabilities |
 | `operator` | Full access: all nav items visible, Settings and Webhooks pages accessible, delete buttons shown on Assets/Devices/Geofences |
 | `ingest` | Restricted access: Settings and Webhooks nav links hidden; those pages show an access-denied message if navigated to directly; delete buttons hidden on list pages |
 
-The frontend queries `GET /api/auth/me` on startup to determine the active role set. If the request fails (network error, misconfigured key), the UI defaults to the most restrictive behaviour (`isOperator: false`).
+The frontend queries `GET /api/auth/me` on startup to determine roles, access tier, and capability flags. If the request fails, the UI defaults to the most restrictive behaviour.
 
 ## Observation History & Export
 
@@ -618,7 +625,7 @@ Configure the key in `appsettings.json` or via environment variable:
 
 Or via environment variable: `Auth__ApiKey=your-secret-key`
 
-When `Auth:ApiKey` is empty (default), all requests are allowed. When a key is configured, all `/api/*` endpoints require the header `X-Api-Key: <your-key>`. Health check endpoints (`/healthz/*` and `/api/health`) are always public.
+When `Auth:ApiKey` is empty in Development or Testing, requests are allowed with admin/operator/ingest roles. In Production, `Auth:ApiKey` is required. When keys are configured, `/api/*` endpoints require `X-Api-Key: <your-key>` and policies are evaluated from the matching key's roles. Health check endpoints (`/healthz/*` and `/api/health`) are always public.
 
 > **SSE exception**: The browser `EventSource` API cannot send custom headers. The frontend uses a short-lived token-based authentication: it fetches a token via `POST /api/events/token` (using the API key) and then connects to the SSE endpoint with `?token=<short-lived-token>`. This approach avoids exposing long-lived API keys in URLs. See [Live Events Authentication](#live-events-authentication) for details.
 
@@ -674,7 +681,9 @@ Useful AppHost overrides:
 | Variable | Purpose | Default |
 |---|---|---|
 | `ASSTRACK_API_KEY` | Operator API key also passed to the dev frontend | `local-dev-key-asstrack` |
+| `ASSTRACK_ADMIN_API_KEY` | Optional separate admin key for destructive maintenance and future access administration | Empty; operator key receives admin |
 | `ASSTRACK_INGEST_API_KEY` | Ingest-only key for devices and bridge gateway posts | Same as `ASSTRACK_API_KEY` |
+| `ASSTRACK_ACCESS_TIER` | Deployment tier surfaced by identity and system status APIs | `enterprise` |
 | `ASSTRACK_CONNECTION_STRING` | SQLite connection string for local API storage | `Data Source=<repo>\asstrack-dev.db` |
 The frontend still loads `/config.json` in hosted/containerized deployments. Under the Vite dev server, the AppHost also supplies `VITE_DEV_API_KEY` so the local UI can call the API without a separate config file.
 

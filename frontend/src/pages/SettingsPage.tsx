@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { apiPost } from '../api/client'
-import { getSystemStatus, seedDemoData, type SeedResult, type SystemStatus } from '../api/system'
+import { applyEnterpriseRetention, getSystemStatus, seedDemoData, type EnterpriseRetentionCleanupResult, type SeedResult, type SystemStatus } from '../api/system'
 import { useIdentityContext } from '../context/IdentityContext'
 import { useAppearance, type ColorMode, type ThemeStyle } from '../context/AppearanceContext'
 import DisplayControls from '../components/DisplayControls'
@@ -34,7 +34,7 @@ const colorModeOptions: Array<{ value: ColorMode; label: string }> = [
 ]
 
 export default function SettingsPage() {
-  const { isOperator, loading: identityLoading } = useIdentityContext()
+  const { isOperator, isAdmin, loading: identityLoading } = useIdentityContext()
   const { colorMode, effectiveColorMode, themeStyle, setColorMode, setThemeStyle } = useAppearance()
   const [status, setStatus] = useState<SystemStatus | null>(null)
   const [loading, setLoading] = useState(true)
@@ -48,6 +48,10 @@ export default function SettingsPage() {
   const [seedResult, setSeedResult] = useState<SeedResult | null>(null)
   const [seedError, setSeedError] = useState<string | null>(null)
   const [seedLoading, setSeedLoading] = useState(false)
+  const [retentionDays, setRetentionDays] = useState({ audit: 365, signal: 180, webhook: 90 })
+  const [retentionLoading, setRetentionLoading] = useState(false)
+  const [retentionError, setRetentionError] = useState<string | null>(null)
+  const [retentionResult, setRetentionResult] = useState<EnterpriseRetentionCleanupResult | null>(null)
 
   async function loadStatus() {
     try {
@@ -97,6 +101,25 @@ export default function SettingsPage() {
       setSeedError(e instanceof Error ? e.message : String(e))
     } finally {
       setSeedLoading(false)
+    }
+  }
+
+  async function handleRetention(dryRun: boolean) {
+    try {
+      setRetentionLoading(true)
+      setRetentionError(null)
+      const r = await applyEnterpriseRetention({
+        auditDays: retentionDays.audit,
+        signalDays: retentionDays.signal,
+        webhookDays: retentionDays.webhook,
+        dryRun,
+      })
+      setRetentionResult(r)
+      await loadStatus()
+    } catch (e: unknown) {
+      setRetentionError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setRetentionLoading(false)
     }
   }
 
@@ -276,8 +299,16 @@ export default function SettingsPage() {
             <span className={`badge ${status.apiKeyConfigured ? 'badge-success' : 'badge-danger'}`}>{status.apiKeyConfigured ? 'Configured' : 'Missing'}</span>
           </div>
           <div className="status-tile">
+            <span className="muted">Admin Key</span>
+            <span className={`badge ${status.adminApiKeyConfigured ? 'badge-success' : 'badge-warning'}`}>{status.adminApiKeyConfigured ? 'Configured' : 'Operator fallback'}</span>
+          </div>
+          <div className="status-tile">
             <span className="muted">Ingest Key</span>
             <span className={`badge ${status.ingestApiKeyConfigured ? 'badge-success' : 'badge-danger'}`}>{status.ingestApiKeyConfigured ? 'Configured' : 'Missing'}</span>
+          </div>
+          <div className="status-tile">
+            <span className="muted">Access Tier</span>
+            <strong>{status.accessTier}</strong>
           </div>
           <div className="status-tile">
             <span className="muted">Swagger</span>
@@ -429,6 +460,50 @@ export default function SettingsPage() {
         </>
       )}
         </>
+      )}
+
+      {showOperatorSettings && status && isAdmin && (
+        <div className="card">
+          <div className="page-header">
+            <div>
+              <h2>Enterprise Retention</h2>
+              <p className="muted">Purge old audit events, resolved signals, and webhook delivery logs after export windows close.</p>
+            </div>
+          </div>
+          <div className="field-grid">
+            <label className="field">
+              <span>Audit days</span>
+              <input min={1} onChange={(event) => setRetentionDays((v) => ({ ...v, audit: parseInt(event.target.value || '365', 10) }))} type="number" value={retentionDays.audit} />
+            </label>
+            <label className="field">
+              <span>Resolved signal days</span>
+              <input min={1} onChange={(event) => setRetentionDays((v) => ({ ...v, signal: parseInt(event.target.value || '180', 10) }))} type="number" value={retentionDays.signal} />
+            </label>
+            <label className="field">
+              <span>Webhook log days</span>
+              <input min={1} onChange={(event) => setRetentionDays((v) => ({ ...v, webhook: parseInt(event.target.value || '90', 10) }))} type="number" value={retentionDays.webhook} />
+            </label>
+          </div>
+          <div className="button-row">
+            <button className="button button-secondary" disabled={retentionLoading} onClick={() => void handleRetention(true)} type="button">
+              {retentionLoading ? 'Checking...' : 'Dry Run'}
+            </button>
+            <button className="button button-danger" disabled={retentionLoading} onClick={() => void handleRetention(false)} type="button">
+              {retentionLoading ? 'Applying...' : 'Apply Retention'}
+            </button>
+          </div>
+          {retentionError && <div className="notice notice-danger">{retentionError}</div>}
+          {retentionResult && (
+            <div className={`notice ${retentionResult.dryRun ? 'notice-info' : 'notice-success'}`}>
+              <div className="panel-grid">
+                <div className="status-tile"><span className="muted">Audit events</span><strong>{retentionResult.deletedAuditEvents} / {retentionResult.matchingAuditEvents}</strong></div>
+                <div className="status-tile"><span className="muted">Resolved signals</span><strong>{retentionResult.deletedResolvedIntegrationEvents} / {retentionResult.matchingResolvedIntegrationEvents}</strong></div>
+                <div className="status-tile"><span className="muted">Webhook logs</span><strong>{retentionResult.deletedWebhookDeliveries} / {retentionResult.matchingWebhookDeliveries}</strong></div>
+                <div className="status-tile"><span className="muted">Mode</span><strong>{retentionResult.dryRun ? 'Dry run' : 'Applied'}</strong></div>
+              </div>
+            </div>
+          )}
+        </div>
       )}
     </div>
   )

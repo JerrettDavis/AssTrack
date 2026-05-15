@@ -616,10 +616,17 @@ p {
 }
 
 .signal-actions {
-  display: grid;
-  grid-template-columns: minmax(150px, 1fr) auto;
+  display: flex;
+  flex-wrap: wrap;
   gap: 0.65rem;
-  align-items: end;
+  align-items: center;
+}
+
+.compact-input {
+  min-width: 160px;
+  max-width: 240px;
+  height: 2.25rem;
+  padding: 0 0.65rem;
 }
 
 .metric {
@@ -1354,7 +1361,7 @@ p {
 
 .timeline-controls {
   display: grid;
-  grid-template-columns: auto auto auto auto minmax(0, 1fr);
+  grid-template-columns: auto auto auto auto auto minmax(0, 1fr);
   gap: 0.65rem;
   align-items: end;
 }
@@ -1406,6 +1413,13 @@ p {
   color: #fff;
   background: var(--success);
   border-color: var(--success);
+}
+
+.timeline-live-button:disabled {
+  color: var(--text-muted);
+  border-color: var(--border);
+  background: var(--surface-muted);
+  cursor: not-allowed;
 }
 
 .timeline-track-shell {

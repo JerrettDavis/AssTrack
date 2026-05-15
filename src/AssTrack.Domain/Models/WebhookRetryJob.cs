@@ -10,4 +10,8 @@ public record WebhookRetryJob(
     string EventType,
     int AttemptNumber,
     string CorrelationId,
-    DateTime ScheduledAt);
+    DateTime ScheduledAt)
+{
+    public string? TargetUrl { get; init; }
+    public string? SigningSecret { get; init; }
+}

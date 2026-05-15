@@ -22,7 +22,8 @@ public sealed record WebhookStatusDto(
     DateTime? LastDeliveredAt,
     double? AvgDurationMs,
     int RetryQueueDepth = 0,
-    bool SigningEnabled = false);
+    bool SigningEnabled = false,
+    int EnabledSubscriptions = 0);
 
 /// <summary>Request body for POST /api/webhooks/test.</summary>
 public sealed record TestWebhookRequest(string? EventType);
@@ -34,3 +35,18 @@ public sealed record TestWebhookFireResponse(
     bool Configured,
     string Message);
 
+/// <summary>Response from POST /api/webhooks/deliveries/{id}/replay.</summary>
+public sealed record WebhookReplayResponse(
+    bool Replayed,
+    int SourceDeliveryId,
+    string EventType,
+    string TargetUrl,
+    string Message);
+
+/// <summary>Response from POST /api/webhooks/subscriptions/{id}/test.</summary>
+public sealed record WebhookSubscriptionTestResponse(
+    bool Fired,
+    Guid SubscriptionId,
+    string EventType,
+    string TargetUrl,
+    string Message);

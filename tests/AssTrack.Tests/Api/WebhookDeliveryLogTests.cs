@@ -117,6 +117,70 @@ public class WebhookDeliveryLogTests : IClassFixture<WebhookDeliveryLogFactory>
     }
 
     [Fact]
+    public async Task FailedDelivery_CanBeReplayed_ToOriginalTarget()
+    {
+        await _factory.ResetDatabaseAsync();
+        _factory.WebhookHandler.Reset();
+        _factory.WebhookHandler.ResponseStatusCode = HttpStatusCode.InternalServerError;
+
+        var deviceId = await SeedDeviceAsync();
+        using var client = _factory.CreateAuthenticatedClient();
+        await IngestSpeedingObservationAsync(client, deviceId);
+        await Task.Delay(200);
+
+        var failedResponse = await client.GetAsync("/api/webhooks/deliveries?success=false");
+        var failedResult = await failedResponse.Content.ReadFromJsonAsync<PagedResult<WebhookDeliveryLogDto>>();
+        var failed = failedResult!.Items.Single();
+
+        _factory.WebhookHandler.Reset();
+        _factory.WebhookHandler.ResponseStatusCode = HttpStatusCode.OK;
+        var replayResponse = await client.PostAsync($"/api/webhooks/deliveries/{failed.Id}/replay", null);
+
+        replayResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var replay = await replayResponse.Content.ReadFromJsonAsync<WebhookReplayResponse>();
+        replay.Should().NotBeNull();
+        replay!.Replayed.Should().BeTrue();
+        replay.TargetUrl.Should().Be("https://hooks.test.local/delivery");
+        _factory.WebhookHandler.LastRequest.Should().NotBeNull();
+        _factory.WebhookHandler.LastRequest!.RequestUri!.ToString().Should().Be("https://hooks.test.local/delivery");
+        _factory.WebhookHandler.LastRequestBody.Should().Contain("speed_alert");
+
+        var deliveries = await client.GetFromJsonAsync<PagedResult<WebhookDeliveryLogDto>>("/api/webhooks/deliveries?eventType=speed_alert");
+        deliveries!.Items.Should().Contain(x => x.AttemptNumber == failed.AttemptNumber + 1 && x.Success);
+
+        var audit = await client.GetFromJsonAsync<PagedResult<AuditEventDto>>("/api/audit-events?action=webhook_delivery.replayed");
+        audit.Should().NotBeNull();
+        audit!.Items.Should().ContainSingle(x => x.EntityId == failed.Id.ToString() && x.EntityType == "webhook_delivery");
+    }
+
+    [Fact]
+    public async Task Replay_ReturnsConflict_WhenFullPayloadWasNotRetained()
+    {
+        await _factory.ResetDatabaseAsync();
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AssTrackDbContext>();
+            db.WebhookDeliveryLogs.Add(new WebhookDeliveryLog
+            {
+                AttemptedAt = DateTime.UtcNow,
+                EventType = "speed_alert",
+                TargetUrl = "https://hooks.test.local/delivery",
+                Success = false,
+                AttemptNumber = 1,
+                CorrelationId = Guid.NewGuid().ToString(),
+                RequestPayloadSummary = """{"eventType":"speed_alert"}"""
+            });
+            await db.SaveChangesAsync();
+        }
+
+        using var client = _factory.CreateAuthenticatedClient();
+        var logs = await client.GetFromJsonAsync<PagedResult<WebhookDeliveryLogDto>>("/api/webhooks/deliveries");
+        var response = await client.PostAsync($"/api/webhooks/deliveries/{logs!.Items.Single().Id}/replay", null);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Conflict);
+    }
+
+    [Fact]
     public async Task DeliveryLog_IsCreated_OnNetworkFailureAndExceptionIsSwallowed()
     {
         await _factory.ResetDatabaseAsync();

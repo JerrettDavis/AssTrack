@@ -534,6 +534,135 @@ public sealed class BridgeGatewayTests
         ingestClient.StatusUpdate!.Status.Should().Be("delivered");
     }
 
+    [Fact]
+    public void Dynamic_feed_store_maps_configuration_and_replaces_snapshot_case_insensitively()
+    {
+        var store = new DynamicBridgeFeedStore();
+        var feedId = Guid.NewGuid();
+
+        store.Replace([
+            new BridgeIntegrationFeedConfigDto(
+                feedId,
+                "Field MQTT",
+                "meshtastic",
+                true,
+                true,
+                "mesh,field",
+                """
+                {
+                  "bridgeKey": "Field-Mesh",
+                  "bridgeEnabled": true,
+                  "sharedSecret": "secret",
+                  "topics": ["msh/US/#", "msh/EU/#"],
+                  "port": 1883
+                }
+                """,
+                DateTime.UtcNow)
+        ]);
+
+        store.TryGet("field-mesh", out var feed).Should().BeTrue();
+        feed.FeedId.Should().Be(feedId);
+        feed.Enabled.Should().BeTrue();
+        feed.SharedSecret.Should().Be("secret");
+        feed.DefaultTags.Should().Be("mesh,field");
+        feed.Settings["topics"].Should().Be("msh/US/#,msh/EU/#");
+        feed.Settings["port"].Should().Be("1883");
+
+        store.Replace([
+            new BridgeIntegrationFeedConfigDto(
+                Guid.NewGuid(),
+                "Replacement Feed",
+                "generic-webhook",
+                true,
+                false,
+                null,
+                """{"bridgeEnabled":false}""",
+                DateTime.UtcNow)
+        ]);
+
+        store.TryGet("field-mesh", out _).Should().BeFalse();
+        store.TryGet("replacement-feed", out var replacement).Should().BeTrue();
+        replacement.Enabled.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Dynamic_feed_store_tolerates_invalid_configuration_json()
+    {
+        var store = new DynamicBridgeFeedStore();
+        var feedId = Guid.NewGuid();
+
+        store.Replace([
+            new BridgeIntegrationFeedConfigDto(
+                feedId,
+                "Invalid Json Feed",
+                "generic-webhook",
+                true,
+                false,
+                null,
+                "{not-json",
+                DateTime.UtcNow)
+        ]);
+
+        store.TryGet("invalid-json-feed", out var feed).Should().BeTrue();
+        feed.FeedId.Should().Be(feedId);
+        feed.Settings.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Bridge_feed_monitor_filters_logs_messages_and_tracks_resyncs()
+    {
+        var monitor = new BridgeFeedMonitor();
+        monitor.Update("mesh", status =>
+        {
+            status.Provider = "meshtastic";
+            status.State = "connected";
+        });
+        monitor.Log("mesh", "info", "Connected to MQTT");
+        monitor.Log("other", "warn", "Other feed warning");
+        monitor.RecordMessage("mesh", "meshtastic", "msh/US/2/json/LongFast", "!abc123", "position", "Position packet", """{"lat":1}""");
+        monitor.RecordMessage("mesh", "meshtastic", "msh/US/2/json/LongFast", "!def456", "text", "Text packet", """{"text":"hello"}""");
+
+        monitor.Statuses.Should().ContainSingle(status => status.FeedKey == "mesh" && status.State == "connected");
+        monitor.Logs("mesh").Should().ContainSingle(log => log.Message == "Connected to MQTT");
+        monitor.Messages(feedKey: "mesh", trackerId: "abc", limit: 10).Should().ContainSingle(message => message.TrackerId == "!abc123");
+        monitor.Messages(search: "hello", payloadOnly: true).Should().ContainSingle(message => message.MessageType == "text");
+
+        monitor.RequestResync("mesh").Should().Be(1);
+        monitor.RequestResync("mesh").Should().Be(2);
+        monitor.GetResyncVersion("mesh").Should().Be(2);
+        monitor.Statuses.Single(status => status.FeedKey == "mesh").State.Should().Be("resync-requested");
+    }
+
+    [Fact]
+    public async Task Bridge_gateway_feeds_endpoint_merges_dynamic_feeds_before_static_feeds()
+    {
+        var dynamicStore = new DynamicBridgeFeedStore();
+        var dynamicFeedId = Guid.NewGuid();
+        dynamicStore.Replace([
+            new BridgeIntegrationFeedConfigDto(
+                dynamicFeedId,
+                "Signal Dynamic",
+                "signal",
+                true,
+                false,
+                "dynamic",
+                """{"bridgeKey":"signal","sharedSecret":"dynamic-secret"}""",
+                DateTime.UtcNow)
+        ]);
+
+        await using var app = BuildGatewayTestApp(new FakeIngestClient(), dynamicStore);
+        await app.StartAsync();
+
+        var feeds = await app.GetTestClient().GetFromJsonAsync<List<BridgeFeedSummary>>("/bridge/feeds");
+
+        feeds.Should().NotBeNull();
+        feeds!.Should().ContainSingle(feed =>
+            feed.Key == "signal" &&
+            feed.FeedId == dynamicFeedId &&
+            feed.Provider == "signal" &&
+            feed.HasSharedSecret);
+    }
+
     private static BridgeFeedContext Context(string provider, string? defaultTags = null)
         => new("test", new BridgeFeedOptions
         {
@@ -543,7 +672,7 @@ public sealed class BridgeGatewayTests
             DefaultTags = defaultTags
         }, provider);
 
-    private static WebApplication BuildGatewayTestApp(IAssTrackIngestClient ingestClient)
+    private static WebApplication BuildGatewayTestApp(IAssTrackIngestClient ingestClient, DynamicBridgeFeedStore? dynamicBridgeFeedStore = null)
     {
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseTestServer();
@@ -561,7 +690,7 @@ public sealed class BridgeGatewayTests
                 }
             }
         }));
-        builder.Services.AddSingleton(new DynamicBridgeFeedStore());
+        builder.Services.AddSingleton(dynamicBridgeFeedStore ?? new DynamicBridgeFeedStore());
         builder.Services.AddSingleton(new BridgeFeedMonitor());
         builder.Services.AddSingleton(new ProviderAdapterRegistry([new NormalizedJsonAdapter()]));
         builder.Services.AddSingleton(ingestClient);

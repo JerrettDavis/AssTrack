@@ -11,9 +11,10 @@ public class AlertRoutingRuleRepository(AssTrackDbContext dbContext)
             .OrderBy(x => x.Name)
             .ToListAsync(cancellationToken);
 
-    public async Task<IReadOnlyList<AlertRoutingRule>> GetEnabledForEventAsync(string eventType, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<AlertRoutingRule>> GetEnabledForEventAsync(string eventType, Guid? assetId, CancellationToken cancellationToken = default)
         => await Query()
             .Where(x => x.IsEnabled && (x.EventType == AlertRouteEventTypes.All || x.EventType == eventType))
+            .Where(x => !x.AssetId.HasValue || (assetId.HasValue && x.AssetId == assetId.Value))
             .OrderBy(x => x.Name)
             .ToListAsync(cancellationToken);
 
@@ -34,6 +35,7 @@ public class AlertRoutingRuleRepository(AssTrackDbContext dbContext)
         string eventType,
         string channel,
         string provider,
+        Guid? assetId,
         Guid? integrationFeedId,
         string? externalPeerId,
         string? displayName,
@@ -49,6 +51,7 @@ public class AlertRoutingRuleRepository(AssTrackDbContext dbContext)
         rule.EventType = eventType;
         rule.Channel = channel;
         rule.Provider = provider;
+        rule.AssetId = assetId;
         rule.IntegrationFeedId = integrationFeedId;
         rule.ExternalPeerId = externalPeerId;
         rule.DisplayName = displayName;
@@ -72,5 +75,6 @@ public class AlertRoutingRuleRepository(AssTrackDbContext dbContext)
     private IQueryable<AlertRoutingRule> Query()
         => dbContext.AlertRoutingRules
             .AsNoTracking()
+            .Include(x => x.Asset)
             .Include(x => x.IntegrationFeed);
 }

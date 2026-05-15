@@ -58,6 +58,8 @@ export type AlertRoutingRule = {
   eventType: 'all' | 'speed_alert' | 'geofence_breach'
   channel: string
   provider: string
+  assetId?: string | null
+  assetName?: string | null
   integrationFeedId?: string | null
   integrationFeedName?: string | null
   externalPeerId?: string | null
@@ -74,6 +76,7 @@ export type AlertRoutingRuleRequest = {
   eventType: 'all' | 'speed_alert' | 'geofence_breach'
   channel: string
   provider: string
+  assetId?: string | null
   integrationFeedId?: string | null
   externalPeerId?: string | null
   displayName?: string | null

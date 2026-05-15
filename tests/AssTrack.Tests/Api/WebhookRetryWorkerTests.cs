@@ -55,6 +55,8 @@ public class WebhookRetryWorkerTests
 
         public Task NotifyGeofenceBreachAsync(GeofenceBreach breach, CancellationToken cancellationToken = default) => Task.CompletedTask;
 
+        public Task NotifyIntegrationEventAsync(IntegrationEvent integrationEvent, CancellationToken cancellationToken = default) => Task.CompletedTask;
+
         public Task ExecuteRetryAsync(WebhookRetryJob job, CancellationToken cancellationToken = default)
         {
             Job = job;

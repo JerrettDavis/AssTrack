@@ -8,6 +8,7 @@ public interface IAlertRoutingService
 {
     Task RouteSpeedAlertAsync(SpeedAlert alert, CancellationToken cancellationToken = default);
     Task RouteGeofenceBreachAsync(GeofenceBreach breach, CancellationToken cancellationToken = default);
+    Task RouteIntegrationEventAsync(IntegrationEvent integrationEvent, CancellationToken cancellationToken = default);
 }
 
 public sealed class AlertRoutingService(
@@ -43,15 +44,29 @@ public sealed class AlertRoutingService(
             detectedAt = ApiDateTime.Utc(breach.DetectedAt)
         }, cancellationToken);
 
+    public Task RouteIntegrationEventAsync(IntegrationEvent integrationEvent, CancellationToken cancellationToken = default)
+        => RouteAsync(AlertRouteEventTypes.EnterpriseSignal, null, TryParseGuid(integrationEvent.SubjectType, integrationEvent.SubjectId), BuildIntegrationEventBody(integrationEvent), new
+        {
+            eventType = AlertRouteEventTypes.EnterpriseSignal,
+            integrationEventId = integrationEvent.Id,
+            source = integrationEvent.Source,
+            signalType = integrationEvent.EventType,
+            severity = integrationEvent.Severity,
+            subjectType = integrationEvent.SubjectType,
+            subjectId = integrationEvent.SubjectId,
+            subjectName = integrationEvent.SubjectName,
+            occurredAt = ApiDateTime.Utc(integrationEvent.OccurredAt)
+        }, cancellationToken);
+
     private async Task RouteAsync(
         string eventType,
-        Guid deviceId,
+        Guid? deviceId,
         Guid? assetId,
         string defaultBody,
         object metadata,
         CancellationToken cancellationToken)
     {
-        var routes = await routeRepository.GetEnabledForEventAsync(eventType, cancellationToken);
+        var routes = await routeRepository.GetEnabledForEventAsync(eventType, assetId, cancellationToken);
         foreach (var route in routes)
         {
             try
@@ -114,4 +129,16 @@ public sealed class AlertRoutingService(
 
     private static string ApplyTemplate(string template, string defaultBody)
         => template.Replace("{message}", defaultBody, StringComparison.OrdinalIgnoreCase);
+
+    private static string BuildIntegrationEventBody(IntegrationEvent integrationEvent)
+    {
+        var subject = integrationEvent.SubjectName ?? integrationEvent.SubjectId ?? integrationEvent.SubjectType ?? "enterprise signal";
+        return $"{integrationEvent.Severity.ToUpperInvariant()} signal from {integrationEvent.Source} for {subject}: {integrationEvent.Message}";
+    }
+
+    private static Guid? TryParseGuid(string? subjectType, string? subjectId)
+        => string.Equals(subjectType, "asset", StringComparison.OrdinalIgnoreCase) &&
+           Guid.TryParse(subjectId, out var assetId)
+            ? assetId
+            : null;
 }

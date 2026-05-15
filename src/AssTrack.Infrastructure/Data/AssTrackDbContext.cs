@@ -13,6 +13,7 @@ public class AssTrackDbContext(DbContextOptions<AssTrackDbContext> options) : Db
     public DbSet<GeofenceBreach> GeofenceBreaches => Set<GeofenceBreach>();
     public DbSet<DeviceGeofenceState> DeviceGeofenceStates => Set<DeviceGeofenceState>();
     public DbSet<WebhookDeliveryLog> WebhookDeliveryLogs => Set<WebhookDeliveryLog>();
+    public DbSet<WebhookSubscription> WebhookSubscriptions => Set<WebhookSubscription>();
     public DbSet<IntegrationFeed> IntegrationFeeds => Set<IntegrationFeed>();
     public DbSet<MessageThread> MessageThreads => Set<MessageThread>();
     public DbSet<MessageEntry> MessageEntries => Set<MessageEntry>();
@@ -21,6 +22,8 @@ public class AssTrackDbContext(DbContextOptions<AssTrackDbContext> options) : Db
     public DbSet<MaintenanceSchedule> MaintenanceSchedules => Set<MaintenanceSchedule>();
     public DbSet<MaintenanceServiceRecord> MaintenanceServiceRecords => Set<MaintenanceServiceRecord>();
     public DbSet<CustodyEvent> CustodyEvents => Set<CustodyEvent>();
+    public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
+    public DbSet<IntegrationEvent> IntegrationEvents => Set<IntegrationEvent>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -155,12 +158,24 @@ public class AssTrackDbContext(DbContextOptions<AssTrackDbContext> options) : Db
             entity.Property(x => x.EventType).IsRequired().HasMaxLength(100);
             entity.Property(x => x.TargetUrl).IsRequired().HasMaxLength(2000);
             entity.Property(x => x.ErrorMessage).HasMaxLength(2000);
+            entity.Property(x => x.RequestPayloadJson).HasColumnType("TEXT");
             entity.Property(x => x.RequestPayloadSummary).HasMaxLength(500);
             entity.Property(x => x.AttemptNumber).HasDefaultValue(1);
             entity.Property(x => x.CorrelationId).IsRequired().HasMaxLength(50).HasDefaultValue(string.Empty);
             entity.HasIndex(x => x.AttemptedAt);
             entity.HasIndex(x => x.EventType);
             entity.HasIndex(x => x.CorrelationId);
+        });
+
+        modelBuilder.Entity<WebhookSubscription>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Name).IsRequired().HasMaxLength(200);
+            entity.Property(x => x.EventTypes).IsRequired().HasMaxLength(500);
+            entity.Property(x => x.TargetUrl).IsRequired().HasMaxLength(2000);
+            entity.Property(x => x.SigningSecret).HasMaxLength(500);
+            entity.HasIndex(x => x.IsEnabled);
+            entity.HasIndex(x => x.Name);
         });
 
         modelBuilder.Entity<MessageThread>(entity =>
@@ -222,6 +237,11 @@ public class AssTrackDbContext(DbContextOptions<AssTrackDbContext> options) : Db
             entity.Property(x => x.Recipient).HasMaxLength(300);
             entity.Property(x => x.MessageTemplate).HasMaxLength(1000);
             entity.HasIndex(x => new { x.IsEnabled, x.EventType });
+            entity.HasIndex(x => x.AssetId);
+            entity.HasOne(x => x.Asset)
+                .WithMany()
+                .HasForeignKey(x => x.AssetId)
+                .OnDelete(DeleteBehavior.SetNull);
             entity.HasOne(x => x.IntegrationFeed)
                 .WithMany()
                 .HasForeignKey(x => x.IntegrationFeedId)
@@ -303,6 +323,50 @@ public class AssTrackDbContext(DbContextOptions<AssTrackDbContext> options) : Db
                 .WithMany(x => x.CustodyEvents)
                 .HasForeignKey(x => x.AssetId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<AuditEvent>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.ActorName).IsRequired().HasMaxLength(200);
+            entity.Property(x => x.ActorRole).IsRequired().HasMaxLength(80);
+            entity.Property(x => x.Action).IsRequired().HasMaxLength(120);
+            entity.Property(x => x.EntityType).IsRequired().HasMaxLength(120);
+            entity.Property(x => x.EntityId).HasMaxLength(120);
+            entity.Property(x => x.EntityName).HasMaxLength(300);
+            entity.Property(x => x.Summary).HasMaxLength(1000);
+            entity.Property(x => x.MetadataJson).HasColumnType("TEXT");
+            entity.Property(x => x.CorrelationId).HasMaxLength(80);
+            entity.HasIndex(x => x.OccurredAt);
+            entity.HasIndex(x => new { x.EntityType, x.OccurredAt });
+            entity.HasIndex(x => new { x.Action, x.OccurredAt });
+            entity.HasIndex(x => x.ActorName);
+        });
+
+        modelBuilder.Entity<IntegrationEvent>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Source).IsRequired().HasMaxLength(120);
+            entity.Property(x => x.ExternalEventId).HasMaxLength(200);
+            entity.Property(x => x.EventType).IsRequired().HasMaxLength(120);
+            entity.Property(x => x.Severity).IsRequired().HasMaxLength(40);
+            entity.Property(x => x.SubjectType).HasMaxLength(120);
+            entity.Property(x => x.SubjectId).HasMaxLength(120);
+            entity.Property(x => x.SubjectName).HasMaxLength(300);
+            entity.Property(x => x.Message).IsRequired().HasMaxLength(1000);
+            entity.Property(x => x.PayloadJson).HasColumnType("TEXT");
+            entity.Property(x => x.CorrelationId).HasMaxLength(80);
+            entity.Property(x => x.Status).IsRequired().HasMaxLength(40).HasDefaultValue(IntegrationEventStatuses.Open);
+            entity.Property(x => x.AcknowledgedBy).HasMaxLength(200);
+            entity.Property(x => x.ResolvedBy).HasMaxLength(200);
+            entity.Property(x => x.ResolutionNote).HasMaxLength(1000);
+            entity.HasIndex(x => x.OccurredAt);
+            entity.HasIndex(x => new { x.Source, x.OccurredAt });
+            entity.HasIndex(x => new { x.Source, x.ExternalEventId }).IsUnique();
+            entity.HasIndex(x => new { x.EventType, x.OccurredAt });
+            entity.HasIndex(x => new { x.SubjectType, x.SubjectId });
+            entity.HasIndex(x => new { x.Status, x.OccurredAt });
+            entity.HasIndex(x => x.CorrelationId);
         });
     }
 }

@@ -29,4 +29,28 @@ public class AlertSteps
         var hasTab = await page.HasFilterTabAsync(tabName);
         hasTab.Should().BeTrue($"Expected alerts page to have filter tab '{tabName}'");
     }
+
+    [When(@"I expand alert routing")]
+    public async Task WhenIExpandAlertRouting()
+    {
+        await _context.Page.GetByText("Alert routing").ClickAsync();
+    }
+
+    [Given(@"an asset-filtered speed alert route named ""([^""]*)"" exists for the asset")]
+    public async Task GivenAnAssetFilteredSpeedAlertRouteNamedExistsForTheAsset(string name)
+    {
+        var assetId = _context.AssetId ?? throw new InvalidOperationException("AssetId not set");
+        await _context.ApiClient.CreateAlertRouteAsync(new Dictionary<string, object?>
+        {
+            ["name"] = name,
+            ["isEnabled"] = true,
+            ["eventType"] = "speed_alert",
+            ["channel"] = "direct",
+            ["provider"] = "meshtastic",
+            ["assetId"] = assetId,
+            ["integrationFeedId"] = null,
+            ["externalPeerId"] = $"!e2e-{Guid.NewGuid():N}",
+            ["displayName"] = name
+        });
+    }
 }

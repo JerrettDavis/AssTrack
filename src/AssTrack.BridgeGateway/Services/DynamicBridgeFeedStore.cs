@@ -49,18 +49,30 @@ public sealed class DynamicBridgeFeedStore
         var settings = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         if (string.IsNullOrWhiteSpace(json)) return settings;
 
-        using var document = JsonDocument.Parse(json);
-        if (document.RootElement.ValueKind != JsonValueKind.Object) return settings;
-
-        foreach (var property in document.RootElement.EnumerateObject())
+        JsonDocument document;
+        try
         {
-            settings[property.Name] = property.Value.ValueKind switch
+            document = JsonDocument.Parse(json);
+        }
+        catch (JsonException)
+        {
+            return settings;
+        }
+
+        using (document)
+        {
+            if (document.RootElement.ValueKind != JsonValueKind.Object) return settings;
+
+            foreach (var property in document.RootElement.EnumerateObject())
             {
-                JsonValueKind.String => property.Value.GetString() ?? string.Empty,
-                JsonValueKind.Number or JsonValueKind.True or JsonValueKind.False => property.Value.GetRawText(),
-                JsonValueKind.Array => string.Join(",", property.Value.EnumerateArray().Select(ToScalarString).Where(x => !string.IsNullOrWhiteSpace(x))),
-                _ => property.Value.GetRawText()
-            };
+                settings[property.Name] = property.Value.ValueKind switch
+                {
+                    JsonValueKind.String => property.Value.GetString() ?? string.Empty,
+                    JsonValueKind.Number or JsonValueKind.True or JsonValueKind.False => property.Value.GetRawText(),
+                    JsonValueKind.Array => string.Join(",", property.Value.EnumerateArray().Select(ToScalarString).Where(x => !string.IsNullOrWhiteSpace(x))),
+                    _ => property.Value.GetRawText()
+                };
+            }
         }
 
         return settings;

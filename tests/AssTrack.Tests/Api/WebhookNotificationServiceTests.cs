@@ -20,6 +20,14 @@ public sealed class CapturingHttpMessageHandler : HttpMessageHandler
     public HttpStatusCode ResponseStatusCode { get; set; } = HttpStatusCode.OK;
     public bool ShouldThrow { get; set; }
 
+    public void Reset()
+    {
+        LastRequest = null;
+        LastRequestBody = null;
+        ResponseStatusCode = HttpStatusCode.OK;
+        ShouldThrow = false;
+    }
+
     protected override async Task<HttpResponseMessage> SendAsync(
         HttpRequestMessage request, CancellationToken cancellationToken)
     {

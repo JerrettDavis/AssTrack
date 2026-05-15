@@ -10,6 +10,9 @@ import WebhooksPage from './pages/WebhooksPage'
 import SettingsPage from './pages/SettingsPage'
 import IntegrationsPage from './pages/IntegrationsPage'
 import MessagesPage from './pages/MessagesPage'
+import ReportsPage from './pages/ReportsPage'
+import AuditPage from './pages/AuditPage'
+import SignalsPage from './pages/SignalsPage'
 import { getAlertSummary } from './api/alerts'
 import { useLiveEvents } from './hooks/useLiveEvents'
 import { IdentityProvider, useIdentityContext } from './context/IdentityContext'
@@ -19,7 +22,7 @@ import './styles.css'
 function AppContent() {
   const [unacknowledgedCount, setUnacknowledgedCount] = useState(0)
   const pollRef = useRef<number | null>(null)
-  const { isOperator } = useIdentityContext()
+  const { isAdmin, isOperator } = useIdentityContext()
   const location = useLocation()
   const isMapRoute = location.pathname.startsWith('/map')
 
@@ -73,9 +76,12 @@ function AppContent() {
               {unacknowledgedCount > 0 && <span className="nav-badge">{unacknowledgedCount}</span>}
             </NavLink>
             <NavLink to="/history">History</NavLink>
+            <NavLink to="/reports">Reports</NavLink>
             <NavLink to="/messages">Messages</NavLink>
             {isOperator && <NavLink to="/integrations">Bridge</NavLink>}
+            {isOperator && <NavLink to="/signals">Signals</NavLink>}
             {isOperator && <NavLink to="/webhooks">Webhooks</NavLink>}
+            {isAdmin && <NavLink to="/audit">Audit</NavLink>}
             <NavLink to="/settings">Settings</NavLink>
           </div>
         </div>
@@ -88,9 +94,12 @@ function AppContent() {
           <Route path="/geofences" element={<GeofencesPage />} />
           <Route path="/alerts" element={<AlertsPage />} />
           <Route path="/history" element={<HistoryPage />} />
+          <Route path="/reports" element={<ReportsPage />} />
           <Route path="/messages" element={<MessagesPage />} />
           <Route path="/integrations" element={<IntegrationsPage />} />
+          <Route path="/signals" element={<SignalsPage />} />
           <Route path="/webhooks" element={<WebhooksPage />} />
+          <Route path="/audit" element={<AuditPage />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Routes>
       </main>

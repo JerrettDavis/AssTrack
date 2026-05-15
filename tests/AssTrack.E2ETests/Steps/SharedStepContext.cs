@@ -28,6 +28,12 @@ public class SharedStepContext
         set => _scenarioContext["DeviceId"] = value;
     }
 
+    public string? DeviceIdentifier
+    {
+        get => _scenarioContext.TryGetValue("DeviceIdentifier", out string? identifier) ? identifier : null;
+        set => _scenarioContext["DeviceIdentifier"] = value;
+    }
+
     public string? UnassignedDeviceId
     {
         get => _scenarioContext.TryGetValue("UnassignedDeviceId", out string? id) ? id : null;

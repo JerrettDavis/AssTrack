@@ -38,6 +38,7 @@ public class AssetDeviceSteps
         };
         var deviceId = await _context.ApiClient.CreateDeviceAsync(data);
         _context.DeviceId = deviceId;
+        _context.DeviceIdentifier = actualIdentifier;
     }
 
     [Given(@"an unassigned bridge device named ""([^""]*)"" exists via the API")]

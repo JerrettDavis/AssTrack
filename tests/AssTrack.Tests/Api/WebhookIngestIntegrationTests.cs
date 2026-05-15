@@ -18,6 +18,7 @@ public sealed class RecordingWebhookService : IWebhookNotificationService
 {
     public List<SpeedAlert> SpeedAlerts { get; } = [];
     public List<GeofenceBreach> Breaches { get; } = [];
+    public List<IntegrationEvent> IntegrationEvents { get; } = [];
 
     public Task NotifySpeedAlertAsync(SpeedAlert alert, CancellationToken cancellationToken = default)
     {
@@ -28,6 +29,12 @@ public sealed class RecordingWebhookService : IWebhookNotificationService
     public Task NotifyGeofenceBreachAsync(GeofenceBreach breach, CancellationToken cancellationToken = default)
     {
         Breaches.Add(breach);
+        return Task.CompletedTask;
+    }
+
+    public Task NotifyIntegrationEventAsync(IntegrationEvent integrationEvent, CancellationToken cancellationToken = default)
+    {
+        IntegrationEvents.Add(integrationEvent);
         return Task.CompletedTask;
     }
 

@@ -1,6 +1,6 @@
 import { getRuntimeApiKey } from './config'
 
-export type LiveEventType = 'observation' | 'speed_alert' | 'geofence_breach' | 'message' | 'data_changed'
+export type LiveEventType = 'observation' | 'speed_alert' | 'geofence_breach' | 'message' | 'data_changed' | 'integration_event'
 
 export type ObservationEvent = {
   id: string
@@ -106,7 +106,7 @@ async function connect(): Promise<void> {
     status = 'open'
   }
 
-  const eventTypes: LiveEventType[] = ['observation', 'speed_alert', 'geofence_breach', 'message', 'data_changed']
+  const eventTypes: LiveEventType[] = ['observation', 'speed_alert', 'geofence_breach', 'message', 'data_changed', 'integration_event']
   for (const type of eventTypes) {
     eventSource.addEventListener(type, (e: MessageEvent) => {
       let data: unknown

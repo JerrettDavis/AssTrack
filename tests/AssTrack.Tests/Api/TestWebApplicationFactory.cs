@@ -19,6 +19,7 @@ file sealed class NullWebhookService : IWebhookNotificationService
 {
     public Task NotifySpeedAlertAsync(SpeedAlert alert, CancellationToken cancellationToken = default) => Task.CompletedTask;
     public Task NotifyGeofenceBreachAsync(GeofenceBreach breach, CancellationToken cancellationToken = default) => Task.CompletedTask;
+    public Task NotifyIntegrationEventAsync(IntegrationEvent integrationEvent, CancellationToken cancellationToken = default) => Task.CompletedTask;
     public Task ExecuteRetryAsync(WebhookRetryJob job, CancellationToken cancellationToken = default) => Task.CompletedTask;
 }
 
@@ -29,12 +30,17 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
     private SqliteConnection? _connection;
     private readonly string _databaseName = $"AssTrackTests-{Guid.NewGuid():N}";
     private readonly int? _ttlMinutes;
+    private readonly IReadOnlyDictionary<string, string?> _extraConfiguration;
 
-    public TestWebApplicationFactory() { }
+    public TestWebApplicationFactory()
+    {
+        _extraConfiguration = new Dictionary<string, string?>();
+    }
 
-    internal TestWebApplicationFactory(int? ttlMinutes)
+    internal TestWebApplicationFactory(int? ttlMinutes, IReadOnlyDictionary<string, string?>? extraConfiguration = null)
     {
         _ttlMinutes = ttlMinutes;
+        _extraConfiguration = extraConfiguration ?? new Dictionary<string, string?>();
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -47,6 +53,11 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
                 ["Auth:ApiKey"] = TestApiKey,
                 ["Auth:IngestApiKey"] = TestIngestApiKey
             };
+
+            foreach (var item in _extraConfiguration)
+            {
+                configDict[item.Key] = item.Value;
+            }
             
             if (_ttlMinutes.HasValue)
             {
@@ -86,6 +97,13 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
     {
         var client = CreateClient();
         client.DefaultRequestHeaders.Add("X-Api-Key", TestIngestApiKey);
+        return client;
+    }
+
+    public HttpClient CreateClientWithApiKey(string apiKey)
+    {
+        var client = CreateClient();
+        client.DefaultRequestHeaders.Add("X-Api-Key", apiKey);
         return client;
     }
 

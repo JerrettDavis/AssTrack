@@ -1,5 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
-import { getWebhookStatus, fireWebhookTest, getWebhookDeliveries, type WebhookStatus, type WebhookDeliveryLog } from '../api/webhooks'
+import {
+  createWebhookSubscription,
+  deleteWebhookSubscription,
+  fireWebhookTest,
+  getWebhookDeliveries,
+  getWebhookStatus,
+  getWebhookSubscriptions,
+  replayWebhookDelivery,
+  testWebhookSubscription,
+  type WebhookDeliveryLog,
+  type WebhookStatus,
+  type WebhookSubscription,
+  type WebhookTestEventType,
+} from '../api/webhooks'
 import { useIdentityContext } from '../context/IdentityContext'
 import { useLiveDataRefresh } from '../hooks/useLiveDataRefresh'
 import DisplayControls from '../components/DisplayControls'
@@ -9,26 +22,33 @@ export default function WebhooksPage() {
   const [webhookViewMode, setWebhookViewMode] = useState<'cards' | 'table'>('table')
   const [status, setStatus] = useState<WebhookStatus | null>(null)
   const [deliveries, setDeliveries] = useState<WebhookDeliveryLog[]>([])
+  const [subscriptions, setSubscriptions] = useState<WebhookSubscription[]>([])
   const [deliveriesTotal, setDeliveriesTotal] = useState(0)
   const [deliveriesPage, setDeliveriesPage] = useState(1)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [testLoading, setTestLoading] = useState(false)
   const [testResult, setTestResult] = useState<string | null>(null)
-  const [selectedEventType, setSelectedEventType] = useState<'speed_alert' | 'geofence_breach'>('speed_alert')
+  const [selectedEventType, setSelectedEventType] = useState<WebhookTestEventType>('speed_alert')
+  const [subscriptionName, setSubscriptionName] = useState('Enterprise signals')
+  const [subscriptionEvents, setSubscriptionEvents] = useState('enterprise_signal')
+  const [subscriptionUrl, setSubscriptionUrl] = useState('')
+  const [subscriptionSecret, setSubscriptionSecret] = useState('')
   const [lastUpdated, setLastUpdated] = useState<string | null>(null)
   const pollRef = useRef<number | null>(null)
 
   async function load() {
     try {
       setError(null)
-      const [webhookStatus, deliveryLogs] = await Promise.all([
+      const [webhookStatus, deliveryLogs, subscriptionList] = await Promise.all([
         getWebhookStatus(),
         getWebhookDeliveries(deliveriesPage, 20),
+        getWebhookSubscriptions(),
       ])
       setStatus(webhookStatus)
       setDeliveries(deliveryLogs.items)
       setDeliveriesTotal(deliveryLogs.totalCount)
+      setSubscriptions(subscriptionList)
       setLastUpdated(new Date().toLocaleTimeString())
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e))
@@ -74,6 +94,59 @@ export default function WebhooksPage() {
         <p className="muted">Webhook management is only accessible to operator keys.</p>
       </div>
     )
+  }
+
+  async function handleCreateSubscription() {
+    setTestResult(null)
+    try {
+      await createWebhookSubscription({
+        name: subscriptionName,
+        isEnabled: true,
+        eventTypes: subscriptionEvents,
+        targetUrl: subscriptionUrl,
+        signingSecret: subscriptionSecret || null,
+      })
+      setSubscriptionName('Enterprise signals')
+      setSubscriptionEvents('enterprise_signal')
+      setSubscriptionUrl('')
+      setSubscriptionSecret('')
+      await load()
+    } catch (e: unknown) {
+      setTestResult(`Error: ${e instanceof Error ? e.message : String(e)}`)
+    }
+  }
+
+  async function handleDeleteSubscription(subscription: WebhookSubscription) {
+    await deleteWebhookSubscription(subscription.id)
+    await load()
+  }
+
+  async function handleTestSubscription(subscription: WebhookSubscription) {
+    setTestResult(null)
+    try {
+      const result = await testWebhookSubscription(subscription.id)
+      setTestResult(result.message)
+      await load()
+    } catch (e: unknown) {
+      setTestResult(`Error: ${e instanceof Error ? e.message : String(e)}`)
+    }
+  }
+
+  async function handleReplayDelivery(delivery: WebhookDeliveryLog) {
+    setTestResult(null)
+    try {
+      const replay = await replayWebhookDelivery(delivery.id)
+      setTestResult(replay.message)
+      await load()
+    } catch (e: unknown) {
+      setTestResult(`Error: ${e instanceof Error ? e.message : String(e)}`)
+    }
+  }
+
+  function subscriptionHealthClass(health: string) {
+    if (health === 'healthy') return 'badge-success'
+    if (health === 'degraded' || health === 'idle' || health === 'disabled') return 'badge-warning'
+    return 'badge-danger'
   }
 
   if (loading || identityLoading) return <div className="card">Loading webhook status…</div>
@@ -139,6 +212,10 @@ export default function WebhooksPage() {
               <strong>{status?.retryQueueDepth ?? 0}</strong>
             </div>
             <div className="status-tile">
+              <span className="muted">Subscriptions</span>
+              <strong>{status?.enabledSubscriptions ?? 0}</strong>
+            </div>
+            <div className="status-tile">
               <span className="muted">Signing</span>
               <span className={`badge ${status?.signingEnabled ? 'badge-success' : 'badge-warning'}`}>
                 {status?.signingEnabled ? 'Enabled' : 'Disabled'}
@@ -154,10 +231,11 @@ export default function WebhooksPage() {
               <span>Event type</span>
               <select
                 value={selectedEventType}
-                onChange={(e) => setSelectedEventType(e.target.value as 'speed_alert' | 'geofence_breach')}
+                onChange={(e) => setSelectedEventType(e.target.value as WebhookTestEventType)}
               >
                 <option value="speed_alert">Speed Alert</option>
                 <option value="geofence_breach">Geofence Breach</option>
+                <option value="enterprise_signal">Enterprise Signal</option>
               </select>
             </label>
             <button
@@ -177,6 +255,79 @@ export default function WebhooksPage() {
         </div>
       </div>
 
+      <div className="card inline-form">
+        <div className="asset-list-header">
+          <h2>Webhook Subscriptions</h2>
+          <span className="badge">Event-specific</span>
+        </div>
+        <div className="field-grid">
+          <label className="field">
+            <span>Name</span>
+            <input onChange={(event) => setSubscriptionName(event.target.value)} value={subscriptionName} />
+          </label>
+          <label className="field">
+            <span>Event types</span>
+            <input onChange={(event) => setSubscriptionEvents(event.target.value)} placeholder="enterprise_signal,speed_alert or *" value={subscriptionEvents} />
+          </label>
+          <label className="field field-wide">
+            <span>Target URL</span>
+            <input onChange={(event) => setSubscriptionUrl(event.target.value)} placeholder="https://hooks.example.com/asstrack" value={subscriptionUrl} />
+          </label>
+          <label className="field field-wide">
+            <span>Signing secret</span>
+            <input onChange={(event) => setSubscriptionSecret(event.target.value)} placeholder="Optional HMAC secret" value={subscriptionSecret} />
+          </label>
+        </div>
+        <div className="button-row">
+          <button className="button button-primary" disabled={!subscriptionName.trim() || !subscriptionEvents.trim() || !subscriptionUrl.trim()} onClick={() => void handleCreateSubscription()} type="button">
+            Add Subscription
+          </button>
+        </div>
+
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Events</th>
+              <th>Target</th>
+              <th>Health</th>
+              <th>Last attempt</th>
+              <th>Signing</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {subscriptions.map((subscription) => (
+              <tr key={subscription.id}>
+                <td>{subscription.name}<br /><span className={`badge ${subscription.isEnabled ? 'badge-success' : 'badge-warning'}`}>{subscription.isEnabled ? 'Enabled' : 'Disabled'}</span></td>
+                <td>{subscription.eventTypes}</td>
+                <td className="truncate-cell" title={subscription.targetUrl}>{subscription.targetUrl}</td>
+                <td>
+                  <span className={`badge ${subscriptionHealthClass(subscription.health)}`}>{subscription.health}</span>
+                  <div className="muted">{subscription.last24hDeliveries} / 24h, {subscription.last24hFailures} failed</div>
+                </td>
+                <td>
+                  {subscription.lastAttemptedAt ? new Date(subscription.lastAttemptedAt).toLocaleString() : 'Never'}
+                  {subscription.lastHttpStatusCode != null && <div className="muted">HTTP {subscription.lastHttpStatusCode}</div>}
+                </td>
+                <td>{subscription.signingEnabled ? 'Enabled' : 'Disabled'}</td>
+                <td>
+                  <div className="compact-actions">
+                    <button className="button button-secondary button-compact" onClick={() => void handleTestSubscription(subscription)} type="button">Test</button>
+                    <button className="button button-danger button-compact" onClick={() => void handleDeleteSubscription(subscription)} type="button">Delete</button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+            {subscriptions.length === 0 && (
+              <tr>
+                <td className="muted" colSpan={7}>No webhook subscriptions configured.</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
       {!notConfigured && (
         <div className="card table-card">
           <h2>Recent Delivery Log</h2>
@@ -194,6 +345,11 @@ export default function WebhooksPage() {
                   <div className="asset-meta-row"><span>Duration</span><strong>{delivery.durationMs}ms</strong></div>
                   <div className="asset-meta-row"><span>Attempt</span><strong>{delivery.attemptNumber}</strong></div>
                 </div>
+                {!delivery.success && (
+                  <div className="button-row">
+                    <button className="button button-secondary button-compact" onClick={() => void handleReplayDelivery(delivery)} type="button">Replay</button>
+                  </div>
+                )}
               </article>
             ))}
             {deliveries.length === 0 && <div className="card">No webhook delivery logs yet.</div>}
@@ -211,6 +367,7 @@ export default function WebhooksPage() {
                 <th>Correlation</th>
                 <th>Duration (ms)</th>
                 <th>Error Message</th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
@@ -233,11 +390,16 @@ export default function WebhooksPage() {
                   <td className={delivery.errorMessage ? 'error-text' : 'muted'}>
                     {delivery.errorMessage ? delivery.errorMessage.substring(0, 50) + (delivery.errorMessage.length > 50 ? '…' : '') : '—'}
                   </td>
+                  <td>
+                    {!delivery.success && (
+                      <button className="button button-secondary button-compact" onClick={() => void handleReplayDelivery(delivery)} type="button">Replay</button>
+                    )}
+                  </td>
                 </tr>
               ))}
               {deliveries.length === 0 && (
                 <tr>
-                  <td className="muted" colSpan={9}>
+                  <td className="muted" colSpan={10}>
                     No delivery logs available.
                   </td>
                 </tr>

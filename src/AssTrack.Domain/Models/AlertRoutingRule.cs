@@ -8,6 +8,8 @@ public class AlertRoutingRule
     public string EventType { get; set; } = AlertRouteEventTypes.All;
     public string Channel { get; set; } = string.Empty;
     public string Provider { get; set; } = string.Empty;
+    public Guid? AssetId { get; set; }
+    public Asset? Asset { get; set; }
     public Guid? IntegrationFeedId { get; set; }
     public IntegrationFeed? IntegrationFeed { get; set; }
     public string? ExternalPeerId { get; set; }
@@ -23,4 +25,5 @@ public static class AlertRouteEventTypes
     public const string All = "all";
     public const string SpeedAlert = "speed_alert";
     public const string GeofenceBreach = "geofence_breach";
+    public const string EnterpriseSignal = "enterprise_signal";
 }

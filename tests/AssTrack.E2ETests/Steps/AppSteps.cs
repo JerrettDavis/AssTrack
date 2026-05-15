@@ -33,6 +33,12 @@ public class AppSteps
     [When(@"I navigate to the map page")]
     public async Task WhenINavigateToTheMapPage()
     {
+        if (!string.IsNullOrWhiteSpace(_context.DeviceId))
+        {
+            await _context.Page.GotoAsync($"{E2ESettings.FrontendUrl}/map?device={Uri.EscapeDataString(_context.DeviceId)}", new() { WaitUntil = WaitUntilState.DOMContentLoaded });
+            return;
+        }
+
         var page = new MapPageObject(_context.Page);
         await page.NavigateAsync();
     }
@@ -42,6 +48,46 @@ public class AppSteps
     {
         var page = new AlertsPageObject(_context.Page);
         await page.NavigateAsync();
+    }
+
+    [When(@"I navigate to the unscoped map page")]
+    public async Task WhenINavigateToTheUnscopedMapPage()
+    {
+        var page = new MapPageObject(_context.Page);
+        await page.NavigateAsync();
+    }
+
+    [When(@"I navigate to the reports page")]
+    public async Task WhenINavigateToTheReportsPage()
+    {
+        await _context.Page.GotoAsync($"{E2ESettings.FrontendUrl}/reports");
+        await _context.Page.GetByRole(Microsoft.Playwright.AriaRole.Heading, new() { Name = "Reports" }).WaitForAsync();
+    }
+
+    [When(@"I navigate to the audit page")]
+    public async Task WhenINavigateToTheAuditPage()
+    {
+        await _context.Page.GotoAsync($"{E2ESettings.FrontendUrl}/audit");
+        await _context.Page.GetByRole(Microsoft.Playwright.AriaRole.Heading, new() { Name = "Audit" }).WaitForAsync();
+    }
+
+    [When(@"I navigate to the signals page")]
+    public async Task WhenINavigateToTheSignalsPage()
+    {
+        await _context.Page.GotoAsync($"{E2ESettings.FrontendUrl}/signals");
+        await _context.Page.GetByRole(Microsoft.Playwright.AriaRole.Heading, new() { Name = "Signals" }).WaitForAsync();
+    }
+
+    [When(@"I publish an enterprise signal named ""([^""]*)""")]
+    public async Task WhenIPublishAnEnterpriseSignalNamed(string signalName)
+    {
+        var form = _context.Page.GetByTestId("signal-publish-form");
+        await form.Locator("label.field", new() { HasTextString = "Source" }).Locator("input").FillAsync("e2e-console");
+        await form.Locator("label.field", new() { HasTextString = "Event type" }).Locator("input").FillAsync("e2e.signal");
+        await form.Locator("label.field", new() { HasTextString = "Subject name" }).Locator("input").FillAsync(signalName);
+        await form.Locator("label.field", new() { HasTextString = "Message" }).Locator("input").FillAsync($"Enterprise signal {signalName}");
+        await form.GetByRole(Microsoft.Playwright.AriaRole.Button, new() { Name = "Publish Signal" }).ClickAsync();
+        await _context.Page.GetByText("Published e2e.signal").WaitForAsync();
     }
 
     [When(@"I navigate to the geofences page")]
@@ -56,6 +102,24 @@ public class AppSteps
     {
         await _context.Page.GotoAsync($"{E2ESettings.FrontendUrl}/integrations");
         await _context.Page.GetByRole(Microsoft.Playwright.AriaRole.Heading, new() { Name = "Bridge Gateway" }).WaitForAsync();
+    }
+
+    [When(@"I navigate to the webhooks page")]
+    public async Task WhenINavigateToTheWebhooksPage()
+    {
+        await _context.Page.GotoAsync($"{E2ESettings.FrontendUrl}/webhooks");
+        await _context.Page.GetByRole(Microsoft.Playwright.AriaRole.Heading, new() { Name = "Webhooks" }).WaitForAsync();
+    }
+
+    [When(@"I create a webhook subscription named ""([^""]*)""")]
+    public async Task WhenICreateAWebhookSubscriptionNamed(string subscriptionName)
+    {
+        var section = _context.Page.Locator("xpath=//div[contains(@class,'inline-form')][.//h2[normalize-space()='Webhook Subscriptions']]");
+        await section.Locator("label.field", new() { HasTextString = "Name" }).Locator("input").FillAsync(subscriptionName);
+        await section.Locator("label.field", new() { HasTextString = "Event types" }).Locator("input").FillAsync("enterprise_signal");
+        await section.Locator("label.field", new() { HasTextString = "Target URL" }).Locator("input").FillAsync($"https://hooks.example.com/e2e/{Guid.NewGuid():N}");
+        await section.GetByRole(Microsoft.Playwright.AriaRole.Button, new() { Name = "Add Subscription" }).ClickAsync();
+        await _context.Page.GetByText(subscriptionName).WaitForAsync();
     }
 
     [When(@"I configure bridge provider ""([^""]*)""")]
@@ -122,6 +186,36 @@ public class AppSteps
     [When(@"I select the first map node")]
     public async Task WhenISelectTheFirstMapNode()
     {
+        if (!string.IsNullOrWhiteSpace(_context.DeviceId))
+        {
+            var deviceSelect = _context.Page.Locator("xpath=//div[contains(@class,'map-panel')][.//h2[normalize-space()='Trail']]//select").First;
+            try
+            {
+                await deviceSelect.WaitForAsync(new() { Timeout = 10000 });
+                await deviceSelect.SelectOptionAsync(_context.DeviceId);
+
+                var panel = MapDetailPanel();
+                var deadline = DateTime.UtcNow.AddSeconds(20);
+                while (DateTime.UtcNow < deadline)
+                {
+                    var text = await panel.InnerTextAsync(new() { Timeout = 1000 });
+                    if (text.Contains("Observation log", StringComparison.OrdinalIgnoreCase)
+                        && (_context.DeviceIdentifier is null || text.Contains(_context.DeviceIdentifier, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        return;
+                    }
+
+                    await _context.Page.WaitForTimeoutAsync(250);
+                }
+
+                return;
+            }
+            catch (Exception)
+            {
+                // Fall through to marker selection when a scenario intentionally has no scoped node ready yet.
+            }
+        }
+
         var marker = _context.Page.Locator(".device-marker").First;
         var markers = _context.Page.Locator(".device-marker");
         var clusters = _context.Page.Locator(".device-cluster-marker");
@@ -153,8 +247,22 @@ public class AppSteps
         {
             var item = locator.Nth(index);
             if (!await item.IsVisibleAsync()) continue;
-            await item.ClickAsync(new() { Force = true });
-            return true;
+
+            var box = await item.BoundingBoxAsync();
+            if (box is null || box.Width <= 0 || box.Height <= 0 || box.X + box.Width < 0 || box.Y + box.Height < 0)
+            {
+                continue;
+            }
+
+            try
+            {
+                await item.ClickAsync(new() { Force = true, Timeout = 1000 });
+                return true;
+            }
+            catch (PlaywrightException)
+            {
+                continue;
+            }
         }
 
         return false;
@@ -163,10 +271,72 @@ public class AppSteps
     [Then(@"the map node details panel is available")]
     public async Task ThenTheMapNodeDetailsPanelIsAvailable()
     {
-        var panel = _context.Page.GetByTestId("map-node-detail-panel");
+        var panel = MapDetailPanel();
         await panel.WaitForAsync();
         await ExpectAnyPanelTextAsync(panel, "Asset", "Tracker");
         await panel.GetByText("Observation log").WaitForAsync();
+    }
+
+    private ILocator MapDetailPanel()
+    {
+        return _context.Page.Locator("[data-testid='map-node-detail-panel'], .map-detail-panel[aria-label='Selected node details']").First;
+    }
+
+    [Then(@"the map trail uses luminosity decay")]
+    public async Task ThenTheMapTrailUsesLuminosityDecay()
+    {
+        try
+        {
+            await _context.Page.GetByRole(AriaRole.Button, new() { Name = "Follow" }).ClickAsync(new() { Timeout = 1000 });
+        }
+        catch (Exception)
+        {
+            // Follow is an enhancement for scoped maps; trail rendering is still asserted below.
+        }
+
+        var segments = _context.Page.Locator("path.map-trail-segment, path[stroke^='hsl(']");
+
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while (DateTime.UtcNow < deadline && await segments.CountAsync() < 2)
+        {
+            await _context.Page.WaitForTimeoutAsync(250);
+        }
+
+        var count = await segments.CountAsync();
+        if (count < 2)
+        {
+            var allSvgPaths = await _context.Page.Locator("svg path").CountAsync();
+            var trailPanelText = await _context.Page.Locator("xpath=//div[contains(@class,'map-panel')][.//h2[normalize-space()='Trail']]").First.InnerTextAsync();
+            count.Should().BeGreaterThanOrEqualTo(2, $"expected rendered decayed trail segments; svg path count was {allSvgPaths}, trail panel was: {trailPanelText}");
+        }
+
+        var strokes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        for (var index = 0; index < count; index++)
+        {
+            var segment = segments.Nth(index);
+            var stroke = await segment.GetAttributeAsync("stroke")
+                ?? await segment.EvaluateAsync<string?>("el => getComputedStyle(el).stroke");
+            stroke.Should().NotBeNullOrWhiteSpace();
+            strokes.Add(stroke!);
+
+            var opacity = await segment.GetAttributeAsync("stroke-opacity");
+            if (!string.IsNullOrWhiteSpace(opacity))
+            {
+                opacity.Should().Be("1");
+            }
+        }
+
+        strokes.Count.Should().BeGreaterThan(1, "trail decay should vary stroke luminosity instead of opacity");
+    }
+
+    [Then(@"all-map timeline trails are suppressed")]
+    public async Task ThenAllMapTimelineTrailsAreSuppressed()
+    {
+        await _context.Page.GetByRole(AriaRole.Button, new() { Name = "Play" }).ClickAsync();
+        await _context.Page.WaitForTimeoutAsync(500);
+
+        var decayedTrailSegments = _context.Page.Locator("path[stroke^='hsl(']");
+        (await decayedTrailSegments.CountAsync()).Should().Be(0, "all-map playback should avoid unreadable overlapping tracker history");
     }
 
     private static async Task ExpectAnyPanelTextAsync(ILocator panel, params string[] values)

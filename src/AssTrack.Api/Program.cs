@@ -31,6 +31,10 @@ builder.Services.AddScoped<AlertRoutingRuleRepository>();
 builder.Services.AddScoped<SensorReadingRepository>();
 builder.Services.AddScoped<MaintenanceScheduleRepository>();
 builder.Services.AddScoped<CustodyRepository>();
+builder.Services.AddScoped<ReportRepository>();
+builder.Services.AddScoped<AuditEventRepository>();
+builder.Services.AddScoped<IntegrationEventRepository>();
+builder.Services.AddScoped<WebhookSubscriptionRepository>();
 
 var corsOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
 builder.Services.AddCors(options =>
@@ -54,8 +58,11 @@ builder.Services
     .AddScheme<ApiKeyAuthenticationOptions, ApiKeyAuthenticationHandler>(ApiKeyAuthenticationOptions.DefaultScheme, _ => { });
 builder.Services.AddAuthorization(options =>
 {
-    options.AddPolicy("Operator", policy => policy.RequireRole("operator"));
-    options.AddPolicy("Ingest", policy => policy.RequireRole("ingest"));
+    options.AddPolicy(AssTrackPolicies.Viewer, policy => policy.RequireRole(AssTrackRoles.Viewer, AssTrackRoles.Operator, AssTrackRoles.Admin));
+    options.AddPolicy(AssTrackPolicies.Operator, policy => policy.RequireRole(AssTrackRoles.Operator, AssTrackRoles.Admin));
+    options.AddPolicy(AssTrackPolicies.Admin, policy => policy.RequireRole(AssTrackRoles.Admin));
+    options.AddPolicy(AssTrackPolicies.Ingest, policy => policy.RequireRole(AssTrackRoles.Ingest));
+    options.AddPolicy(AssTrackPolicies.Enterprise, policy => policy.RequireClaim(AssTrackClaimTypes.AccessTier, AssTrackAccessTiers.Enterprise));
 });
 builder.Services.AddRateLimiter(options =>
 {
@@ -99,6 +106,8 @@ builder.Services.AddHttpClient<IWebhookNotificationService, WebhookNotificationS
 builder.Services.AddHostedService<WebhookRetryWorker>();
 builder.Services.AddScoped<IObservationIngestService, ObservationIngestService>();
 builder.Services.AddScoped<IAlertRoutingService, AlertRoutingService>();
+builder.Services.AddScoped<IAuditService, AuditService>();
+builder.Services.AddScoped<IIntegrationEventService, IntegrationEventService>();
 builder.Services.Configure<SimulationOptions>(builder.Configuration.GetSection(SimulationOptions.SectionName));
 builder.Services.AddScoped<ISimulationService, SimulationService>();
 builder.Services.AddScoped<ISeedService, SeedService>();
@@ -216,6 +225,9 @@ api.MapAlertRoutingEndpoints();
 api.MapSensorEndpoints();
 api.MapMaintenanceEndpoints();
 api.MapCustodyEndpoints();
+api.MapReportEndpoints();
+api.MapAuditEndpoints();
+api.MapIntegrationEventEndpoints();
 api.MapGet("/alerts/summary", async (SpeedAlertRepository speedAlerts, GeofenceBreachRepository breaches, CancellationToken ct) =>
 {
     var speedCount = await speedAlerts.GetUnacknowledgedCountAsync(ct);

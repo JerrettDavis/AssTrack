@@ -564,4 +564,40 @@ public class ObservationHistoryTests : IClassFixture<TestWebApplicationFactory>
         result.Observations.Should().HaveCount(3);
         result.Buckets.Sum(bucket => bucket.Count).Should().Be(3);
     }
+
+    [Fact]
+    public async Task GetObservationTimeline_WhenTruncated_KeepsNewestObservations()
+    {
+        await _factory.ResetDatabaseAsync();
+        using var scope = _factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<AssTrackDbContext>();
+        var device = new Device { Identifier = "timeline-truncated-dev-001" };
+        dbContext.Devices.Add(device);
+        await dbContext.SaveChangesAsync();
+
+        var start = new DateTime(2026, 5, 6, 12, 0, 0, DateTimeKind.Utc);
+        var observations = Enumerable.Range(0, 120)
+            .Select(index => new Observation
+            {
+                DeviceId = device.Id,
+                ObservedAt = start.AddMinutes(index),
+                ReceivedAt = start.AddMinutes(index),
+                Latitude = 36 + index / 1000d,
+                Longitude = -95 - index / 1000d
+            });
+        dbContext.Observations.AddRange(observations);
+        await dbContext.SaveChangesAsync();
+
+        using var client = _factory.CreateAuthenticatedClient();
+        var result = await client.GetFromJsonAsync<ObservationTimelineDto>(
+            $"/api/observations/timeline?deviceId={device.Id}&from={Uri.EscapeDataString(start.ToString("O"))}&to={Uri.EscapeDataString(start.AddHours(2).ToString("O"))}&bucketMinutes=30&maxPoints=100");
+
+        result.Should().NotBeNull();
+        result!.TotalCount.Should().Be(120);
+        result.Truncated.Should().BeTrue();
+        result.Observations.Should().HaveCount(100);
+        result.Observations.First().ObservedAt.Should().Be(start.AddMinutes(20));
+        result.Observations.Last().ObservedAt.Should().Be(start.AddMinutes(119));
+        result.Observations.Last().Latitude.Should().Be(36.119);
+    }
 }

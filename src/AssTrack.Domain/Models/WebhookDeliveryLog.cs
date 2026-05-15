@@ -14,6 +14,8 @@ public class WebhookDeliveryLog
     public int? HttpStatusCode { get; set; }
     public int DurationMs { get; set; }
     public string? ErrorMessage { get; set; }
+    /// <summary>Full serialized request payload retained for operator replay.</summary>
+    public string? RequestPayloadJson { get; set; }
     /// <summary>First 500 characters of the serialised request payload.</summary>
     public string? RequestPayloadSummary { get; set; }
     /// <summary>1-based attempt counter; 1 = first try, 2+ = retries.</summary>

@@ -339,11 +339,11 @@ public class IngestKeyAuthorizationTests : IClassFixture<TestWebApplicationFacto
     // -----------------------------------------------------------------------
 
     [Fact]
-    public async Task GetAuthMe_WithIngestKey_Returns403()
+    public async Task GetAuthMe_WithIngestKey_Returns200()
     {
         using var client = _factory.CreateIngestClient();
         var response = await client.GetAsync("/api/auth/me");
-        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
     // -----------------------------------------------------------------------

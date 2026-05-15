@@ -9,7 +9,9 @@ EnsureLocalEnvironmentFile(repoRoot);
 LoadEnvironmentFile(Path.Combine(repoRoot, ".env"));
 
 var apiKey = GetEnvironmentValue("ASSTRACK_API_KEY") ?? "local-dev-key-asstrack";
+var adminApiKey = GetEnvironmentValue("ASSTRACK_ADMIN_API_KEY");
 var ingestApiKey = GetEnvironmentValue("ASSTRACK_INGEST_API_KEY") ?? apiKey;
+var accessTier = GetEnvironmentValue("ASSTRACK_ACCESS_TIER") ?? "enterprise";
 var connectionString = GetEnvironmentValue("ASSTRACK_CONNECTION_STRING") ?? $"Data Source={Path.Combine(repoRoot, "asstrack-dev.db")}";
 var frontendDirectory = Path.Combine(repoRoot, "frontend");
 EnsureNpmOnPath();
@@ -17,7 +19,9 @@ EnsureNpmOnPath();
 var api = builder.AddProject<Projects.AssTrack_Api>("api")
     .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development")
     .WithEnvironment("Auth__ApiKey", apiKey)
+    .WithEnvironment("Auth__AdminApiKey", adminApiKey ?? string.Empty)
     .WithEnvironment("Auth__IngestApiKey", ingestApiKey)
+    .WithEnvironment("Auth__AccessTier", accessTier)
     .WithEnvironment("ConnectionStrings__DefaultConnection", connectionString)
     .WithEnvironment("Cors__AllowedOrigins__0", frontendUrl)
     .WithEnvironment("Cors__AllowedOrigins__1", frontendLoopbackUrl)

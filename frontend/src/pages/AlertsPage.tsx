@@ -17,6 +17,7 @@ import { useLiveDataRefresh } from '../hooks/useLiveDataRefresh'
 import DisplayControls from '../components/DisplayControls'
 import AcknowledgeModal from '../components/AcknowledgeModal'
 import { getIntegrationFeeds, type IntegrationFeed } from '../api/integrations'
+import { getAssets, type Asset } from '../api/assets'
 
 type FilterTab = 'all' | 'unacknowledged'
 
@@ -26,6 +27,7 @@ export default function AlertsPage() {
   const [breaches, setBreaches] = useState<GeofenceBreach[]>([])
   const [routes, setRoutes] = useState<AlertRoutingRule[]>([])
   const [feeds, setFeeds] = useState<IntegrationFeed[]>([])
+  const [assets, setAssets] = useState<Asset[]>([])
   const [alertsTotal, setAlertsTotal] = useState(0)
   const [breachesTotal, setBreachesTotal] = useState(0)
   const [alertsPage, setAlertsPage] = useState(1)
@@ -44,6 +46,7 @@ export default function AlertsPage() {
     eventType: 'all',
     channel: 'direct',
     provider: 'meshtastic',
+    assetId: null,
     integrationFeedId: null,
     externalPeerId: '',
     displayName: '',
@@ -56,11 +59,12 @@ export default function AlertsPage() {
   async function load() {
     try {
       setError(null)
-      const [speedAlerts, geofenceBreaches, routeItems, feedItems] = await Promise.all([
+      const [speedAlerts, geofenceBreaches, routeItems, feedItems, assetItems] = await Promise.all([
         getSpeedAlerts({ unacknowledged: speedFilter === 'unacknowledged' || undefined, page: alertsPage, pageSize: 50 }),
         getGeofenceBreaches({ unacknowledged: breachFilter === 'unacknowledged' || undefined, page: breachesPage, pageSize: 50 }),
         getAlertRoutes(),
         getIntegrationFeeds(),
+        getAssets(),
       ])
       setAlerts(speedAlerts.items)
       setAlertsTotal(speedAlerts.totalCount)
@@ -68,6 +72,7 @@ export default function AlertsPage() {
       setBreachesTotal(geofenceBreaches.totalCount)
       setRoutes(routeItems)
       setFeeds(feedItems)
+      setAssets(assetItems)
       setLastUpdated(new Date().toLocaleTimeString())
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e))
@@ -184,6 +189,7 @@ export default function AlertsPage() {
       setError(null)
       const payload = {
         ...routeForm,
+        assetId: routeForm.assetId || null,
         integrationFeedId: routeForm.integrationFeedId || null,
         externalPeerId: routeForm.externalPeerId || null,
         displayName: routeForm.displayName || null,
@@ -202,6 +208,7 @@ export default function AlertsPage() {
         eventType: 'all',
         channel: 'direct',
         provider: 'meshtastic',
+        assetId: null,
         integrationFeedId: null,
         externalPeerId: '',
         displayName: '',
@@ -222,6 +229,7 @@ export default function AlertsPage() {
       eventType: route.eventType,
       channel: route.channel,
       provider: route.provider,
+      assetId: route.assetId ?? null,
       integrationFeedId: route.integrationFeedId ?? null,
       externalPeerId: route.externalPeerId ?? '',
       displayName: route.displayName ?? '',
@@ -295,6 +303,15 @@ export default function AlertsPage() {
             <input value={routeForm.provider} onChange={(event) => setRouteForm({ ...routeForm, provider: event.target.value })} />
           </label>
           <label className="field">
+            <span>Asset filter</span>
+            <select value={routeForm.assetId ?? ''} onChange={(event) => setRouteForm({ ...routeForm, assetId: event.target.value || null })}>
+              <option value="">All assets</option>
+              {assets.map((asset) => (
+                <option key={asset.id} value={asset.id}>{asset.name}</option>
+              ))}
+            </select>
+          </label>
+          <label className="field">
             <span>Feed</span>
             <select value={routeForm.integrationFeedId ?? ''} onChange={(event) => setRouteForm({ ...routeForm, integrationFeedId: event.target.value || null })}>
               <option value="">No bridge feed</option>
@@ -334,6 +351,7 @@ export default function AlertsPage() {
               <tr>
                 <th>Name</th>
                 <th>Event</th>
+                <th>Asset</th>
                 <th>Target</th>
                 <th>Status</th>
                 <th></th>
@@ -344,6 +362,7 @@ export default function AlertsPage() {
                 <tr key={route.id}>
                   <td>{route.name}</td>
                   <td>{route.eventType}</td>
+                  <td>{route.assetName ?? 'All assets'}</td>
                   <td>{route.integrationFeedName ?? route.provider} {route.externalPeerId ? `· ${route.externalPeerId}` : ''}</td>
                   <td>{route.isEnabled ? 'Enabled' : 'Paused'}</td>
                   <td>
@@ -355,7 +374,7 @@ export default function AlertsPage() {
                 </tr>
               ))}
               {routes.length === 0 && (
-                <tr><td className="muted" colSpan={5}>No alert routes configured.</td></tr>
+                <tr><td className="muted" colSpan={6}>No alert routes configured.</td></tr>
               )}
             </tbody>
           </table>

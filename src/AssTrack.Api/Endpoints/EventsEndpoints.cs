@@ -48,6 +48,7 @@ public static class EventsEndpoints
                 LiveEventType.GeofenceBreach => "geofence_breach",
                 LiveEventType.Message => "message",
                 LiveEventType.DataChanged => "data_changed",
+                LiveEventType.IntegrationEvent => "integration_event",
                 _ => "unknown"
             };
             var data = JsonSerializer.Serialize(evt.Payload, _jsonOptions);

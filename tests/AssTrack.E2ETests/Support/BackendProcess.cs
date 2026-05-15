@@ -23,7 +23,7 @@ public class BackendProcess : IDisposable
             StartInfo = new ProcessStartInfo
             {
                 FileName = ResolveDotnetCommand(),
-                Arguments = $"run --project \"{apiCsprojPath}\" --configuration Release --no-build --no-restore --no-launch-profile",
+                Arguments = $"run --project \"{apiCsprojPath}\" --configuration {ResolveBuildConfiguration()} --no-launch-profile",
                 WorkingDirectory = apiProjectPath,
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
@@ -39,6 +39,10 @@ public class BackendProcess : IDisposable
         _process.StartInfo.Environment["Auth__ApiKey"] = E2ESettings.ApiKey;
 
         _process.Start();
+        _process.OutputDataReceived += static (_, _) => { };
+        _process.ErrorDataReceived += static (_, _) => { };
+        _process.BeginOutputReadLine();
+        _process.BeginErrorReadLine();
 
         await WaitForStartupAsync();
     }
@@ -109,5 +113,22 @@ public class BackendProcess : IDisposable
         }
 
         return "dotnet";
+    }
+
+    private static string ResolveBuildConfiguration()
+    {
+        var segments = AppContext.BaseDirectory
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            .Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+        for (var index = 0; index < segments.Length - 1; index++)
+        {
+            if (string.Equals(segments[index], "bin", StringComparison.OrdinalIgnoreCase))
+            {
+                return segments[index + 1];
+            }
+        }
+
+        return "Debug";
     }
 }

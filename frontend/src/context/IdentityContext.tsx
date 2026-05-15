@@ -3,13 +3,19 @@ import { useIdentity } from '../hooks/useIdentity';
 
 interface IdentityContextType {
   roles: string[];
+  accessTier: string;
+  capabilities: string[];
   isOperator: boolean;
+  isAdmin: boolean;
   loading: boolean;
 }
 
 const IdentityContext = createContext<IdentityContextType>({
   roles: [],
+  accessTier: 'community',
+  capabilities: [],
   isOperator: false,
+  isAdmin: false,
   loading: true,
 });
 

@@ -1,5 +1,7 @@
+using AssTrack.Api.Auth;
 using AssTrack.Api.Services;
 using AssTrack.Domain.Contracts;
+using AssTrack.Domain.Models;
 using AssTrack.Infrastructure.Data;
 using AssTrack.Infrastructure.Repositories;
 using Microsoft.AspNetCore.Hosting;
@@ -30,7 +32,9 @@ public static class SystemEndpoints
                 SimulationEnabled: simulationOptions.Value.Enabled,
                 WebhookConfigured: !string.IsNullOrEmpty(webhookOptions.Value.Url),
                 ApiKeyConfigured: !string.IsNullOrEmpty(configuration["Auth:ApiKey"]),
+                AdminApiKeyConfigured: !string.IsNullOrEmpty(configuration["Auth:AdminApiKey"]),
                 IngestApiKeyConfigured: !string.IsNullOrEmpty(configuration["Auth:IngestApiKey"]),
+                AccessTier: AssTrackAccessTiers.Normalize(configuration["Auth:AccessTier"]),
                 SwaggerEnabled: configuration.GetValue<bool>("Swagger:Enabled"),
                 RateLimitPermitLimit: configuration.GetValue<int>("RateLimiting:IngestPermitLimit", 60),
                 RateLimitWindowSeconds: configuration.GetValue<int>("RateLimiting:IngestWindowSeconds", 60),
@@ -42,11 +46,13 @@ public static class SystemEndpoints
         })
         .WithName("GetSystemStatus")
         .WithSummary("Get sanitized system configuration status.")
-        .RequireAuthorization("Operator");
+        .RequireAuthorization(AssTrackPolicies.Operator);
 
         group.MapPost("/system/seed", async (
             SeedRequest request,
             ISeedService seedService,
+            IAuditService audit,
+            HttpContext httpContext,
             ILiveEventBroadcaster broadcaster,
             CancellationToken ct) =>
         {
@@ -54,6 +60,15 @@ public static class SystemEndpoints
             {
                 var result = await seedService.SeedAsync(request.Reset, ct);
                 broadcaster.PublishDataChanged("system", "seeded", metadata: new { request.Reset });
+                await audit.RecordAsync(
+                    httpContext,
+                    "system.seed",
+                    "system",
+                    "seed",
+                    "Demo data",
+                    request.Reset ? "Reset and seeded demo data." : "Seeded demo data.",
+                    new { request.Reset, result.AssetsCreated, result.DevicesCreated, result.GeofencesCreated },
+                    ct);
                 return Results.Ok(result);
             }
             catch (SeedingDisabledException)
@@ -63,16 +78,27 @@ public static class SystemEndpoints
         })
         .WithName("SeedDemoData")
         .WithSummary("Seed demo data. Use reset=true to wipe and re-seed seeded records only.")
-        .RequireAuthorization("Operator");
+        .RequireAuthorization(AssTrackPolicies.Operator);
 
         group.MapPost("/system/maintenance/clean-null-island", async (
             bool? dryRun,
             ObservationRepository observationRepository,
+            IAuditService audit,
+            HttpContext httpContext,
             ILiveEventBroadcaster broadcaster,
             CancellationToken ct) =>
         {
             var result = await observationRepository.DeleteNullIslandNoiseAsync(dryRun ?? true, ct);
             if (result.DeletedObservations > 0) broadcaster.PublishDataChanged("observation", "cleaned", metadata: new { result.DeletedObservations, dryRun = dryRun ?? true });
+            await audit.RecordAsync(
+                httpContext,
+                "maintenance.clean_null_island",
+                "system_maintenance",
+                "clean-null-island",
+                "Null island cleanup",
+                (dryRun ?? true) ? "Dry-ran null island observation cleanup." : "Deleted null island observation noise.",
+                new { result.MatchingObservations, result.DeletedObservations, result.AffectedDevices, result.ResetGeofenceStates, dryRun = dryRun ?? true },
+                ct);
             return Results.Ok(new ObservationCleanupResultDto(
                 result.MatchingObservations,
                 result.DeletedObservations,
@@ -82,16 +108,27 @@ public static class SystemEndpoints
         })
         .WithName("CleanNullIslandObservationNoise")
         .WithSummary("Remove historical observations near 0,0 and reset geofence state for affected devices.")
-        .RequireAuthorization("Operator");
+        .RequireAuthorization(AssTrackPolicies.Admin);
 
         group.MapPost("/system/maintenance/clean-auto-created-provider-assets", async (
             bool? dryRun,
             AssetRepository assetRepository,
+            IAuditService audit,
+            HttpContext httpContext,
             ILiveEventBroadcaster broadcaster,
             CancellationToken ct) =>
         {
             var result = await assetRepository.DeleteAutoCreatedProviderAssetsAsync(dryRun ?? true, ct);
             if (result.DeletedAssets > 0 || result.DetachedDevices > 0) broadcaster.PublishDataChanged("asset", "cleaned", metadata: new { result.DeletedAssets, result.DetachedDevices, dryRun = dryRun ?? true });
+            await audit.RecordAsync(
+                httpContext,
+                "maintenance.clean_auto_provider_assets",
+                "system_maintenance",
+                "clean-auto-created-provider-assets",
+                "Provider asset cleanup",
+                (dryRun ?? true) ? "Dry-ran auto-created provider asset cleanup." : "Cleaned auto-created provider assets.",
+                new { result.MatchingAssets, result.DeletedAssets, result.DetachedDevices, dryRun = dryRun ?? true },
+                ct);
             return Results.Ok(new AutoCreatedAssetCleanupResultDto(
                 result.MatchingAssets,
                 result.DeletedAssets,
@@ -100,11 +137,99 @@ public static class SystemEndpoints
         })
         .WithName("CleanAutoCreatedProviderAssets")
         .WithSummary("Detach devices from previously auto-created provider assets and remove those asset records.")
-        .RequireAuthorization("Operator");
+        .RequireAuthorization(AssTrackPolicies.Admin);
+
+        group.MapPost("/system/maintenance/apply-retention", async (
+            int? auditDays,
+            int? signalDays,
+            int? webhookDays,
+            bool? dryRun,
+            AssTrackDbContext db,
+            IAuditService audit,
+            HttpContext httpContext,
+            ILiveEventBroadcaster broadcaster,
+            CancellationToken ct) =>
+        {
+            var auditRetentionDays = ClampRetentionDays(auditDays, 365);
+            var signalRetentionDays = ClampRetentionDays(signalDays, 180);
+            var webhookRetentionDays = ClampRetentionDays(webhookDays, 90);
+            var isDryRun = dryRun ?? true;
+            var now = DateTime.UtcNow;
+            var auditCutoff = now.AddDays(-auditRetentionDays);
+            var signalCutoff = now.AddDays(-signalRetentionDays);
+            var webhookCutoff = now.AddDays(-webhookRetentionDays);
+
+            var matchingAuditEvents = await db.AuditEvents.CountAsync(x => x.OccurredAt < auditCutoff, ct);
+            var matchingResolvedSignals = await db.IntegrationEvents.CountAsync(x =>
+                x.Status == IntegrationEventStatuses.Resolved &&
+                (x.ResolvedAt ?? x.OccurredAt) < signalCutoff, ct);
+            var matchingWebhookDeliveries = await db.WebhookDeliveryLogs.CountAsync(x => x.AttemptedAt < webhookCutoff, ct);
+
+            var deletedAuditEvents = 0;
+            var deletedResolvedSignals = 0;
+            var deletedWebhookDeliveries = 0;
+
+            if (!isDryRun)
+            {
+                deletedAuditEvents = await db.AuditEvents
+                    .Where(x => x.OccurredAt < auditCutoff)
+                    .ExecuteDeleteAsync(ct);
+                deletedResolvedSignals = await db.IntegrationEvents
+                    .Where(x => x.Status == IntegrationEventStatuses.Resolved && (x.ResolvedAt ?? x.OccurredAt) < signalCutoff)
+                    .ExecuteDeleteAsync(ct);
+                deletedWebhookDeliveries = await db.WebhookDeliveryLogs
+                    .Where(x => x.AttemptedAt < webhookCutoff)
+                    .ExecuteDeleteAsync(ct);
+            }
+
+            if (deletedAuditEvents > 0 || deletedResolvedSignals > 0 || deletedWebhookDeliveries > 0)
+            {
+                broadcaster.PublishDataChanged("system", "retention_applied", metadata: new { deletedAuditEvents, deletedResolvedSignals, deletedWebhookDeliveries });
+            }
+
+            await audit.RecordAsync(
+                httpContext,
+                "maintenance.apply_retention",
+                "system_maintenance",
+                "enterprise-retention",
+                "Enterprise retention cleanup",
+                isDryRun ? "Dry-ran enterprise retention cleanup." : "Applied enterprise retention cleanup.",
+                new
+                {
+                    auditRetentionDays,
+                    signalRetentionDays,
+                    webhookRetentionDays,
+                    matchingAuditEvents,
+                    deletedAuditEvents,
+                    matchingResolvedSignals,
+                    deletedResolvedSignals,
+                    matchingWebhookDeliveries,
+                    deletedWebhookDeliveries,
+                    dryRun = isDryRun
+                },
+                ct);
+
+            return Results.Ok(new EnterpriseRetentionCleanupResultDto(
+                matchingAuditEvents,
+                deletedAuditEvents,
+                matchingResolvedSignals,
+                deletedResolvedSignals,
+                matchingWebhookDeliveries,
+                deletedWebhookDeliveries,
+                auditRetentionDays,
+                signalRetentionDays,
+                webhookRetentionDays,
+                isDryRun));
+        })
+        .WithName("ApplyEnterpriseRetention")
+        .WithSummary("Apply retention cleanup for audit events, resolved integration signals, and webhook delivery logs.")
+        .RequireAuthorization(AssTrackPolicies.Admin);
 
         group.MapDelete("/system/maintenance/e2e-data", async (
             IWebHostEnvironment env,
             AssTrackDbContext db,
+            IAuditService audit,
+            HttpContext httpContext,
             ILiveEventBroadcaster broadcaster,
             CancellationToken ct) =>
         {
@@ -168,6 +293,15 @@ public static class SystemEndpoints
 
             var totalDeleted = deletedAssets + deletedDevices + deletedObservations + deletedSensorReadings + deletedAlerts + deletedBreaches + deletedStates + deletedSchedules + deletedServiceRecords + deletedCustodyEvents;
             if (totalDeleted > 0) broadcaster.PublishDataChanged("system", "cleaned_e2e_data", metadata: new { totalDeleted });
+            await audit.RecordAsync(
+                httpContext,
+                "maintenance.clean_e2e_data",
+                "system_maintenance",
+                "e2e-data",
+                "E2E data cleanup",
+                "Removed non-production E2E data.",
+                new { totalDeleted, deletedAssets, deletedDevices, deletedObservations, deletedSensorReadings, deletedAlerts, deletedBreaches, deletedStates, deletedSchedules, deletedServiceRecords, deletedCustodyEvents },
+                ct);
             return Results.Ok(new E2EDataCleanupResultDto(
                 deletedAssets,
                 deletedDevices,
@@ -182,10 +316,13 @@ public static class SystemEndpoints
         })
         .WithName("CleanE2EData")
         .WithSummary("Remove non-production E2E test records from a shared database.")
-        .RequireAuthorization("Operator");
+        .RequireAuthorization(AssTrackPolicies.Admin);
 
         return group;
     }
+
+    private static int ClampRetentionDays(int? value, int fallback)
+        => Math.Clamp(value ?? fallback, 1, 36500);
 }
 
 internal sealed record E2EDataCleanupResultDto(

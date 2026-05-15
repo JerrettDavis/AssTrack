@@ -22,7 +22,9 @@ public class ApiKeyAuthenticationHandler(
     protected override Task<AuthenticateResult> HandleAuthenticateAsync()
     {
         var configuredKey = configuration["Auth:ApiKey"];
+        var adminKey = configuration["Auth:AdminApiKey"];
         var ingestKey = configuration["Auth:IngestApiKey"];
+        var configuredTier = AssTrackAccessTiers.Normalize(configuration["Auth:AccessTier"]);
 
         if (string.IsNullOrWhiteSpace(configuredKey))
         {
@@ -35,12 +37,15 @@ public class ApiKeyAuthenticationHandler(
                 return Task.FromResult(AuthenticateResult.Fail("API key is not configured"));
             }
 
-            // No key configured in Development/Testing – allow all with both roles
+            // No key configured in Development/Testing keeps local workflows fully enabled.
             var anonClaims = new[]
             {
                 new Claim(ClaimTypes.Name, "anonymous"),
-                new Claim(ClaimTypes.Role, "operator"),
-                new Claim(ClaimTypes.Role, "ingest")
+                new Claim(ClaimTypes.Role, AssTrackRoles.Viewer),
+                new Claim(ClaimTypes.Role, AssTrackRoles.Operator),
+                new Claim(ClaimTypes.Role, AssTrackRoles.Admin),
+                new Claim(ClaimTypes.Role, AssTrackRoles.Ingest),
+                new Claim(AssTrackClaimTypes.AccessTier, configuredTier)
             };
             var anonPrincipal = new ClaimsPrincipal(new ClaimsIdentity(anonClaims, Scheme.Name));
             return Task.FromResult(AuthenticateResult.Success(new AuthenticationTicket(anonPrincipal, Scheme.Name)));
@@ -49,15 +54,20 @@ public class ApiKeyAuthenticationHandler(
         Request.Headers.TryGetValue(Options.HeaderName, out var headerKey);
         var providedKey = headerKey.ToString();
 
+        if (!string.IsNullOrWhiteSpace(adminKey) && providedKey == adminKey)
+        {
+            var claims = BuildClaims("admin-api-client", configuredTier, AssTrackRoles.Admin, AssTrackRoles.Operator, AssTrackRoles.Viewer, AssTrackRoles.Ingest);
+            var identity = new ClaimsIdentity(claims, Scheme.Name);
+            var principal = new ClaimsPrincipal(identity);
+            return Task.FromResult(AuthenticateResult.Success(new AuthenticationTicket(principal, Scheme.Name)));
+        }
+
         if (providedKey == configuredKey)
         {
-            // Operator key: both roles
-            var claims = new[]
-            {
-                new Claim(ClaimTypes.Name, "api-client"),
-                new Claim(ClaimTypes.Role, "operator"),
-                new Claim(ClaimTypes.Role, "ingest")
-            };
+            var roles = string.IsNullOrWhiteSpace(adminKey)
+                ? [AssTrackRoles.Admin, AssTrackRoles.Operator, AssTrackRoles.Viewer, AssTrackRoles.Ingest]
+                : new[] { AssTrackRoles.Operator, AssTrackRoles.Viewer, AssTrackRoles.Ingest };
+            var claims = BuildClaims("api-client", configuredTier, roles);
             var identity = new ClaimsIdentity(claims, Scheme.Name);
             var principal = new ClaimsPrincipal(identity);
             return Task.FromResult(AuthenticateResult.Success(new AuthenticationTicket(principal, Scheme.Name)));
@@ -65,12 +75,7 @@ public class ApiKeyAuthenticationHandler(
 
         if (!string.IsNullOrWhiteSpace(ingestKey) && providedKey == ingestKey)
         {
-            // Ingest-only key: ingest role only
-            var claims = new[]
-            {
-                new Claim(ClaimTypes.Name, "api-client"),
-                new Claim(ClaimTypes.Role, "ingest")
-            };
+            var claims = BuildClaims("ingest-api-client", AssTrackAccessTiers.Device, AssTrackRoles.Ingest);
             var identity = new ClaimsIdentity(claims, Scheme.Name);
             var principal = new ClaimsPrincipal(identity);
             return Task.FromResult(AuthenticateResult.Success(new AuthenticationTicket(principal, Scheme.Name)));
@@ -78,4 +83,17 @@ public class ApiKeyAuthenticationHandler(
 
         return Task.FromResult(AuthenticateResult.Fail("Invalid or missing API key"));
     }
+
+    private static Claim[] BuildClaims(string name, string accessTier, params string[] roles)
+    {
+        var claims = new List<Claim>
+        {
+            new(ClaimTypes.Name, name),
+            new(AssTrackClaimTypes.AccessTier, accessTier)
+        };
+
+        claims.AddRange(roles.Distinct(StringComparer.OrdinalIgnoreCase).Select(role => new Claim(ClaimTypes.Role, role)));
+        return claims.ToArray();
+    }
+
 }

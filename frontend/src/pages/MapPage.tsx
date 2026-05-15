@@ -40,6 +40,8 @@ type SelectedMapNode =
   | { type: 'geofence'; geofenceId: string }
 
 const unclusteredZoomLevelCount = 3
+const markerAnimationDurationMs = 1400
+const markerAnimationMinimumMeters = 0.4
 
 const timeFilterOptions: Array<{ value: TimeFilterMinutes; label: string }> = [
   { value: 'all', label: 'Any time' },
@@ -234,6 +236,55 @@ function positionTimeMs(position: Pick<Observation, 'observedAt' | 'receivedAt'>
   return new Date(ageTimestamp(position.observedAt, position.receivedAt)).getTime()
 }
 
+function latestPositionTimeMs(positions: Array<Pick<Observation, 'observedAt' | 'receivedAt'>>): number | null {
+  const values = positions
+    .map(positionTimeMs)
+    .filter(Number.isFinite)
+  return values.length === 0 ? null : Math.max(...values)
+}
+
+function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
+  const value = hex.trim().replace(/^#/, '')
+  if (!/^[0-9a-f]{6}$/i.test(value)) return null
+  return {
+    r: parseInt(value.slice(0, 2), 16),
+    g: parseInt(value.slice(2, 4), 16),
+    b: parseInt(value.slice(4, 6), 16),
+  }
+}
+
+function rgbToHsl({ r, g, b }: { r: number; g: number; b: number }): { h: number; s: number; l: number } {
+  const red = r / 255
+  const green = g / 255
+  const blue = b / 255
+  const max = Math.max(red, green, blue)
+  const min = Math.min(red, green, blue)
+  const delta = max - min
+  const lightness = (max + min) / 2
+
+  if (delta === 0) return { h: 0, s: 0, l: lightness * 100 }
+
+  const saturation = delta / (1 - Math.abs(2 * lightness - 1))
+  let hue = 0
+  if (max === red) hue = 60 * (((green - blue) / delta) % 6)
+  else if (max === green) hue = 60 * ((blue - red) / delta + 2)
+  else hue = 60 * ((red - green) / delta + 4)
+  if (hue < 0) hue += 360
+
+  return { h: hue, s: saturation * 100, l: lightness * 100 }
+}
+
+function decayedHueColor(baseColor: string, progress: number, minLightness = 10): string {
+  const rgb = hexToRgb(baseColor)
+  if (!rgb) return baseColor
+
+  const hsl = rgbToHsl(rgb)
+  const maxLightness = Math.max(minLightness + 8, hsl.l)
+  const easedProgress = Math.pow(Math.max(0, Math.min(1, progress)), 2.35)
+  const lightness = minLightness + (maxLightness - minLightness) * easedProgress
+  return `hsl(${Math.round(hsl.h)} ${Math.round(hsl.s)}% ${Math.round(lightness)}%)`
+}
+
 function distanceMeters(a: Pick<Observation, 'latitude' | 'longitude'>, b: Pick<Observation, 'latitude' | 'longitude'>): number {
   const earthRadiusMeters = 6_371_000
   const dLat = (b.latitude - a.latitude) * Math.PI / 180
@@ -322,11 +373,54 @@ type MarkerCluster = {
   positions: DisplayPosition[]
 }
 
+type TrailSegment = {
+  color: string
+  id: string
+  positions: [[number, number], [number, number]]
+}
+
+function buildTrailSegments(
+  observations: Observation[],
+  baseColor: string,
+  rangeStartMs?: number,
+  rangeEndMs?: number,
+  minLightness = 22,
+): TrailSegment[] {
+  const ordered = [...observations]
+    .filter((item) => Number.isFinite(item.latitude) && Number.isFinite(item.longitude))
+    .sort((a, b) => positionTimeMs(a) - positionTimeMs(b))
+
+  if (ordered.length < 2) return []
+
+  const firstMs = rangeStartMs ?? positionTimeMs(ordered[0])
+  const lastMs = rangeEndMs ?? positionTimeMs(ordered[ordered.length - 1])
+  const spanMs = Math.max(1, lastMs - firstMs)
+  const segments: TrailSegment[] = []
+
+  for (let index = 1; index < ordered.length; index += 1) {
+    const from = ordered[index - 1]
+    const to = ordered[index]
+    const segmentMs = Math.max(positionTimeMs(from), positionTimeMs(to))
+    const progress = (segmentMs - firstMs) / spanMs
+    segments.push({
+      color: decayedHueColor(baseColor, progress, minLightness),
+      id: `${from.id}-${to.id}-${index}`,
+      positions: [[from.latitude, from.longitude], [to.latitude, to.longitude]],
+    })
+  }
+
+  return segments
+}
+
 function displayPositionKey(position: Pick<DisplayPosition, 'deviceId' | 'assetId' | 'assetName' | 'displayKey' | 'displayMode'>): string {
   if (position.displayKey) return position.displayKey
   if (position.displayMode === 'assets' && position.assetId) return `asset:${position.assetId}`
   if (position.displayMode === 'assets' && position.assetName) return `asset-name:${position.assetName.toLocaleLowerCase()}`
   return `device:${position.deviceId}`
+}
+
+function stablePositionSortKey(position: DisplayPosition): string {
+  return displayPositionKey(position)
 }
 
 function groupPositionsByAsset(positions: Observation[], deviceById: Map<string, Device>): DisplayPosition[] {
@@ -346,8 +440,12 @@ function groupPositionsByAsset(positions: Observation[], deviceById: Map<string,
   const result: DisplayPosition[] = [...ungrouped]
   for (const assetPositions of groupedByAsset.values()) {
     const ordered = [...assetPositions].sort((a, b) => positionTimeMs(b) - positionTimeMs(a))
+    const latitude = assetPositions.reduce((sum, position) => sum + position.latitude, 0) / assetPositions.length
+    const longitude = assetPositions.reduce((sum, position) => sum + position.longitude, 0) / assetPositions.length
     result.push({
       ...ordered[0],
+      latitude,
+      longitude,
       displayKey: assetPositions[0].assetId ? `asset:${assetPositions[0].assetId}` : assetPositions[0].assetName ? `asset-name:${assetPositions[0].assetName.toLocaleLowerCase()}` : `asset:${assetPositions.map((position) => position.deviceId).sort().join('-')}`,
       displayMode: 'assets',
       groupedTrackers: ordered,
@@ -362,8 +460,9 @@ function clusterMapPositions(map: L.Map, positions: DisplayPosition[], pixelRang
   const zoom = map.getZoom()
   const maxZoom = map.getMaxZoom() === Infinity ? 19 : map.getMaxZoom()
   const unclusterAtZoom = Math.max(0, maxZoom - unclusteredZoomLevelCount + 1)
+  const orderedPositions = [...positions].sort((a, b) => stablePositionSortKey(a).localeCompare(stablePositionSortKey(b)))
   if (zoom >= unclusterAtZoom) {
-    return positions.map((position) => ({
+    return orderedPositions.map((position) => ({
       center: [position.latitude, position.longitude],
       id: displayPositionKey(position),
       point: map.project([position.latitude, position.longitude], zoom),
@@ -373,7 +472,7 @@ function clusterMapPositions(map: L.Map, positions: DisplayPosition[], pixelRang
 
   const clusters: MarkerCluster[] = []
 
-  for (const position of positions) {
+  for (const position of orderedPositions) {
     const point = map.project([position.latitude, position.longitude], zoom)
     const cluster = clusters.find((item) => item.point.distanceTo(point) <= pixelRange)
     if (!cluster) {
@@ -396,7 +495,8 @@ function clusterMapPositions(map: L.Map, positions: DisplayPosition[], pixelRang
       (cluster.center[1] * cluster.positions.length + position.longitude) / nextCount,
     ]
     cluster.positions.push(position)
-    cluster.id = [...cluster.positions.map(displayPositionKey)].sort().join('-')
+    cluster.positions.sort((a, b) => stablePositionSortKey(a).localeCompare(stablePositionSortKey(b)))
+    cluster.id = cluster.positions.map(displayPositionKey).join('-')
   }
 
   return clusters
@@ -447,36 +547,54 @@ function AnimatedMarker({
   position: [number, number]
 }) {
   const [displayPosition, setDisplayPosition] = useState<[number, number]>(position)
-  const previousTargetRef = useRef(position)
+  const markerRef = useRef<L.Marker | null>(null)
+  const previousTargetRef = useRef<[number, number]>(position)
+  const displayPositionRef = useRef<[number, number]>(position)
+  const targetLatitude = position[0]
+  const targetLongitude = position[1]
 
   useEffect(() => {
+    const target: [number, number] = [targetLatitude, targetLongitude]
     const previousTarget = previousTargetRef.current
-    previousTargetRef.current = position
-    if (previousTarget[0] === position[0] && previousTarget[1] === position[1]) return
+    previousTargetRef.current = target
+    if (
+      previousTarget[0] === target[0] &&
+      previousTarget[1] === target[1]
+    ) {
+      return
+    }
+
+    const currentLatLng = markerRef.current?.getLatLng()
+    const start: [number, number] = currentLatLng
+      ? [currentLatLng.lat, currentLatLng.lng]
+      : displayPositionRef.current
+
+    if (distanceMeters({ latitude: start[0], longitude: start[1] }, { latitude: target[0], longitude: target[1] }) < markerAnimationMinimumMeters) {
+      return
+    }
 
     let frameId = 0
     const startMs = performance.now()
-    const durationMs = 1200
-    setDisplayPosition((from) => {
-      const start = from
-      const tick = (frameMs: number) => {
-        const progress = Math.min(1, (frameMs - startMs) / durationMs)
-        const eased = progress < 0.5 ? 2 * progress * progress : 1 - Math.pow(-2 * progress + 2, 2) / 2
-        setDisplayPosition([
-          interpolateNumber(start[0], position[0], eased) ?? position[0],
-          interpolateNumber(start[1], position[1], eased) ?? position[1],
-        ])
-        if (progress < 1) frameId = window.requestAnimationFrame(tick)
-      }
-      frameId = window.requestAnimationFrame(tick)
-      return from
-    })
+    const tick = (frameMs: number) => {
+      const progress = Math.min(1, (frameMs - startMs) / markerAnimationDurationMs)
+      const eased = progress < 0.5 ? 2 * progress * progress : 1 - Math.pow(-2 * progress + 2, 2) / 2
+      const nextPosition: [number, number] = [
+        interpolateNumber(start[0], target[0], eased) ?? target[0],
+        interpolateNumber(start[1], target[1], eased) ?? target[1],
+      ]
+
+      displayPositionRef.current = nextPosition
+      setDisplayPosition(nextPosition)
+      markerRef.current?.setLatLng(nextPosition)
+      if (progress < 1) frameId = window.requestAnimationFrame(tick)
+    }
+    frameId = window.requestAnimationFrame(tick)
 
     return () => window.cancelAnimationFrame(frameId)
-  }, [position])
+  }, [targetLatitude, targetLongitude])
 
   return (
-    <Marker eventHandlers={eventHandlers} icon={icon} position={displayPosition}>
+    <Marker eventHandlers={eventHandlers} icon={icon} position={displayPosition} ref={markerRef}>
       {children}
     </Marker>
   )
@@ -567,8 +685,10 @@ function DeviceMarkerLayer({
 }
 
 function TimelineScrubber({
+  canFollowSelected,
   cursorMs,
   error,
+  followSelected,
   isPlaying,
   isLive,
   loading,
@@ -577,6 +697,7 @@ function TimelineScrubber({
   onCursorChange,
   onLive,
   onDateChange,
+  onFollowSelectedChange,
   onPlayToggle,
   onWindowChange,
   scoped,
@@ -584,8 +705,10 @@ function TimelineScrubber({
   timelineDate,
   windowHours,
 }: {
+  canFollowSelected: boolean
   cursorMs: number | null
   error: string | null
+  followSelected: boolean
   isPlaying: boolean
   isLive: boolean
   loading: boolean
@@ -594,6 +717,7 @@ function TimelineScrubber({
   onCursorChange: (value: number) => void
   onLive: () => void
   onDateChange: (value: string) => void
+  onFollowSelectedChange: (value: boolean) => void
   onPlayToggle: () => void
   onWindowChange: (value: TimelineWindowHours) => void
   scoped: boolean
@@ -613,6 +737,15 @@ function TimelineScrubber({
         </button>
         <button className={`timeline-live-button${isLive ? ' active' : ''}`} onClick={onLive} type="button" title="Return to live map positions">
           Live
+        </button>
+        <button
+          className={`timeline-live-button${followSelected && canFollowSelected ? ' active' : ''}`}
+          disabled={!canFollowSelected}
+          onClick={() => onFollowSelectedChange(!followSelected)}
+          type="button"
+          title="Follow the selected asset or tracker as it moves"
+        >
+          Follow
         </button>
         <label>
           <span>Day</span>
@@ -750,20 +883,27 @@ function getBaseLayer(layer: MapBaseLayer, colorMode: 'light' | 'dark', themeSty
 function MapViewportUpdater({
   selectedCenter,
   selectedFocusKey,
+  followSelected,
   hasInitialViewport,
   onViewportChange,
+  onFollowSelectedChange,
 }: {
   selectedCenter: [number, number] | null
   selectedFocusKey: string | null
+  followSelected: boolean
   hasInitialViewport: boolean
   onViewportChange: (viewport: { lat: number; lng: number; zoom: number }) => void
+  onFollowSelectedChange: (value: boolean) => void
 }) {
   const map = useMap()
   const hasUserMoved = useRef(hasInitialViewport)
   const prevSelectedFocusKey = useRef<string | null>(null)
 
   useEffect(() => {
-    const handler = () => { hasUserMoved.current = true }
+    const handler = () => {
+      hasUserMoved.current = true
+      onFollowSelectedChange(false)
+    }
     const moveEndHandler = () => {
       const nextCenter = map.getCenter()
       onViewportChange({
@@ -773,14 +913,12 @@ function MapViewportUpdater({
       })
     }
     map.on('dragstart', handler)
-    map.on('zoomstart', handler)
     map.on('moveend', moveEndHandler)
     return () => {
       map.off('dragstart', handler)
-      map.off('zoomstart', handler)
       map.off('moveend', moveEndHandler)
     }
-  }, [map, onViewportChange])
+  }, [map, onFollowSelectedChange, onViewportChange])
 
   useEffect(() => {
     if (selectedCenter === null || selectedFocusKey === null) {
@@ -793,18 +931,24 @@ function MapViewportUpdater({
 
     if (isNewFocus) {
       hasUserMoved.current = false
+      onFollowSelectedChange(true)
       map.setView(selectedCenter, Math.max(map.getZoom(), 13))
       return
     }
 
-    if (hasUserMoved.current) {
+    if (!followSelected && hasUserMoved.current) {
+      return
+    }
+
+    if (followSelected) {
+      map.panTo(selectedCenter, { animate: true, duration: 0.8 })
       return
     }
 
     if (!map.getBounds().pad(-0.2).contains(selectedCenter)) {
-      map.panTo(selectedCenter)
+      map.panTo(selectedCenter, { animate: true, duration: 0.8 })
     }
-  }, [selectedCenter, selectedFocusKey, map])
+  }, [followSelected, map, onFollowSelectedChange, selectedCenter, selectedFocusKey])
 
   return null
 }
@@ -830,7 +974,7 @@ export default function MapPage() {
   const [error, setError] = useState<string | null>(null)
   const [lastUpdated, setLastUpdated] = useState<string | null>(null)
   const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(() => searchParams.get('device'))
-  const [trailPoints, setTrailPoints] = useState<[number, number][]>([])
+  const [trailObservations, setTrailObservations] = useState<Observation[]>([])
   const [trailLength, setTrailLength] = useState<number>(() => numberParam(searchParams.get('trail'), 50, [20, 50, 100]))
   const [deviceSummary, setDeviceSummary] = useState<DeviceSummary | null>(null)
   const [baseLayer, setBaseLayer] = useState<MapBaseLayer>(() => optionOrDefault(searchParams.get('layer'), ['theme', 'street', 'satellite', 'terrain'] as const, 'theme'))
@@ -858,6 +1002,7 @@ export default function MapPage() {
   const [timelineError, setTimelineError] = useState<string | null>(null)
   const [timelineLive, setTimelineLive] = useState(() => !searchParams.has('timelineAt'))
   const [timelinePlaying, setTimelinePlaying] = useState(false)
+  const [followLiveSelection, setFollowLiveSelection] = useState(() => boolParam(searchParams.get('follow'), true))
   const [selectedNode, setSelectedNode] = useState<SelectedMapNode | null>(null)
   const [nodeHistory, setNodeHistory] = useState<Observation[]>([])
   const [nodeBreaches, setNodeBreaches] = useState<GeofenceBreach[]>([])
@@ -878,11 +1023,7 @@ export default function MapPage() {
       getDeviceTrail(deviceId, length),
       getDeviceSummary(deviceId),
     ])
-    const points: [number, number][] = trail
-      .slice()
-      .reverse()
-      .map((o) => [o.latitude, o.longitude])
-    setTrailPoints(points)
+    setTrailObservations(trail)
     setDeviceSummary(summary)
   }
 
@@ -956,6 +1097,7 @@ export default function MapPage() {
     if (!showTrail) params.set('trailVisible', '0')
     if (showAccuracy) params.set('accuracy', '1')
     if (!showTimeline) params.set('timeline', '0')
+    if (!followLiveSelection) params.set('follow', '0')
     if (trailLength !== 50) params.set('trail', String(trailLength))
     if (timelineDate !== localDateInput()) params.set('timelineDate', timelineDate)
     if (timelineWindowHours !== '24') params.set('timelineWindow', timelineWindowHours)
@@ -973,6 +1115,7 @@ export default function MapPage() {
   }, [
     baseLayer,
     feedFilter,
+    followLiveSelection,
     effectiveIdleMinutes,
     effectiveLiveMinutes,
     mapViewport,
@@ -1022,6 +1165,15 @@ export default function MapPage() {
       }
     }
   }, [geofences, initialSelectedGeofenceId, loading, positions, selectedDeviceId])
+
+  useEffect(() => {
+    if (restoredSelectionRef.current || loading || selectedDeviceId === null || trailObservations.length === 0) return
+    const latestTrailPoint = [...trailObservations].sort((a, b) => positionTimeMs(b) - positionTimeMs(a))[0]
+    if (latestTrailPoint?.deviceId !== selectedDeviceId) return
+
+    restoredSelectionRef.current = true
+    void selectDeviceNode(latestTrailPoint)
+  }, [loading, selectedDeviceId, trailObservations])
 
   useLiveEvents((type, data) => {
     if (type === 'observation') {
@@ -1092,7 +1244,7 @@ export default function MapPage() {
     if (deviceId === '') {
       setSelectedDeviceId(null)
       if (selectedNode?.type === 'device') setSelectedNode(null)
-      setTrailPoints([])
+      setTrailObservations([])
       setDeviceSummary(null)
     } else {
       setSelectedDeviceId(deviceId)
@@ -1117,7 +1269,7 @@ export default function MapPage() {
       setNodeHistory(history.items)
       setNodeBreaches(breaches)
       const trail = await getDeviceTrail(position.deviceId, trailLength)
-      setTrailPoints(trail.slice().reverse().map((item) => [item.latitude, item.longitude]))
+      setTrailObservations(trail)
     } catch (err) {
       setNodeError(err instanceof Error ? err.message : 'Unable to load node details.')
     } finally {
@@ -1148,7 +1300,7 @@ export default function MapPage() {
       setNodeHistory(history.items)
       setNodeBreaches(breaches)
       const trail = await getDeviceTrail(position.deviceId, trailLength)
-      setTrailPoints(trail.slice().reverse().map((item) => [item.latitude, item.longitude]))
+      setTrailObservations(trail)
     } catch (err) {
       setNodeError(err instanceof Error ? err.message : 'Unable to load asset details.')
     } finally {
@@ -1335,6 +1487,17 @@ export default function MapPage() {
     return true
   }), [deviceById, feedFilter, nowMs, providerFilter, timeFilterMinutes, timelineSourcePositions])
 
+  const livePositionCursorMs = useMemo(
+    () => latestPositionTimeMs(visiblePositions) ?? latestPositionTimeMs(positions),
+    [positions, visiblePositions],
+  )
+
+  useEffect(() => {
+    if (!timelineLive) return
+    const nextCursorMs = livePositionCursorMs ?? Date.now()
+    setTimelineCursorMs((current) => current === nextCursorMs ? current : nextCursorMs)
+  }, [livePositionCursorMs, timelineLive])
+
   const displayPositions = useMemo<DisplayPosition[]>(() => {
     if (mapMode === 'trackers') return visiblePositions
     return groupPositionsByAsset(visiblePositions, deviceById)
@@ -1385,6 +1548,10 @@ export default function MapPage() {
 
   const timelinePaths = useMemo(() => {
     if (timelineLive || !showTimeline || timeline === null || timelineCursorMs === null) return []
+    if (!timelineScope.scoped) return []
+
+    const rangeStartMs = new Date(timeline.from).getTime()
+    const rangeEndMs = new Date(timeline.to).getTime()
     const grouped = new Map<string, Observation[]>()
     for (const observation of timeline.observations) {
       const device = deviceById.get(observation.deviceId)
@@ -1398,28 +1565,41 @@ export default function MapPage() {
     return Array.from(grouped.entries()).map(([deviceId, items]) => {
       const ordered = [...items].sort((a, b) => positionTimeMs(a) - positionTimeMs(b))
       const cursorPosition = observationAtCursor(ordered, timelineCursorMs)
-      const cursorPoint = cursorPosition ? [cursorPosition.latitude, cursorPosition.longitude] as [number, number] : null
+      const cursorObservation = cursorPosition ? { ...cursorPosition, id: `${cursorPosition.id}:cursor` } : null
       const past = ordered
         .filter((item) => positionTimeMs(item) <= timelineCursorMs)
-        .map((item) => [item.latitude, item.longitude] as [number, number])
       const future = ordered
         .filter((item) => positionTimeMs(item) > timelineCursorMs)
-        .map((item) => [item.latitude, item.longitude] as [number, number])
 
-      if (cursorPoint) {
+      if (cursorObservation) {
         const lastPast = past[past.length - 1]
-        if (!lastPast || lastPast[0] !== cursorPoint[0] || lastPast[1] !== cursorPoint[1]) past.push(cursorPoint)
+        if (!lastPast || lastPast.latitude !== cursorObservation.latitude || lastPast.longitude !== cursorObservation.longitude) past.push(cursorObservation)
         const firstFuture = future[0]
-        if (!firstFuture || firstFuture[0] !== cursorPoint[0] || firstFuture[1] !== cursorPoint[1]) future.unshift(cursorPoint)
+        if (!firstFuture || firstFuture.latitude !== cursorObservation.latitude || firstFuture.longitude !== cursorObservation.longitude) future.unshift(cursorObservation)
       }
+
+      const pastSegments = buildTrailSegments(
+        past,
+        effectiveColorMode === 'dark' ? '#22c55e' : '#15803d',
+        rangeStartMs,
+        timelineCursorMs,
+        effectiveColorMode === 'dark' ? 8 : 12,
+      )
+      const futureSegments = buildTrailSegments(
+        future,
+        effectiveColorMode === 'dark' ? '#94a3b8' : '#64748b',
+        timelineCursorMs,
+        rangeEndMs,
+        effectiveColorMode === 'dark' ? 10 : 18,
+      )
 
       return {
         deviceId,
-        past,
-        future,
+        futureSegments,
+        pastSegments,
       }
-    }).filter((path) => path.past.length + path.future.length > 1)
-  }, [deviceById, feedFilter, providerFilter, showTimeline, timeline, timelineCursorMs, timelineLive])
+    }).filter((path) => path.pastSegments.length + path.futureSegments.length > 0)
+  }, [deviceById, effectiveColorMode, feedFilter, providerFilter, showTimeline, timeline, timelineCursorMs, timelineLive, timelineScope.scoped])
 
   const groupedTrackerHiddenCount = useMemo(
     () => displayPositions.reduce((total, position) => total + Math.max(0, (position.groupedTrackerCount ?? 1) - 1), 0),
@@ -1477,15 +1657,39 @@ export default function MapPage() {
     if (selectedDeviceId !== null) return `device:${selectedDeviceId}`
     return null
   }, [selectedDeviceId, selectedNode])
+  const canFollowSelected = selectedCenter !== null && selectedFocusKey !== null
+  const selectedDisplayPosition = useMemo<DisplayPosition | Observation | null>(() => {
+    if (selectedNode?.type === 'asset') {
+      return displayPositions.find((position) =>
+        position.assetId === selectedNode.assetId ||
+        position.groupedTrackers?.some((tracker) => tracker.assetId === selectedNode.assetId)) ?? selectedNode.observation
+    }
+    if (selectedNode?.type === 'device') {
+      return displayPositions.find((position) =>
+        position.deviceId === selectedNode.deviceId ||
+        position.groupedTrackers?.some((tracker) => tracker.deviceId === selectedNode.deviceId)) ?? selectedNode.observation
+    }
+    return null
+  }, [displayPositions, selectedNode])
 
   const mapTheme = useMemo(() => getBaseLayer(baseLayer, effectiveColorMode, themeStyle), [baseLayer, effectiveColorMode, themeStyle])
+  const trailSegments = useMemo(
+    () => buildTrailSegments(
+      trailObservations,
+      mapTheme.trailColor,
+      undefined,
+      undefined,
+      effectiveColorMode === 'dark' ? 8 : 12,
+    ),
+    [effectiveColorMode, mapTheme.trailColor, trailObservations],
+  )
   const selectedGeofence = selectedNode?.type === 'geofence' ? geofences.find((item) => item.id === selectedNode.geofenceId) : null
   const selectedAssetPositions = useMemo(() => {
     if (!selectedAsset) return []
-    return positions
+    return timelineSourcePositions
       .filter((position) => position.assetId === selectedAsset.id || deviceById.get(position.deviceId)?.assetId === selectedAsset.id)
       .sort((a, b) => positionTimeMs(b) - positionTimeMs(a))
-  }, [deviceById, positions, selectedAsset])
+  }, [deviceById, selectedAsset, timelineSourcePositions])
   const selectedAssetSeparationAlerts = useMemo(
     () => selectedAsset ? separationAlerts.filter((alert) => alert.assetId === selectedAsset.id) : [],
     [selectedAsset, separationAlerts],
@@ -1529,8 +1733,14 @@ export default function MapPage() {
   const handleTimelineLive = useCallback(() => {
     setTimelinePlaying(false)
     setTimelineLive(true)
-    setTimelineCursorMs(timeline ? new Date(timeline.to).getTime() : Date.now())
-  }, [timeline])
+    setFollowLiveSelection(canFollowSelected)
+    const nextCursorMs = livePositionCursorMs ?? Date.now()
+    setTimelineCursorMs(nextCursorMs)
+    const nextDate = localDateInput(new Date(nextCursorMs))
+    if (nextDate !== timelineDate) {
+      setTimelineDate(nextDate)
+    }
+  }, [canFollowSelected, livePositionCursorMs, timelineDate])
 
   if (loading) return <div className="map-workspace map-workspace-state">Loading map...</div>
   if (error) return <div className="map-workspace map-workspace-state">Error: {error}</div>
@@ -1689,10 +1899,10 @@ export default function MapPage() {
               ))}
             </div>
           )}
-          {trailPoints.length > 0 && (
+          {trailObservations.length > 0 && (
             <div className="trail-legend">
               <span className="trail-legend-dot" />
-              <span>Trail ({trailPoints.length} pts)</span>
+              <span>Trail ({trailObservations.length} pts)</span>
             </div>
           )}
         </div>
@@ -1770,7 +1980,9 @@ export default function MapPage() {
       <section className="map-canvas" aria-label="Asset map">
           <MapContainer center={mapInitialCenter} zoom={mapInitialZoom} style={{ height: '100%', width: '100%' }}>
             <MapViewportUpdater
+              followSelected={followLiveSelection && canFollowSelected}
               hasInitialViewport={initialViewport !== null}
+              onFollowSelectedChange={setFollowLiveSelection}
               onViewportChange={handleViewportChange}
               selectedCenter={selectedCenter}
               selectedFocusKey={selectedFocusKey}
@@ -1812,26 +2024,45 @@ export default function MapPage() {
                   </Circle>
                 )
             ))}
-            {showTrail && trailPoints.length > 0 && (
+            {showTrail && trailSegments.map((segment) => (
               <Polyline
-                positions={trailPoints}
-                pathOptions={{ color: mapTheme.trailColor, weight: themeStyle === 'condensed' ? 2 : 3, opacity: effectiveColorMode === 'dark' ? 0.92 : 0.82 }}
+                key={`trail-${segment.id}`}
+                positions={segment.positions}
+                pathOptions={{
+                  className: 'map-trail-segment',
+                  color: segment.color,
+                  opacity: 1,
+                  weight: themeStyle === 'condensed' ? 2 : 3,
+                }}
               />
-            )}
+            ))}
             {timelinePaths.map((path) => (
               <Fragment key={`timeline-path-${path.deviceId}`}>
-                {path.future.length > 1 && (
+                {path.futureSegments.map((segment) => (
                   <Polyline
-                    positions={path.future}
-                    pathOptions={{ color: effectiveColorMode === 'dark' ? '#94a3b8' : '#64748b', dashArray: '5 8', opacity: 0.46, weight: timelineScope.scoped ? 4 : 2 }}
+                    key={`timeline-future-${path.deviceId}-${segment.id}`}
+                    positions={segment.positions}
+                    pathOptions={{
+                      className: 'map-timeline-trail-segment map-timeline-trail-segment-future',
+                      color: segment.color,
+                      dashArray: '5 8',
+                      opacity: 1,
+                      weight: timelineScope.scoped ? 4 : 2,
+                    }}
                   />
-                )}
-                {path.past.length > 1 && (
+                ))}
+                {path.pastSegments.map((segment) => (
                   <Polyline
-                    positions={path.past}
-                    pathOptions={{ color: effectiveColorMode === 'dark' ? '#22c55e' : '#15803d', opacity: timelineScope.scoped ? 0.9 : 0.55, weight: timelineScope.scoped ? 5 : 2 }}
+                    key={`timeline-past-${path.deviceId}-${segment.id}`}
+                    positions={segment.positions}
+                    pathOptions={{
+                      className: 'map-timeline-trail-segment map-timeline-trail-segment-past',
+                      color: segment.color,
+                      opacity: 1,
+                      weight: timelineScope.scoped ? 5 : 2,
+                    }}
                   />
-                )}
+                ))}
               </Fragment>
             ))}
             {showAccuracy && (
@@ -1883,8 +2114,10 @@ export default function MapPage() {
           </MapContainer>
           {showTimeline && (
             <TimelineScrubber
+              canFollowSelected={canFollowSelected}
               cursorMs={timelineCursorMs}
               error={timelineError}
+              followSelected={followLiveSelection}
               isPlaying={timelinePlaying}
               isLive={timelineLive}
               loading={timelineLoading}
@@ -1892,6 +2125,7 @@ export default function MapPage() {
               minMs={timeline ? new Date(timeline.from).getTime() : timelineBounds.from.getTime()}
               onCursorChange={handleTimelineCursorChange}
               onDateChange={handleTimelineDateChange}
+              onFollowSelectedChange={setFollowLiveSelection}
               onLive={handleTimelineLive}
               onPlayToggle={handleTimelinePlayToggle}
               onWindowChange={(value) => {
@@ -1940,9 +2174,9 @@ export default function MapPage() {
               <p className="muted">{selectedAsset.description ?? 'No description provided.'}</p>
               <div className="asset-meta">
                 <div className="asset-meta-row"><span>Trackers</span><strong>{selectedAssetPositions.length}</strong></div>
-                <div className="asset-meta-row"><span>Shown on map</span><strong>{selectedNode.observation.deviceIdentifier}</strong></div>
-                <div className="asset-meta-row"><span>Last signal</span><strong>{formatRelativeTime(selectedNode.observation.observedAt, selectedNode.observation.receivedAt)}</strong></div>
-                <div className="asset-meta-row"><span>Freshness</span><strong>{freshnessLabel(getFreshnessState(selectedNode.observation, nowMs, effectiveLiveMinutes, effectiveIdleMinutes))}</strong></div>
+                <div className="asset-meta-row"><span>Shown on map</span><strong>{selectedDisplayPosition?.deviceIdentifier ?? selectedNode.observation.deviceIdentifier}</strong></div>
+                <div className="asset-meta-row"><span>Last signal</span><strong>{selectedDisplayPosition ? formatRelativeTime(selectedDisplayPosition.observedAt, selectedDisplayPosition.receivedAt) : formatRelativeTime(selectedNode.observation.observedAt, selectedNode.observation.receivedAt)}</strong></div>
+                <div className="asset-meta-row"><span>Freshness</span><strong>{freshnessLabel(getFreshnessState(selectedDisplayPosition ?? selectedNode.observation, nowMs, effectiveLiveMinutes, effectiveIdleMinutes))}</strong></div>
               </div>
             </div>
 

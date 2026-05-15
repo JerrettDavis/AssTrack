@@ -140,11 +140,16 @@ public class ObservationRepository(AssTrackDbContext dbContext)
             .OrderBy(x => x.Index)
             .ToListAsync(cancellationToken);
 
-        var items = await query
-            .OrderBy(x => x.ObservedAt)
-            .ThenBy(x => x.ReceivedAt)
+        var cappedItems = await query
+            .OrderByDescending(x => x.ObservedAt)
+            .ThenByDescending(x => x.ReceivedAt)
             .Take(boundedMaxPoints)
             .ToListAsync(cancellationToken);
+
+        var items = cappedItems
+            .OrderBy(x => x.ObservedAt)
+            .ThenBy(x => x.ReceivedAt)
+            .ToList();
 
         return (
             items,
