@@ -1,0 +1,11 @@
+{
+  "name": "asstrack-release-tooling",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "release:plan": "node scripts/release/plan-release.mjs"
+  },
+  "devDependencies": {
+    "semver": "^7.7.2"
+  }
+}

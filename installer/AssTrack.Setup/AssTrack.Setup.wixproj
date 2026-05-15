@@ -1,0 +1,22 @@
+<Project Sdk="WixToolset.Sdk/4.0.6">
+
+  <PropertyGroup>
+    <OutputType>Package</OutputType>
+    <Platform>x64</Platform>
+    <InstallerPlatform>x64</InstallerPlatform>
+    <PublishDir Condition="'$(PublishDir)' == ''">$(MSBuildProjectDirectory)\..\..\artifacts\installer\publish\</PublishDir>
+    <ProductVersion Condition="'$(ProductVersion)' == ''">0.1.0</ProductVersion>
+    <GeneratedHarvestFile>$([MSBuild]::NormalizePath($(MSBuildProjectDirectory), $(IntermediateOutputPath)HarvestedFiles.wxs))</GeneratedHarvestFile>
+    <DefineConstants>$(DefineConstants);ProductVersion=$(ProductVersion)</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="$(MSBuildProjectDirectory)\HarvestedFiles.wxs" />
+    <Compile Include="$(GeneratedHarvestFile)" />
+  </ItemGroup>
+
+  <Target Name="GenerateHarvestedFiles" BeforeTargets="CoreCompile">
+    <Exec Command="pwsh -NoLogo -NoProfile -File &quot;$(MSBuildProjectDirectory)\..\..\scripts\release\New-WixHarvestFragment.ps1&quot; -PublishDirectory &quot;$(PublishDir)&quot; -OutputPath &quot;$(GeneratedHarvestFile)&quot;" />
+  </Target>
+
+</Project>

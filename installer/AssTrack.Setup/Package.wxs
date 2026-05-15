@@ -1,0 +1,22 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package
+    Name="AssTrack"
+    Manufacturer="Jerrett Davis"
+    Version="$(var.ProductVersion)"
+    UpgradeCode="2F641F39-3B41-4F27-B10D-0E197A6F3C70"
+    Language="1033"
+    Scope="perMachine">
+
+    <SummaryInformation Description="AssTrack integrated web application" Manufacturer="Jerrett Davis" />
+    <MajorUpgrade DowngradeErrorMessage="A newer version of AssTrack is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="AssTrack" />
+    </StandardDirectory>
+
+    <Feature Id="Complete" Title="AssTrack" Level="1">
+      <ComponentGroupRef Id="AppFiles" />
+    </Feature>
+  </Package>
+</Wix>

@@ -12,6 +12,33 @@ AssTrack is an asset tracking platform with a .NET minimal API backend, EF Core 
 - [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
 - [Node.js 18+](https://nodejs.org/) and npm
 
+## Releases
+
+AssTrack ships through `.github\workflows\release.yml`. The release pipeline derives the next SemVer version from conventional commits on `master`, bootstraps the first public release as `0.1.0`, validates release artifacts, and only then publishes a GitHub release.
+
+### Release outputs
+
+The release workflow publishes:
+
+- Portable self-contained ZIP packages for the integrated `AssTrack.Api` app on `win-x64`, `linux-x64`, `linux-arm64`, `osx-x64`, and `osx-arm64`
+- Portable self-contained ZIP packages for `AssTrack.BridgeGateway`, `AssTrack.SignalWorker`, and `AssTrack.TelegramWorker` on `win-x64` and `linux-x64`
+- A Windows x64 MSI installer for the integrated app
+- GHCR container images for `asstrack-api`, `asstrack-frontend`, and `asstrack-bridge-gateway`
+- A release bundle containing `docker-compose.release.yml`, `docker-compose.release.env.example`, `.env.example`, the README, and the exported OpenAPI document
+- `SHA256SUMS.txt` for all uploaded release assets
+
+### Release validation
+
+Before publishing, the workflow runs:
+
+1. Backend tests
+2. Frontend production build
+3. Managed E2E, AppHost E2E, and production-publish E2E suites
+4. Docker Compose smoke validation against release-tagged images
+5. Windows MSI install validation that launches the installed app and runs the E2E suite against it
+
+Use conventional commits (`feat:`, `fix:`, `perf:`, and `BREAKING CHANGE:` footers) to control release bumps. Non-releasable commits keep the workflow idle after planning. You can trigger the workflow manually with GitHub Actions `workflow_dispatch`, but pushes to `master` also evaluate whether a release should be cut.
+
 ## Solution structure
 
 | Project | Description |

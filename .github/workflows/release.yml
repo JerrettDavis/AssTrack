@@ -1,0 +1,722 @@
+name: Release
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_VERSION: 10.0.x
+  NODE_VERSION: 22
+
+jobs:
+  plan:
+    name: Plan release
+    runs-on: ubuntu-latest
+    outputs:
+      should_release: ${{ steps.plan.outputs.should_release }}
+      version: ${{ steps.plan.outputs.version }}
+      tag: ${{ steps.plan.outputs.tag }}
+      compare_from: ${{ steps.plan.outputs.compare_from }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install release tooling
+        run: npm ci
+
+      - name: Compute release plan
+        id: plan
+        run: npm run release:plan
+
+      - name: Upload release notes
+        if: steps.plan.outputs.should_release == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-notes
+          path: artifacts/release/release-notes.md
+
+  backend:
+    name: Backend
+    needs: plan
+    if: needs.plan.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+          cache: true
+          cache-dependency-path: |
+            **/packages.lock.json
+            **/*.csproj
+
+      - name: Restore
+        run: dotnet restore AssTrack.sln
+
+      - name: Build
+        run: dotnet build AssTrack.sln --configuration Release --no-restore /p:ContinuousIntegrationBuild=true
+
+      - name: Test
+        run: >
+          dotnet test tests/AssTrack.Tests/AssTrack.Tests.csproj
+          --configuration Release
+          --no-build
+          --logger "trx;LogFileName=unit-tests.trx"
+
+      - name: Upload backend results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: backend-test-results
+          path: tests/**/TestResults/**/*.trx
+
+  frontend:
+    name: Frontend
+    needs: plan
+    if: needs.plan.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install
+        run: npm ci --prefix frontend
+
+      - name: Build
+        run: npm run build --prefix frontend
+
+  e2e-managed:
+    name: E2E Managed
+    needs: [plan, backend, frontend]
+    if: needs.plan.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+          cache: true
+          cache-dependency-path: |
+            **/packages.lock.json
+            **/*.csproj
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Restore .NET
+        run: dotnet restore AssTrack.sln
+
+      - name: Build solution
+        run: dotnet build AssTrack.sln --configuration Release --no-restore /p:ContinuousIntegrationBuild=true
+
+      - name: Install frontend dependencies
+        run: npm ci --prefix frontend
+
+      - name: Install Playwright Chromium
+        run: pwsh tests/AssTrack.E2ETests/bin/Release/net10.0/playwright.ps1 install chromium
+
+      - name: Run E2E tests
+        run: >
+          dotnet test tests/AssTrack.E2ETests/AssTrack.E2ETests.csproj
+          --configuration Release
+          --no-build
+          --logger "trx;LogFileName=e2e-tests.trx"
+        env:
+          E2E_BACKEND_PORT: "5099"
+          E2E_FRONTEND_PORT: "5174"
+
+      - name: Upload E2E results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-managed-test-results
+          path: tests/**/TestResults/**/*.trx
+
+  e2e-apphost:
+    name: E2E AppHost
+    needs: [plan, backend, frontend]
+    if: needs.plan.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+          cache: true
+          cache-dependency-path: |
+            **/packages.lock.json
+            **/*.csproj
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Restore .NET
+        run: dotnet restore AssTrack.sln
+
+      - name: Build solution
+        run: dotnet build AssTrack.sln --configuration Release --no-restore /p:ContinuousIntegrationBuild=true
+
+      - name: Install Playwright Chromium
+        run: pwsh tests/AssTrack.E2ETests/bin/Release/net10.0/playwright.ps1 install chromium
+
+      - name: Run E2E tests through AppHost
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet run --project src/AssTrack.AppHost/AssTrack.AppHost.csproj --configuration Release --no-build > apphost.log 2>&1 &
+          APPHOST_PID=$!
+          trap 'kill $APPHOST_PID 2>/dev/null || true; cat apphost.log' EXIT
+
+          READY=0
+          for attempt in {1..120}; do
+            if curl -fsS http://127.0.0.1:5019/healthz/live >/dev/null && curl -fsS http://127.0.0.1:5174 >/dev/null; then
+              READY=1
+              break
+            fi
+            if ! kill -0 "$APPHOST_PID" 2>/dev/null; then
+              cat apphost.log
+              exit 1
+            fi
+            sleep 1
+          done
+          if [ "$READY" -ne 1 ]; then
+            echo "AppHost did not become ready in time"
+            exit 1
+          fi
+
+          E2E_STARTUP_MODE=External \
+          E2E_BACKEND_PORT=5019 \
+          E2E_FRONTEND_PORT=5174 \
+          dotnet test tests/AssTrack.E2ETests/AssTrack.E2ETests.csproj \
+            --configuration Release \
+            --no-build \
+            --logger "trx;LogFileName=e2e-apphost-tests.trx"
+        env:
+          ASSTRACK_API_KEY: e2e-test-key
+          ASSTRACK_CONNECTION_STRING: Data Source=/tmp/asstrack_apphost_e2e.db
+
+      - name: Upload AppHost E2E results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-apphost-test-results
+          path: |
+            tests/**/TestResults/**/*.trx
+            apphost.log
+
+  e2e-production:
+    name: E2E Production Publish
+    needs: [plan, backend, frontend]
+    if: needs.plan.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+          cache: true
+          cache-dependency-path: |
+            **/packages.lock.json
+            **/*.csproj
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Restore .NET
+        run: dotnet restore AssTrack.sln
+
+      - name: Publish integrated production app
+        shell: pwsh
+        run: |
+          $version = '${{ needs.plan.outputs.version }}'
+          $parts = $version.Split('.')
+          $fileVersion = "$($parts[0]).$($parts[1]).$($parts[2]).0"
+          dotnet publish src/AssTrack.Api/AssTrack.Api.csproj `
+            --configuration Release `
+            --no-restore `
+            --output artifacts/production-app `
+            /p:ContinuousIntegrationBuild=true `
+            /p:Version=$version `
+            /p:AssemblyVersion=$fileVersion `
+            /p:FileVersion=$fileVersion `
+            /p:InformationalVersion=$version
+
+      - name: Build E2E tests
+        run: dotnet build tests/AssTrack.E2ETests/AssTrack.E2ETests.csproj --configuration Release --no-restore /p:ContinuousIntegrationBuild=true
+
+      - name: Install Playwright Chromium
+        run: pwsh tests/AssTrack.E2ETests/bin/Release/net10.0/playwright.ps1 install chromium
+
+      - name: Run E2E tests against production publish
+        shell: bash
+        run: |
+          set -euo pipefail
+          (cd artifacts/production-app && ASPNETCORE_ENVIRONMENT=Production ASPNETCORE_URLS=http://127.0.0.1:5099 Auth__ApiKey=e2e-test-key Frontend__ApiKey=e2e-test-key ConnectionStrings__DefaultConnection='Data Source=/tmp/asstrack_production_e2e.db' ./AssTrack.Api) > production-app.log 2>&1 &
+          APP_PID=$!
+          trap 'kill $APP_PID 2>/dev/null || true; cat production-app.log' EXIT
+
+          READY=0
+          for attempt in {1..90}; do
+            if curl -fsS http://127.0.0.1:5099/healthz/live >/dev/null && curl -fsS http://127.0.0.1:5099 >/dev/null; then
+              READY=1
+              break
+            fi
+            if ! kill -0 "$APP_PID" 2>/dev/null; then
+              cat production-app.log
+              exit 1
+            fi
+            sleep 1
+          done
+          if [ "$READY" -ne 1 ]; then
+            echo "Production app did not become ready in time"
+            exit 1
+          fi
+
+          E2E_STARTUP_MODE=External \
+          E2E_BACKEND_PORT=5099 \
+          E2E_FRONTEND_PORT=5099 \
+          dotnet test tests/AssTrack.E2ETests/AssTrack.E2ETests.csproj \
+            --configuration Release \
+            --no-build \
+            --logger "trx;LogFileName=e2e-production-tests.trx"
+
+      - name: Upload production E2E results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-production-test-results
+          path: |
+            tests/**/TestResults/**/*.trx
+            production-app.log
+
+  portable:
+    name: Portable packages (${{ matrix.rid }})
+    needs: [plan, backend, frontend, e2e-managed, e2e-apphost, e2e-production]
+    if: needs.plan.outputs.should_release == 'true'
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            rid: linux-x64
+            packageAuxiliary: true
+          - runner: ubuntu-latest
+            rid: linux-arm64
+            packageAuxiliary: false
+          - runner: ubuntu-latest
+            rid: osx-x64
+            packageAuxiliary: false
+          - runner: ubuntu-latest
+            rid: osx-arm64
+            packageAuxiliary: false
+          - runner: windows-latest
+            rid: win-x64
+            packageAuxiliary: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+          cache: true
+          cache-dependency-path: |
+            **/packages.lock.json
+            **/*.csproj
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Restore
+        run: dotnet restore AssTrack.sln
+
+      - name: Package API
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path artifacts/release/portable/${{ matrix.rid }} | Out-Null
+          ./scripts/release/New-PortablePackage.ps1 `
+            -ProjectPath src/AssTrack.Api/AssTrack.Api.csproj `
+            -RuntimeIdentifier '${{ matrix.rid }}' `
+            -Version '${{ needs.plan.outputs.version }}' `
+            -OutputRoot artifacts/release/portable/${{ matrix.rid }} `
+            -AssetName 'asstrack-api-${{ needs.plan.outputs.version }}-${{ matrix.rid }}'
+
+      - name: Package auxiliary executables
+        if: matrix.packageAuxiliary
+        shell: pwsh
+        run: |
+          $root = 'artifacts/release/portable/${{ matrix.rid }}'
+          ./scripts/release/New-PortablePackage.ps1 `
+            -ProjectPath src/AssTrack.BridgeGateway/AssTrack.BridgeGateway.csproj `
+            -RuntimeIdentifier '${{ matrix.rid }}' `
+            -Version '${{ needs.plan.outputs.version }}' `
+            -OutputRoot $root `
+            -AssetName 'asstrack-bridge-gateway-${{ needs.plan.outputs.version }}-${{ matrix.rid }}'
+          ./scripts/release/New-PortablePackage.ps1 `
+            -ProjectPath src/AssTrack.SignalWorker/AssTrack.SignalWorker.csproj `
+            -RuntimeIdentifier '${{ matrix.rid }}' `
+            -Version '${{ needs.plan.outputs.version }}' `
+            -OutputRoot $root `
+            -AssetName 'asstrack-signal-worker-${{ needs.plan.outputs.version }}-${{ matrix.rid }}'
+          ./scripts/release/New-PortablePackage.ps1 `
+            -ProjectPath src/AssTrack.TelegramWorker/AssTrack.TelegramWorker.csproj `
+            -RuntimeIdentifier '${{ matrix.rid }}' `
+            -Version '${{ needs.plan.outputs.version }}' `
+            -OutputRoot $root `
+            -AssetName 'asstrack-telegram-worker-${{ needs.plan.outputs.version }}-${{ matrix.rid }}'
+
+      - name: Upload portable packages
+        uses: actions/upload-artifact@v7
+        with:
+          name: portable-${{ matrix.rid }}
+          path: artifacts/release/portable/${{ matrix.rid }}/*.zip
+
+  docker-release:
+    name: Docker images and compose validation
+    needs: [plan, backend, frontend, e2e-managed, e2e-apphost, e2e-production]
+    if: needs.plan.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Compute lowercase owner
+        id: owner
+        shell: bash
+        run: echo "value=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
+
+      - name: Build release-tagged images
+        shell: bash
+        run: |
+          set -euo pipefail
+          API_IMAGE="ghcr.io/${{ steps.owner.outputs.value }}/asstrack-api:${{ needs.plan.outputs.version }}"
+          FRONTEND_IMAGE="ghcr.io/${{ steps.owner.outputs.value }}/asstrack-frontend:${{ needs.plan.outputs.version }}"
+          BRIDGE_IMAGE="ghcr.io/${{ steps.owner.outputs.value }}/asstrack-bridge-gateway:${{ needs.plan.outputs.version }}"
+          docker build -f src/AssTrack.Api/Dockerfile -t "$API_IMAGE" .
+          docker build -f frontend/Dockerfile -t "$FRONTEND_IMAGE" frontend
+          docker build -f src/AssTrack.BridgeGateway/Dockerfile -t "$BRIDGE_IMAGE" .
+          echo "API_IMAGE=$API_IMAGE" >> "$GITHUB_ENV"
+          echo "FRONTEND_IMAGE=$FRONTEND_IMAGE" >> "$GITHUB_ENV"
+          echo "BRIDGE_IMAGE=$BRIDGE_IMAGE" >> "$GITHUB_ENV"
+
+      - name: Validate compose bundle
+        shell: bash
+        env:
+          ASSTRACK_API_IMAGE: ${{ env.API_IMAGE }}
+          ASSTRACK_FRONTEND_IMAGE: ${{ env.FRONTEND_IMAGE }}
+          ASSTRACK_BRIDGE_GATEWAY_IMAGE: ${{ env.BRIDGE_IMAGE }}
+          ASSTRACK_API_KEY: e2e-test-key
+          ASSTRACK_BRIDGE_DRY_RUN: "true"
+        run: |
+          set -euo pipefail
+          docker compose -f docker-compose.release.yml --profile integrations up -d
+          trap 'docker compose -f docker-compose.release.yml --profile integrations logs --no-color; docker compose -f docker-compose.release.yml --profile integrations down -v' EXIT
+
+          for attempt in {1..90}; do
+            if curl -fsS http://127.0.0.1:5019/healthz/live >/dev/null && curl -fsS http://127.0.0.1:5174 >/dev/null && curl -fsS http://127.0.0.1:5056/healthz >/dev/null; then
+              break
+            fi
+            sleep 2
+          done
+
+          curl -fsS -H 'X-Api-Key: e2e-test-key' http://127.0.0.1:5019/api/auth/me >/dev/null
+          curl -fsS http://127.0.0.1:5174 >/dev/null
+          curl -fsS http://127.0.0.1:5056/healthz >/dev/null
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push release images
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker push "$API_IMAGE"
+          docker push "$FRONTEND_IMAGE"
+          docker push "$BRIDGE_IMAGE"
+
+          docker tag "$API_IMAGE" "ghcr.io/${{ steps.owner.outputs.value }}/asstrack-api:latest"
+          docker tag "$FRONTEND_IMAGE" "ghcr.io/${{ steps.owner.outputs.value }}/asstrack-frontend:latest"
+          docker tag "$BRIDGE_IMAGE" "ghcr.io/${{ steps.owner.outputs.value }}/asstrack-bridge-gateway:latest"
+
+          docker push "ghcr.io/${{ steps.owner.outputs.value }}/asstrack-api:latest"
+          docker push "ghcr.io/${{ steps.owner.outputs.value }}/asstrack-frontend:latest"
+          docker push "ghcr.io/${{ steps.owner.outputs.value }}/asstrack-bridge-gateway:latest"
+
+  installer:
+    name: Windows MSI installer
+    needs: [plan, backend, frontend, e2e-managed, e2e-apphost, e2e-production]
+    if: needs.plan.outputs.should_release == 'true'
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+          cache: true
+          cache-dependency-path: |
+            **/packages.lock.json
+            **/*.csproj
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            frontend/package-lock.json
+
+      - name: Install release tooling
+        run: npm ci
+
+      - name: Restore
+        run: |
+          dotnet restore AssTrack.sln
+          dotnet restore installer/AssTrack.Setup/AssTrack.Setup.wixproj
+
+      - name: Publish integrated app for installer
+        shell: pwsh
+        run: |
+          $version = '${{ needs.plan.outputs.version }}'
+          $parts = $version.Split('.')
+          $fileVersion = "$($parts[0]).$($parts[1]).$($parts[2]).0"
+          dotnet publish src/AssTrack.Api/AssTrack.Api.csproj `
+            --configuration Release `
+            --runtime win-x64 `
+            --self-contained true `
+            --output artifacts/installer/publish `
+            /p:ContinuousIntegrationBuild=true `
+            /p:Version=$version `
+            /p:AssemblyVersion=$fileVersion `
+            /p:FileVersion=$fileVersion `
+            /p:InformationalVersion=$version
+
+      - name: Build MSI
+        shell: pwsh
+        run: |
+          dotnet build installer/AssTrack.Setup/AssTrack.Setup.wixproj `
+            --configuration Release `
+            /p:ProductVersion=${{ needs.plan.outputs.version }} `
+            /p:PublishDir=$((Resolve-Path artifacts/installer/publish).Path)
+
+      - name: Build E2E tests
+        run: dotnet build tests/AssTrack.E2ETests/AssTrack.E2ETests.csproj --configuration Release --no-restore /p:ContinuousIntegrationBuild=true
+
+      - name: Install Playwright Chromium
+        run: pwsh tests/AssTrack.E2ETests/bin/Release/net10.0/playwright.ps1 install chromium
+
+      - name: Install MSI and validate app
+        shell: pwsh
+        run: |
+          $msi = Get-ChildItem installer/AssTrack.Setup/bin -Filter *.msi -Recurse | Select-Object -First 1
+          if (-not $msi) {
+            throw 'MSI output not found.'
+          }
+
+          Start-Process msiexec.exe -ArgumentList '/i', $msi.FullName, '/qn', '/norestart' -Wait -NoNewWindow
+
+          $installDir = Join-Path ${env:ProgramFiles} 'AssTrack'
+          $exePath = Join-Path $installDir 'AssTrack.Api.exe'
+          if (-not (Test-Path $exePath)) {
+            throw "Installed application not found at $exePath"
+          }
+
+          $logPath = Join-Path $PWD 'installer-app.log'
+          $env:ASPNETCORE_ENVIRONMENT = 'Production'
+          $env:ASPNETCORE_URLS = 'http://127.0.0.1:5099'
+          $env:Auth__ApiKey = 'e2e-test-key'
+          $env:Frontend__ApiKey = 'e2e-test-key'
+          $env:ConnectionStrings__DefaultConnection = 'Data Source=' + (Join-Path $env:RUNNER_TEMP 'asstrack-installer-e2e.db')
+
+          $process = Start-Process -FilePath $exePath -PassThru -RedirectStandardOutput $logPath -RedirectStandardError $logPath
+          try {
+            $ready = $false
+            for ($attempt = 0; $attempt -lt 90; $attempt++) {
+              try {
+                Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:5099/healthz/live' | Out-Null
+                Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:5099/' | Out-Null
+                $ready = $true
+                break
+              } catch {
+                Start-Sleep -Seconds 2
+              }
+            }
+
+            if (-not $ready) {
+              Get-Content $logPath
+              throw 'Installed application did not become ready in time.'
+            }
+
+            $env:E2E_STARTUP_MODE = 'External'
+            $env:E2E_BACKEND_PORT = '5099'
+            $env:E2E_FRONTEND_PORT = '5099'
+            dotnet test tests/AssTrack.E2ETests/AssTrack.E2ETests.csproj `
+              --configuration Release `
+              --no-build `
+              --logger 'trx;LogFileName=e2e-installer-tests.trx'
+            if ($LASTEXITCODE -ne 0) {
+              throw 'Installer E2E validation failed.'
+            }
+          }
+          finally {
+            if ($process -and -not $process.HasExited) {
+              Stop-Process -Id $process.Id -Force
+            }
+          }
+
+      - name: Upload installer artifacts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: installer
+          path: |
+            installer/AssTrack.Setup/bin/**/*.msi
+            installer-app.log
+            tests/**/TestResults/**/*.trx
+
+  release:
+    name: Publish GitHub release
+    needs: [plan, portable, docker-release, installer]
+    if: needs.plan.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install release tooling
+        run: npm ci
+
+      - name: Download release notes
+        uses: actions/download-artifact@v4
+        with:
+          name: release-notes
+          path: artifacts/release
+
+      - name: Download portable artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: portable-*
+          merge-multiple: true
+          path: artifacts/release/assets
+
+      - name: Download installer artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: installer
+          path: artifacts/release/installer
+
+      - name: Assemble release bundle
+        shell: pwsh
+        run: |
+          $bundleRoot = Join-Path $PWD 'artifacts/release/bundle'
+          New-Item -ItemType Directory -Force -Path $bundleRoot | Out-Null
+          Copy-Item docker-compose.release.yml $bundleRoot
+          Copy-Item docker-compose.release.env.example $bundleRoot
+          Copy-Item .env.example $bundleRoot
+          Copy-Item README.md $bundleRoot
+          Copy-Item docs/openapi/asstrack.v1.json $bundleRoot
+
+          $bundleArchive = Join-Path 'artifacts/release/assets' "asstrack-release-bundle-${{ needs.plan.outputs.version }}.zip"
+          if (Test-Path $bundleArchive) {
+            Remove-Item $bundleArchive -Force
+          }
+          Compress-Archive -Path (Join-Path $bundleRoot '*') -DestinationPath $bundleArchive -CompressionLevel Optimal
+
+          $msi = Get-ChildItem artifacts/release/installer -Filter *.msi -Recurse | Select-Object -First 1
+          if (-not $msi) {
+            throw 'Installer MSI not found in downloaded artifacts.'
+          }
+          Copy-Item $msi.FullName artifacts/release/assets
+
+          ./scripts/release/New-Checksums.ps1 -ArtifactDirectory artifacts/release/assets | Out-Null
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.plan.outputs.tag }}
+          name: AssTrack ${{ needs.plan.outputs.version }}
+          body_path: artifacts/release/release-notes.md
+          generate_release_notes: false
+          files: artifacts/release/assets/*

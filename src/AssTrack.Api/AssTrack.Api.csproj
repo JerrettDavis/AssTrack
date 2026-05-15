@@ -26,8 +26,10 @@
   </ItemGroup>
 
   <Target Name="BuildFrontendForPublish" BeforeTargets="ComputeFilesToPublish" Condition="'$(BuildIntegratedFrontend)' == 'true'">
-    <Exec Command="&quot;$(NpmExecutable)&quot; ci" WorkingDirectory="$(SpaRoot)" />
-    <Exec Command="&quot;$(NpmExecutable)&quot; run build" WorkingDirectory="$(SpaRoot)" />
+    <Exec Condition="$([MSBuild]::IsOSPlatform('Windows'))" Command="cmd /c npm ci" WorkingDirectory="$(SpaRoot)" />
+    <Exec Condition="$([MSBuild]::IsOSPlatform('Windows'))" Command="cmd /c npm run build" WorkingDirectory="$(SpaRoot)" />
+    <Exec Condition="!$([MSBuild]::IsOSPlatform('Windows'))" Command="&quot;$(NpmExecutable)&quot; ci" WorkingDirectory="$(SpaRoot)" />
+    <Exec Condition="!$([MSBuild]::IsOSPlatform('Windows'))" Command="&quot;$(NpmExecutable)&quot; run build" WorkingDirectory="$(SpaRoot)" />
     <ItemGroup>
       <DistFiles Include="$(SpaRoot)dist/**/*" />
       <ResolvedFileToPublish Include="@(DistFiles->'%(FullPath)')" Exclude="@(ResolvedFileToPublish)">
