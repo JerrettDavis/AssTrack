@@ -4,14 +4,15 @@
     <OutputType>Package</OutputType>
     <Platform>x64</Platform>
     <InstallerPlatform>x64</InstallerPlatform>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
     <PublishDir Condition="'$(PublishDir)' == ''">$(MSBuildProjectDirectory)\..\..\artifacts\installer\publish\</PublishDir>
     <ProductVersion Condition="'$(ProductVersion)' == ''">0.1.0</ProductVersion>
-    <GeneratedHarvestFile>$([MSBuild]::NormalizePath($(MSBuildProjectDirectory), $(IntermediateOutputPath)HarvestedFiles.wxs))</GeneratedHarvestFile>
+    <GeneratedHarvestFile>$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', 'obj', '$(Platform)', '$(Configuration)', 'HarvestedFiles.wxs'))</GeneratedHarvestFile>
     <DefineConstants>$(DefineConstants);ProductVersion=$(ProductVersion)</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Remove="$(MSBuildProjectDirectory)\HarvestedFiles.wxs" />
+    <Compile Include="Package.wxs" />
     <Compile Include="$(GeneratedHarvestFile)" />
   </ItemGroup>
 
