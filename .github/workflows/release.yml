@@ -593,14 +593,15 @@ jobs:
             throw "Installed application not found at $exePath"
           }
 
-          $logPath = Join-Path $PWD 'installer-app.log'
+          $stdoutLogPath = Join-Path $PWD 'installer-app.stdout.log'
+          $stderrLogPath = Join-Path $PWD 'installer-app.stderr.log'
           $env:ASPNETCORE_ENVIRONMENT = 'Production'
           $env:ASPNETCORE_URLS = 'http://127.0.0.1:5099'
           $env:Auth__ApiKey = 'e2e-test-key'
           $env:Frontend__ApiKey = 'e2e-test-key'
           $env:ConnectionStrings__DefaultConnection = 'Data Source=' + (Join-Path $env:RUNNER_TEMP 'asstrack-installer-e2e.db')
 
-          $process = Start-Process -FilePath $exePath -PassThru -RedirectStandardOutput $logPath -RedirectStandardError $logPath
+          $process = Start-Process -FilePath $exePath -PassThru -RedirectStandardOutput $stdoutLogPath -RedirectStandardError $stderrLogPath
           try {
             $ready = $false
             for ($attempt = 0; $attempt -lt 90; $attempt++) {
@@ -643,7 +644,8 @@ jobs:
           name: installer
           path: |
             installer/AssTrack.Setup/bin/**/*.msi
-            installer-app.log
+            installer-app.stdout.log
+            installer-app.stderr.log
             tests/**/TestResults/**/*.trx
 
   release:
