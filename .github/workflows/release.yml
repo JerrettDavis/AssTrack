@@ -595,13 +595,25 @@ jobs:
 
           $stdoutLogPath = Join-Path $PWD 'installer-app.stdout.log'
           $stderrLogPath = Join-Path $PWD 'installer-app.stderr.log'
+          function Show-InstallerLogs {
+            if (Test-Path $stdoutLogPath) {
+              Write-Host '=== installer stdout ==='
+              Get-Content $stdoutLogPath
+            }
+
+            if (Test-Path $stderrLogPath) {
+              Write-Host '=== installer stderr ==='
+              Get-Content $stderrLogPath
+            }
+          }
+
           $env:ASPNETCORE_ENVIRONMENT = 'Production'
           $env:ASPNETCORE_URLS = 'http://127.0.0.1:5099'
           $env:Auth__ApiKey = 'e2e-test-key'
           $env:Frontend__ApiKey = 'e2e-test-key'
           $env:ConnectionStrings__DefaultConnection = 'Data Source=' + (Join-Path $env:RUNNER_TEMP 'asstrack-installer-e2e.db')
 
-          $process = Start-Process -FilePath $exePath -PassThru -RedirectStandardOutput $stdoutLogPath -RedirectStandardError $stderrLogPath
+          $process = Start-Process -FilePath $exePath -WorkingDirectory $installDir -PassThru -RedirectStandardOutput $stdoutLogPath -RedirectStandardError $stderrLogPath
           try {
             $ready = $false
             for ($attempt = 0; $attempt -lt 90; $attempt++) {
@@ -611,12 +623,17 @@ jobs:
                 $ready = $true
                 break
               } catch {
+                if ($process.HasExited) {
+                  Show-InstallerLogs
+                  throw 'Installed application exited before it became ready.'
+                }
+
                 Start-Sleep -Seconds 2
               }
             }
 
             if (-not $ready) {
-              Get-Content $logPath
+              Show-InstallerLogs
               throw 'Installed application did not become ready in time.'
             }
 
