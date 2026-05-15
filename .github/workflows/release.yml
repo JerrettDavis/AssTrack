@@ -587,7 +587,7 @@ jobs:
 
           Start-Process msiexec.exe -ArgumentList '/i', $msi.FullName, '/qn', '/norestart' -Wait -NoNewWindow
 
-          $installDir = Join-Path ${env:ProgramFiles} 'AssTrack'
+          $installDir = Join-Path $env:LocalAppData 'Programs\AssTrack'
           $exePath = Join-Path $installDir 'AssTrack.Api.exe'
           if (-not (Test-Path $exePath)) {
             throw "Installed application not found at $exePath"
@@ -652,6 +652,8 @@ jobs:
             if ($process -and -not $process.HasExited) {
               Stop-Process -Id $process.Id -Force
             }
+
+            Start-Process msiexec.exe -ArgumentList '/x', $msi.FullName, '/qn', '/norestart' -Wait -NoNewWindow
           }
 
       - name: Upload installer artifacts

@@ -22,7 +22,7 @@ The release workflow publishes:
 
 - Portable self-contained ZIP packages for the integrated `AssTrack.Api` app on `win-x64`, `linux-x64`, `linux-arm64`, `osx-x64`, and `osx-arm64`
 - Portable self-contained ZIP packages for `AssTrack.BridgeGateway`, `AssTrack.SignalWorker`, and `AssTrack.TelegramWorker` on `win-x64` and `linux-x64`
-- A Windows x64 MSI installer for the integrated app
+- A Windows x64 MSI installer for the integrated app that installs per-user under `%LocalAppData%\Programs\AssTrack`
 - GHCR container images for `asstrack-api`, `asstrack-frontend`, and `asstrack-bridge-gateway`
 - A release bundle containing `docker-compose.release.yml`, `docker-compose.release.env.example`, `.env.example`, the README, and the exported OpenAPI document
 - `SHA256SUMS.txt` for all uploaded release assets
@@ -35,7 +35,7 @@ Before publishing, the workflow runs:
 2. Frontend production build
 3. Managed E2E, AppHost E2E, and production-publish E2E suites
 4. Docker Compose smoke validation against release-tagged images
-5. Windows MSI install validation that launches the installed app and runs the E2E suite against it
+5. Windows MSI install validation that launches the installed per-user app and runs the E2E suite against it
 
 Use conventional commits (`feat:`, `fix:`, `perf:`, and `BREAKING CHANGE:` footers) to control release bumps. Non-releasable commits keep the workflow idle after planning. You can trigger the workflow manually with GitHub Actions `workflow_dispatch`, but pushes to `master` also evaluate whether a release should be cut.
 
