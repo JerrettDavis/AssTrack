@@ -488,7 +488,7 @@ jobs:
           curl -fsS http://127.0.0.1:5056/healthz >/dev/null
 
       - name: Login to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -690,20 +690,20 @@ jobs:
         run: npm ci
 
       - name: Download release notes
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: release-notes
           path: artifacts/release
 
       - name: Download portable artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: portable-*
           merge-multiple: true
           path: artifacts/release/assets
 
       - name: Download installer artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: installer
           path: artifacts/release/installer
@@ -734,7 +734,7 @@ jobs:
           ./scripts/release/New-Checksums.ps1 -ArtifactDirectory artifacts/release/assets | Out-Null
 
       - name: Publish release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ needs.plan.outputs.tag }}
           name: AssTrack ${{ needs.plan.outputs.version }}
