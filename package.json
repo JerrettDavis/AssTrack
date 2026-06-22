@@ -6,6 +6,6 @@
     "release:plan": "node scripts/release/plan-release.mjs"
   },
   "devDependencies": {
-    "semver": "^7.8.4"
+    "semver": "^7.8.5"
   }
 }
