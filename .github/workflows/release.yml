@@ -30,7 +30,7 @@ jobs:
       compare_from: ${{ steps.plan.outputs.compare_from }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -63,7 +63,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
@@ -102,7 +102,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Setup Node
         uses: actions/setup-node@v6
@@ -125,7 +125,7 @@ jobs:
     timeout-minutes: 25
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
@@ -180,7 +180,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
@@ -260,7 +260,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
@@ -372,7 +372,7 @@ jobs:
             packageAuxiliary: true
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
@@ -442,7 +442,7 @@ jobs:
     timeout-minutes: 40
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Compute lowercase owner
         id: owner
@@ -518,7 +518,7 @@ jobs:
     timeout-minutes: 45
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
@@ -675,7 +675,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
