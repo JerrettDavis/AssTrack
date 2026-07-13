@@ -1999,7 +1999,7 @@ export default function MapPage() {
                     eventHandlers={{ click: () => void selectGeofenceNode(geofence) }}
                     key={`geofence-${geofence.id}`}
                     pathOptions={{ color: mapTheme.geofenceColor, fillColor: mapTheme.geofenceFill, fillOpacity: effectiveColorMode === 'dark' ? 0.18 : 0.14, weight: themeStyle === 'contrast' ? 3 : 2 }}
-                    positions={geofence.polygonCoordinates.map((point) => [point.latitude, point.longitude])}
+                    positions={geofence.polygonCoordinates.map((point) => [point.latitude, point.longitude] as [number, number])}
                   >
                     <Popup>
                       <strong>{geofence.name}</strong>

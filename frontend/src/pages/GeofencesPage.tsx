@@ -528,7 +528,7 @@ export default function GeofencesPage() {
             {shapeType === 'polygon' && polygonPoints.length > 0 && (
               <Polygon
                 pathOptions={{ color: mapTheme.geofenceColor, dashArray: '8 6', fillColor: mapTheme.geofenceFill, fillOpacity: 0.12, weight: 2 }}
-                positions={polygonPoints.map((point) => [point.latitude, point.longitude])}
+                positions={polygonPoints.map((point) => [point.latitude, point.longitude] as [number, number])}
               >
                 <Popup>
                   <strong>{name || 'New freeform geofence'}</strong>
@@ -543,7 +543,7 @@ export default function GeofencesPage() {
                   <Polygon
                     key={geofence.id}
                     pathOptions={{ color: mapTheme.geofenceColor, fillColor: mapTheme.geofenceFill, fillOpacity: effectiveColorMode === 'dark' ? 0.18 : 0.14, weight: themeStyle === 'contrast' ? 3 : 2 }}
-                    positions={geofence.polygonCoordinates.map((point) => [point.latitude, point.longitude])}
+                    positions={geofence.polygonCoordinates.map((point) => [point.latitude, point.longitude] as [number, number])}
                   >
                     <Popup>
                       <strong>{geofence.name}</strong>
