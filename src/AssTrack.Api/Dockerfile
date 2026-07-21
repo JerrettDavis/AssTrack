@@ -1,5 +1,5 @@
 # Build stage
-FROM mcr.microsoft.com/dotnet/sdk:10.0.301 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0.302 AS build
 WORKDIR /src
 
 # Copy solution and project files for layer caching
@@ -18,7 +18,7 @@ COPY src/ src/
 RUN dotnet publish src/AssTrack.Api/AssTrack.Api.csproj -c Release --no-restore -o /app/publish /p:BuildIntegratedFrontend=false
 
 # Runtime stage
-FROM mcr.microsoft.com/dotnet/aspnet:10.0.9
+FROM mcr.microsoft.com/dotnet/aspnet:10.0.10
 WORKDIR /app
 
 # Install curl for the Docker healthcheck in docker-compose.yml.
