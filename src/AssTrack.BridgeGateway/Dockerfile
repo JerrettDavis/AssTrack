@@ -1,5 +1,5 @@
 # Build stage
-FROM mcr.microsoft.com/dotnet/sdk:10.0.400 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0.401 AS build
 WORKDIR /src
 
 COPY AssTrack.sln .
@@ -13,7 +13,7 @@ COPY src/ src/
 RUN dotnet publish src/AssTrack.BridgeGateway/AssTrack.BridgeGateway.csproj -c Release --no-restore -o /app/publish
 
 # Runtime stage
-FROM mcr.microsoft.com/dotnet/aspnet:10.0.11
+FROM mcr.microsoft.com/dotnet/aspnet:10.0.12
 WORKDIR /app
 
 RUN apt-get update \
