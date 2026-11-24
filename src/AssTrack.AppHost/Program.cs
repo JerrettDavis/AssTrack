@@ -16,7 +16,7 @@ var connectionString = GetEnvironmentValue("ASSTRACK_CONNECTION_STRING") ?? $"Da
 var frontendDirectory = Path.Combine(repoRoot, "frontend");
 EnsureNpmOnPath();
 
-var api = builder.AddProject<Projects.AssTrack_Api>("api")
+var api = builder.AddDotnetProject("api", "../AssTrack.Api/AssTrack.Api.csproj")
     .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development")
     .WithEnvironment("Auth__ApiKey", apiKey)
     .WithEnvironment("Auth__AdminApiKey", adminApiKey ?? string.Empty)
@@ -30,7 +30,7 @@ var api = builder.AddProject<Projects.AssTrack_Api>("api")
     .WithEnvironment("RateLimiting__IngestWindowSeconds", "60")
     .WithExternalHttpEndpoints();
 
-var bridge = builder.AddProject<Projects.AssTrack_BridgeGateway>("bridge-gateway")
+var bridge = builder.AddDotnetProject("bridge-gateway", "../AssTrack.BridgeGateway/AssTrack.BridgeGateway.csproj")
     .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development")
     .WithEnvironment("BridgeGateway__AssTrackBaseUrl", apiUrl)
     .WithEnvironment("BridgeGateway__IngestApiKey", ingestApiKey)
